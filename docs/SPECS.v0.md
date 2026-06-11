@@ -10,8 +10,6 @@
 >
 > **Các sub-phase (P1A, P1B, P2.5, P3A…) là thứ tự triển khai (thứ tự tấn công), KHÔNG phải các milestone chấm điểm riêng.**
 
-> **[Frontend view]** File này dùng cho repo `frontend/`. Task đánh dấu `[BE]` thuộc repo `backend/` — liệt kê để tham khảo phụ thuộc, không phải việc của repo này.
-
 ---
 
 ## 1. Tổng quan
@@ -26,11 +24,11 @@
 | Render (P1–P2.5) | **SVG/DOM-first** — mỗi shape là một node trong layer transform theo camera. **Image cũng render bằng SVG `<image>`/DOM `<img>`, không cần Canvas.** |
 | Render (P3C+) | Bổ sung **một lớp Canvas overlay** chỉ cho freehand/highlighter/eraser (point-heavy/ink) |
 | State client | Zustand — tách rõ `elements` (committed) và `interaction` (transient) |
-| Shared types | Mỗi repo tự copy `src/types/shared.ts`; đồng bộ thủ công khi model đổi |
-| Transport realtime | Socket.IO client |
-| **[BE]** Server | Node + TypeScript + Express + Socket.IO; state phòng in-memory (authoritative-light) |
+| Shared types | Package `shared/` dùng chung client–server |
+| Transport realtime | Socket.IO |
+| Server | Node + TypeScript + Express + Socket.IO; state phòng in-memory (authoritative-light) |
 | Lưu trữ (P1) | `localStorage` + `BroadcastChannel` (đồng bộ giữa các tab) |
-| **[BE]** Lưu trữ (P3A+) | PostgreSQL + Prisma |
+| Lưu trữ (P3A+) | PostgreSQL + Prisma |
 | Conflict resolution | Last-Write-Wins theo `version` + `versionNonce` |
 
 ### 1.2 Nguyên tắc kiến trúc xuyên suốt
@@ -126,9 +124,7 @@ interface Presence {
 }
 ```
 
-### 2.5 Lưu trữ server (P3A+) — [BE]
-
-> Schema này implement ở backend repo. Frontend chỉ cần biết để hiểu shape của snapshot nhận được.
+### 2.5 Lưu trữ server (P3A+)
 
 ```ts
 Room       { id, name, ownerId, createdAt, updatedAt }
@@ -170,9 +166,8 @@ applyRemoteElements(incoming: Element[])  // LWW theo version/versionNonce; bỏ
 **Chủ đề:** dựng bộ khung mà mọi phase sau dựa vào.
 
 ### [P0-01] Khung dự án & shared types
-- [ ] Khởi tạo frontend project (Vite + React + TypeScript + Zustand + Tailwind CSS).
-- [ ] `src/types/shared.ts` chứa type `Element`, `Camera`, hằng số WS event.
-- [BE] Khởi tạo backend project; `src/types/shared.ts` server-side (đồng bộ thủ công với frontend).
+- [ ] Monorepo `client/` `server/` `shared/` (pnpm workspaces).
+- [ ] `shared/` chứa type `Element`, `Camera`, hằng số WS event.
 
 ### [P0-02] Store & camera utils
 - [ ] Zustand store tách `elements` (committed) và `interaction` (transient) theo §2.
@@ -271,33 +266,28 @@ applyRemoteElements(incoming: Element[])  // LWW theo version/versionNonce; bỏ
 **Chủ đề:** nhiều người một phòng, thấy con trỏ và thay đổi của nhau realtime. Server in-memory + LWW. Sync local trước rồi broadcast (optimistic ngầm).
 
 ### [P2-01] Room + join + share link
-- [ ] Client gửi `join-room` theo `roomId` khi mount.
-- [ ] UI tạo phòng mới / sao chép link; routing mở đúng phòng từ URL.
-- [BE] Server xử lý `join-room`; quản lý danh sách phòng in-memory; chỉ broadcast trong cùng phòng.
+- [ ] Client `join-room` theo `roomId`; chỉ broadcast trong phòng.
+- [ ] Tạo/sao chép link phòng; mở link vào đúng phòng.
 
 ### [P2-02] Realtime broadcast (reuse apply-remote)
-- [ ] Sau mutation → gửi element (đã `version++`) lên server qua socket.
-- [ ] Nhận event từ server → `applyRemoteElements` (cùng hàm P1B); render < ~200ms.
-- [BE] Server nhận element từ client → broadcast cho toàn phòng (trừ sender).
+- [ ] Local mutate → gửi element (đã `version++`) lên server → broadcast cho người khác.
+- [ ] Client nhận → `applyRemoteElements` (cùng hàm P1B); render < ~200ms ở mạng bình thường.
 
 ### [P2-03] Optimistic local update
 - [ ] Thao tác áp ngay cục bộ, không chờ server (cảm giác tức thì). (Ack/rebase nâng cao → P4.)
 
 ### [P2-04] LWW conflict (version + nonce)
-- [ ] `applyRemoteElements` áp LWW: `version` cao hơn thắng; hoà thì `versionNonce` nhỏ hơn thắng (deterministic).
+- [ ] `version` cao hơn thắng; hoà thì `versionNonce` nhỏ hơn thắng (deterministic).
 - [ ] Mọi client hội tụ cùng một state.
 
 ### [P2-05] Từ chối remote khi đang sửa
 - [ ] Element đang kéo/resize/sửa cục bộ bỏ qua remote update giữa chừng; kết thúc thì hội tụ theo LWW.
 
 ### [P2-06] Live cursor + tên/màu
-- [ ] Throttle cursor position (~33ms) → gửi lên server ở toạ độ world; ephemeral (không vào `elements`).
-- [ ] Nhận cursor của người khác → render nhãn tên + màu.
-- [BE] Server relay cursor event trong phòng (không lưu).
+- [ ] Con trỏ broadcast ở toạ độ world (throttle ~33ms); ephemeral; nhãn tên + màu.
 
 ### [P2-07] Danh sách user online
-- [ ] Nhận danh sách user online từ server; render UI; cập nhật khi join/leave.
-- [BE] Server broadcast join/leave event cho phòng.
+- [ ] Join/leave cập nhật danh sách của mọi người.
 
 ### [P2-08] Multi-select + Duplicate/Copy-Paste
 - [ ] Marquee + shift-click; move/style/delete áp cả tập chọn.
@@ -332,24 +322,19 @@ applyRemoteElements(incoming: Element[])  // LWW theo version/versionNonce; bỏ
 
 **Chủ đề:** chuyển nguồn sự thật lên server + DB; reload/reconnect không mất dữ liệu.
 
-### [P3A-01] PostgreSQL + Prisma + autosave — [BE]
-- [BE] Server persist state phòng vào PostgreSQL (throttle ~5–10s) và khi phòng trống.
-- [BE] Schema theo §2.5: `Room`, `RoomMember`, `Snapshot`.
+### [P3A-01] PostgreSQL + Prisma + autosave
+- [ ] Server persist state phòng (throttle ~5–10s) và khi phòng trống; lưu plaintext.
 
 ### [P3A-02] Load khi mở phòng
-- [ ] Client nhận full snapshot từ server khi join phòng; áp vào store qua `applyRemoteElements`.
-- [ ] Phòng chưa có dữ liệu → khởi tạo store rỗng.
-- [BE] Server query DB và gửi snapshot khi client join.
+- [ ] Client mới nhận snapshot đầy đủ; phòng chưa có dữ liệu thì khởi tạo rỗng.
 
 ### [P3A-03] Reconnect không mất data
-- [ ] Socket.IO tự reconnect; sau reconnect áp full snapshot từ server (LWW).
-- [ ] Thay đổi cục bộ chưa kịp gửi được gửi lại sau reconnect.
-- [BE] Server gửi full snapshot khi client reconnect.
+- [ ] Socket.IO tự reconnect; nối lại → server gửi full snapshot.
+- [ ] Thay đổi cục bộ chưa kịp gửi được gửi lại sau reconnect (LWW).
 
 ### [P3A-04] Chỉ gửi đã đổi + resync định kỳ
 - [ ] Theo dõi `version` đã gửi từng element, chỉ gửi khi tăng.
-- [ ] Nhận full-resync định kỳ từ server → `applyRemoteElements`.
-- [BE] Server gửi full-resync định kỳ (~20s) làm lưới an toàn.
+- [ ] Full-resync định kỳ (ví dụ 20s) làm lưới an toàn.
 
 ---
 
@@ -358,14 +343,12 @@ applyRemoteElements(incoming: Element[])  // LWW theo version/versionNonce; bỏ
 **Chủ đề:** danh tính + phân quyền (tách khỏi persistence để giảm rủi ro).
 
 ### [P3B-01] Auth đăng nhập
-- [ ] UI login; lưu token; attach token vào socket connection.
-- [BE] Luồng login (JWT); middleware verify token cho socket và HTTP.
+- [ ] Luồng login (JWT); request/socket gắn `userId`.
 
 ### [P3B-02] Role owner / editor / viewer
-- [ ] UI ẩn toolbar/actions khi role `viewer` (UX only — không đủ để enforce).
-- [ ] Owner có UI đổi role thành viên.
-- [BE] **Server từ chối mutation từ session role `viewer`** (enforce ở server, không chỉ ẩn UI).
-- [BE] `RoomMember.role` lưu vai trò trong DB.
+- [ ] `RoomMember.role` lưu vai trò.
+- [ ] **Server từ chối mutation từ session role `viewer`** (enforce ở server, không chỉ ẩn UI).
+- [ ] Owner đổi được role thành viên.
 
 ---
 
@@ -391,11 +374,10 @@ applyRemoteElements(incoming: Element[])  // LWW theo version/versionNonce; bỏ
 
 ### [P4-01] Optimistic nâng cao (ack / rebase)
 - [ ] Xử lý ack từ server; rollback/rebase khi peer phản hồi khác; hội tụ theo LWW.
-- [BE] Server gửi ack; resolve conflict và broadcast kết quả cuối.
 
 ### [P4-02] Version history (snapshot) + Restore
-- [ ] UI liệt kê phiên bản; Restore gửi lệnh lên server và áp snapshot nhận về.
-- [BE] Server lưu `Snapshot` theo timestamp; API trả danh sách + thực hiện restore.
+- [ ] Server lưu `Snapshot` theo timestamp; UI liệt kê phiên bản.
+- [ ] Restore đưa phòng về snapshot chọn; đồng bộ mọi client.
 
 ### [P4-03] Export PNG / SVG / JSON + Import JSON
 - [ ] Export PNG/SVG khớp nội dung; Export/Import JSON (`Element[]`).
@@ -415,7 +397,6 @@ applyRemoteElements(incoming: Element[])  // LWW theo version/versionNonce; bỏ
 ### [P4-08] Idle/Away + Follow viewport
 - [ ] Không thao tác > ngưỡng → idle; ẩn tab → away.
 - [ ] A follow B → camera A bám viewport B; có dừng follow; tránh vòng lặp.
-- [BE] Server relay viewport cho Follow mode.
 
 ### [P4-09] Sticky note + Embed/iframe/video
 - [ ] Sticky có nền màu + text.
