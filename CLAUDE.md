@@ -4,6 +4,7 @@ Project: Realtime Collaborative Tactical Whiteboard (web app).
 **Source of truth for scope and phases: `docs/SPECS.md`. Read it before planning or coding.**
 
 ## Communication
+
 - Talk to me in Vietnamese.
 - Code, comments, identifiers, and commit messages in English.
 
@@ -23,41 +24,50 @@ vdt-whiteboard/
 
 ### Frontend (this repo)
 
-| Layer | Package | Version |
-|-------|---------|---------|
-| Runtime | Node.js | 22.x LTS |
-| Package manager | pnpm | 10.x |
-| Bundler | Vite | 6.x |
-| Language | TypeScript | 5.8.x |
-| UI framework | React | 19.x |
-| State | Zustand | 5.x |
-| Realtime client | socket.io-client | 4.8.x |
-| Styling | Tailwind CSS | 4.x |
-| Linter | ESLint | 9.x (flat config) |
-| Formatter | Prettier | 3.x |
-| TS lint | @typescript-eslint | 8.x |
-| Testing | Vitest | 3.x |
+| Layer           | Package            | Version           |
+| --------------- | ------------------ | ----------------- |
+| Runtime         | Node.js            | 22.x LTS          |
+| Package manager | pnpm               | 10.x              |
+| Bundler         | Vite               | 6.x               |
+| Language        | TypeScript         | 5.8.x             |
+| UI framework    | React              | 19.x              |
+| State           | Zustand            | 5.x               |
+| Realtime client | socket.io-client   | 4.8.x             |
+| Styling         | Tailwind CSS       | 4.x               |
+| Linter          | ESLint             | 9.x (flat config) |
+| Formatter       | Prettier           | 3.x               |
+| TS lint         | @typescript-eslint | 8.x               |
+| Testing         | Vitest             | 3.x               |
 
 ### Backend (separate repo)
 
-| Layer | Package | Version |
-|-------|---------|---------|
-| Runtime | Node.js | 22.x LTS |
-| Package manager | pnpm | 10.x |
-| Language | TypeScript | 5.8.x |
-| Server framework | Express | 5.x |
-| Realtime server | socket.io | 4.8.x |
-| ORM (P3A+) | Prisma | 6.x |
-| Database (P3A+) | PostgreSQL | 17.x |
+| Layer            | Package    | Version  |
+| ---------------- | ---------- | -------- |
+| Runtime          | Node.js    | 22.x LTS |
+| Package manager  | pnpm       | 10.x     |
+| Language         | TypeScript | 5.8.x    |
+| Server framework | Express    | 5.x      |
+| Realtime server  | socket.io  | 4.8.x    |
+| ORM (P3A+)       | Prisma     | 6.x      |
+| Database (P3A+)  | PostgreSQL | 17.x     |
 
 ### Stack notes
+
 - Rendering is **SVG/DOM-first**; Canvas overlay added only in Phase 3C (freehand/highlighter/eraser). Images render via SVG `<image>` / `<img>`, never Canvas.
 - State: Zustand — keep committed state (`elements`) separate from transient interaction state.
 - Realtime: Socket.IO. Server state is in-memory (authoritative-light) until Phase 3A.
 - Persistence: localStorage + BroadcastChannel (Phase 1); PostgreSQL + Prisma (Phase 3A+).
 - Conflict resolution: Last-Write-Wins via `version` + `versionNonce`.
 
+### Zustand 5 (v5.0.14)
+
+- Named import only: `import { create } from 'zustand'` (default import removed in v5)
+- Always use curried TypeScript pattern: `create<State & Actions>()((set, get) => ({...}))`
+- Middleware: `import { devtools, subscribeWithSelector } from 'zustand/middleware'`; wrap `devtools` outermost
+- Shallow equality for selectors: `import { useShallow } from 'zustand/react/shallow'`
+
 ## Architecture rules (non-negotiable)
+
 1. Unified element store — everything is an `Element`; the renderer never holds state.
 2. **Every element mutation goes through ONE mutation pipeline** (`createElement` / `patchElement` / `deleteElements` / `updateElements`). Never mutate the store directly elsewhere. The pipeline handles `version++`, `versionNonce`, `updatedAt`, history capture, local persist, and broadcast.
 3. One shared **apply-remote** function applies external changes (BroadcastChannel in P1B, Socket.IO in P2) using LWW. Reuse it for both — do not write two.
@@ -86,7 +96,9 @@ frontend/
 │   ├── components/            ← toolbar/, detail-panel/, ui/
 │   ├── hooks/                 ← useKeyboard.ts, …
 │   ├── types/
-│   │   └── shared.ts          ← Element, Camera, Presence, WS_EVENTS (keep in sync w/ backend)
+│   │   ├── shared.ts          ← Element, Camera, Presence, WS_EVENTS (keep in sync w/ backend)
+│   │   ├── geometry.ts        ← Point, Rect (pure geometry primitives)
+│   │   └── interaction.ts     ← ToolId, HandleId, InteractionState (frontend-only)
 │   ├── utils/                 ← camera.ts, geometry.ts, id.ts
 │   └── main.tsx
 ├── public/
@@ -100,15 +112,15 @@ frontend/
 
 ### Naming
 
-| What | Convention | Example |
-|------|------------|---------|
-| TS/TSX files | `kebab-case` | `apply-remote.ts`, `SvgLayer.tsx` |
-| React components | `PascalCase` file + export | `Whiteboard.tsx` |
-| Hooks | `camelCase`, prefix `use` | `useKeyboard.ts` |
-| Types / Interfaces | `PascalCase` | `Element`, `Camera`, `ShapeUtil` |
-| Variables / functions | `camelCase` | `createElement`, `applyRemoteElements` |
-| Module-level constants | `SCREAMING_SNAKE_CASE` | `WS_EVENTS`, `MIN_ZOOM` |
-| WebSocket event strings | `kebab-case` | `"element-update"`, `"join-room"` |
+| What                    | Convention                 | Example                                |
+| ----------------------- | -------------------------- | -------------------------------------- |
+| TS/TSX files            | `kebab-case`               | `apply-remote.ts`, `SvgLayer.tsx`      |
+| React components        | `PascalCase` file + export | `Whiteboard.tsx`                       |
+| Hooks                   | `camelCase`, prefix `use`  | `useKeyboard.ts`                       |
+| Types / Interfaces      | `PascalCase`               | `Element`, `Camera`, `ShapeUtil`       |
+| Variables / functions   | `camelCase`                | `createElement`, `applyRemoteElements` |
+| Module-level constants  | `SCREAMING_SNAKE_CASE`     | `WS_EVENTS`, `MIN_ZOOM`                |
+| WebSocket event strings | `kebab-case`               | `"element-update"`, `"join-room"`      |
 
 ### Formatting (Prettier config)
 
@@ -123,12 +135,14 @@ frontend/
 ```
 
 ### TypeScript
+
 - `strict: true` always.
 - `moduleResolution: "bundler"` in client/server tsconfigs.
 - Extend `tsconfig.base.json` from each package.
 - No `any` — use `unknown` + narrowing.
 
 ## Workflow
+
 - Work **one phase at a time**, in the order in `docs/SPECS.md` (P0 → P1A → P1B → …). Do not build features from later phases ahead of time.
 - **Plan before coding**: propose a task plan for the current phase and wait for my approval, then implement.
 - Commit after each logical group of tasks.
