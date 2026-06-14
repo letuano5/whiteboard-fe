@@ -1,8 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(find /Users/lto5/Code/vdt-whiteboard -type f | head -60)",
-      "Read(//Users/lto5/Code/vdt-whiteboard/**)"
-    ]
-  }
-}
