@@ -1,5 +1,7 @@
 import type React from 'react';
-import type { Element, ElementType, HandleId, Rect } from '../../types/shared';
+import type { Element, ElementType } from '../../types/shared';
+import type { Rect } from '../../types/geometry';
+import type { HandleId } from '../../types/interaction';
 
 export interface ShapeUtil<T extends Element = Element> {
   readonly type: ElementType;

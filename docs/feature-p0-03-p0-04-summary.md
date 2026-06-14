@@ -26,36 +26,36 @@ Xây dựng hệ thống render shapes dạng SVG/DOM-first:
 
 Module `src/store/mutation-pipeline.ts` — pipeline mutation duy nhất cho toàn bộ ứng dụng:
 
-| Hàm | Mô tả |
-|-----|-------|
-| `createElement(draft)` | Sinh ID, tự gán `version=1`, `versionNonce`, `updatedAt`, `zIndex=max+1`, `isDeleted=false` |
+| Hàm                       | Mô tả                                                                                                        |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `createElement(draft)`    | Sinh ID, tự gán `version=1`, `versionNonce`, `updatedAt`, `zIndex=max+1`, `isDeleted=false`                  |
 | `patchElement(id, patch)` | Cập nhật một số field; `version++`, nonce mới, updatedAt mới; bỏ qua nếu id không tồn tại hoặc đã bị xóa mềm |
-| `deleteElements(ids)` | Soft delete (`isDeleted=true`); element vẫn trong store; `version++` |
-| `updateElements(patches)` | Batch patch nhiều elements cùng lúc |
+| `deleteElements(ids)`     | Soft delete (`isDeleted=true`); element vẫn trong store; `version++`                                         |
+| `updateElements(patches)` | Batch patch nhiều elements cùng lúc                                                                          |
 
 **Hook system**: `registerMutationHook(hook)` trả về hàm `unregister`. Mọi mutation kích hoạt `MutationEvent { type, elements }`. Dùng để cắm history (P1B), localStorage persist (P1A), Socket.IO broadcast (P2).
 
 ## Files thay đổi
 
-| File | Hành động |
-|------|-----------|
-| `src/utils/id.ts` | Tạo mới |
-| `src/canvas/shapes/types.ts` | Tạo mới |
-| `src/canvas/shapes/utils.ts` | Tạo mới |
-| `src/canvas/shapes/rectangle.tsx` | Tạo mới |
-| `src/canvas/shapes/ellipse.tsx` | Tạo mới |
-| `src/canvas/shapes/diamond.tsx` | Tạo mới |
-| `src/canvas/shapes/line.tsx` | Tạo mới |
-| `src/canvas/shapes/text.tsx` | Tạo mới |
-| `src/canvas/shapes/index.ts` | Tạo mới |
-| `src/canvas/layers/SvgLayer.tsx` | Tạo mới |
-| `src/canvas/Whiteboard.tsx` | Tạo mới |
-| `src/app/App.tsx` | Sửa |
-| `src/store/mutation-pipeline.ts` | Tạo mới |
-| `src/utils/id.test.ts` | Tạo mới |
-| `src/canvas/shapes/__tests__/registry.test.ts` | Tạo mới |
-| `src/canvas/shapes/__tests__/shapes.test.tsx` | Tạo mới |
-| `src/store/__tests__/mutation-pipeline.test.ts` | Tạo mới |
+| File                                            | Hành động |
+| ----------------------------------------------- | --------- |
+| `src/utils/id.ts`                               | Tạo mới   |
+| `src/canvas/shapes/types.ts`                    | Tạo mới   |
+| `src/canvas/shapes/utils.ts`                    | Tạo mới   |
+| `src/canvas/shapes/rectangle.tsx`               | Tạo mới   |
+| `src/canvas/shapes/ellipse.tsx`                 | Tạo mới   |
+| `src/canvas/shapes/diamond.tsx`                 | Tạo mới   |
+| `src/canvas/shapes/line.tsx`                    | Tạo mới   |
+| `src/canvas/shapes/text.tsx`                    | Tạo mới   |
+| `src/canvas/shapes/index.ts`                    | Tạo mới   |
+| `src/canvas/layers/SvgLayer.tsx`                | Tạo mới   |
+| `src/canvas/Whiteboard.tsx`                     | Tạo mới   |
+| `src/app/App.tsx`                               | Sửa       |
+| `src/store/mutation-pipeline.ts`                | Tạo mới   |
+| `src/utils/id.test.ts`                          | Tạo mới   |
+| `src/canvas/shapes/__tests__/registry.test.ts`  | Tạo mới   |
+| `src/canvas/shapes/__tests__/shapes.test.tsx`   | Tạo mới   |
+| `src/store/__tests__/mutation-pipeline.test.ts` | Tạo mới   |
 
 ## Quyết định thiết kế
 

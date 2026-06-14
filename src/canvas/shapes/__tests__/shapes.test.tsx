@@ -124,7 +124,11 @@ describe('lineShapeUtil', () => {
         strokeWidth: 1,
         strokeStyle: 'solid',
         opacity: 1,
-        points: [[0, 0], [50, 50], [100, 0]],
+        points: [
+          [0, 0],
+          [50, 50],
+          [100, 0],
+        ],
       },
     });
     const jsx = lineShapeUtil.render(el);

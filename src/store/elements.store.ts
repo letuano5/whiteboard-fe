@@ -18,8 +18,7 @@ export const useElementsStore = create<ElementsState & ElementsActions>()((set) 
 
   setElements: (elements) => set({ elements }),
 
-  addElement: (element) =>
-    set((state) => ({ elements: [...state.elements, element] })),
+  addElement: (element) => set((state) => ({ elements: [...state.elements, element] })),
 
   updateElement: (updated) =>
     set((state) => ({

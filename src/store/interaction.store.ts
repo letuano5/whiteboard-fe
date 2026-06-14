@@ -1,13 +1,7 @@
 import { create } from 'zustand';
-import type {
-  Element,
-  HandleId,
-  InteractionState,
-  Point,
-  Presence,
-  Rect,
-  ToolId,
-} from '../types/shared';
+import type { Element, Presence } from '../types/shared';
+import type { Point, Rect } from '../types/geometry';
+import type { HandleId, InteractionState, ToolId } from '../types/interaction';
 
 const DEFAULT_STATE: InteractionState = {
   tool: 'select',
@@ -34,19 +28,17 @@ interface InteractionActions {
   reset: () => void;
 }
 
-export const useInteractionStore = create<InteractionState & InteractionActions>()(
-  (set) => ({
-    ...DEFAULT_STATE,
+export const useInteractionStore = create<InteractionState & InteractionActions>()((set) => ({
+  ...DEFAULT_STATE,
 
-    setTool: (tool) => set({ tool }),
-    setSelectedIds: (selectedIds) => set({ selectedIds }),
-    setDraggingId: (draggingId) => set({ draggingId }),
-    setDragStart: (dragStart) => set({ dragStart }),
-    setDraftElement: (draftElement) => set({ draftElement }),
-    setMarquee: (marquee) => set({ marquee }),
-    setResizeHandle: (resizeHandle) => set({ resizeHandle }),
-    setLaserTrail: (laserTrail) => set({ laserTrail }),
-    setRemoteCursors: (remoteCursors) => set({ remoteCursors }),
-    reset: () => set({ ...DEFAULT_STATE, remoteCursors: new Map() }),
-  }),
-);
+  setTool: (tool) => set({ tool }),
+  setSelectedIds: (selectedIds) => set({ selectedIds }),
+  setDraggingId: (draggingId) => set({ draggingId }),
+  setDragStart: (dragStart) => set({ dragStart }),
+  setDraftElement: (draftElement) => set({ draftElement }),
+  setMarquee: (marquee) => set({ marquee }),
+  setResizeHandle: (resizeHandle) => set({ resizeHandle }),
+  setLaserTrail: (laserTrail) => set({ laserTrail }),
+  setRemoteCursors: (remoteCursors) => set({ remoteCursors }),
+  reset: () => set({ ...DEFAULT_STATE, remoteCursors: new Map() }),
+}));

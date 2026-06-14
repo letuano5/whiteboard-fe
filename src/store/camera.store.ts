@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import type { Camera, Point } from '../types/shared';
+import type { Camera } from '../types/shared';
+import type { Point } from '../types/geometry';
 import { MAX_ZOOM, MIN_ZOOM } from '../utils/camera';
 
 interface CameraState {

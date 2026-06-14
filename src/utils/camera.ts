@@ -1,4 +1,5 @@
-import type { Camera, Point } from '../types/shared';
+import type { Camera } from '../types/shared';
+import type { Point } from '../types/geometry';
 
 export const MIN_ZOOM = 0.1;
 export const MAX_ZOOM = 8;

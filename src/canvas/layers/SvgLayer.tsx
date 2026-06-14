@@ -7,9 +7,7 @@ interface SvgLayerProps {
 }
 
 export default function SvgLayer({ elements, camera }: SvgLayerProps) {
-  const visible = elements
-    .filter((el) => !el.isDeleted)
-    .sort((a, b) => a.zIndex - b.zIndex);
+  const visible = elements.filter((el) => !el.isDeleted).sort((a, b) => a.zIndex - b.zIndex);
 
   return (
     <svg

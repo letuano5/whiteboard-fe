@@ -64,51 +64,6 @@ export interface Camera {
   zoom: number; // clamped [0.1, 8]
 }
 
-// ─── Transient interaction state (§2.3) — NOT persisted, NOT synced ──────────
-
-export type ToolId =
-  | 'select'
-  | 'hand'
-  | 'rectangle'
-  | 'ellipse'
-  | 'line'
-  | 'text'
-  | 'diamond'
-  | 'triangle'
-  | 'polygon'
-  | 'arrow'
-  | 'image'
-  | 'freehand'
-  | 'highlighter'
-  | 'eraser'
-  | 'frame'
-  | 'sticky'
-  | 'embed'
-  | 'laser';
-
-export type HandleId = 'nw' | 'ne' | 'sw' | 'se' | 'n' | 's' | 'e' | 'w' | 'rotate';
-
-export type Point = { x: number; y: number };
-
-export interface Rect {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
-
-export interface InteractionState {
-  tool: ToolId;
-  selectedIds: string[];
-  draggingId: string | null;
-  dragStart: { x: number; y: number } | null;
-  draftElement: Element | null; // shape being drawn
-  marquee: Rect | null; // selection marquee
-  resizeHandle: HandleId | null;
-  laserTrail: Point[]; // ephemeral, not persisted
-  remoteCursors: Map<string, Presence>; // from P2
-}
-
 // ─── Presence (§2.4) — ephemeral, from P2 ────────────────────────────────────
 
 export interface Presence {

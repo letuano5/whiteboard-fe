@@ -9,12 +9,9 @@ export const diamondShapeUtil: ShapeUtil = {
     const { x, y, width, height, angle, props } = element;
     const cx = x + width / 2;
     const cy = y + height / 2;
-    const points = [
-      `${cx},${y}`,
-      `${x + width},${cy}`,
-      `${cx},${y + height}`,
-      `${x},${cy}`,
-    ].join(' ');
+    const points = [`${cx},${y}`, `${x + width},${cy}`, `${cx},${y + height}`, `${x},${cy}`].join(
+      ' ',
+    );
     return (
       <polygon
         points={points}

@@ -27,7 +27,10 @@ function nextNonce(): number {
   return Math.floor(Math.random() * 1_000_000_000);
 }
 
-export type ElementDraft = Omit<Element, 'id' | 'version' | 'versionNonce' | 'updatedAt' | 'zIndex' | 'isDeleted'>;
+export type ElementDraft = Omit<
+  Element,
+  'id' | 'version' | 'versionNonce' | 'updatedAt' | 'zIndex' | 'isDeleted'
+>;
 
 export function createElement(draft: ElementDraft): Element {
   const { elements } = useElementsStore.getState();
@@ -91,14 +94,17 @@ export function deleteElements(ids: string[]): void {
 }
 
 export function updateElements(
-  patches: { id: string; patch: Partial<Omit<Element, 'id' | 'version' | 'versionNonce' | 'updatedAt'>> }[],
+  patches: {
+    id: string;
+    patch: Partial<Omit<Element, 'id' | 'version' | 'versionNonce' | 'updatedAt'>>;
+  }[],
 ): void {
   const { elements } = useElementsStore.getState();
   const now = Date.now();
 
   const updated = patches.reduce<Element[]>((acc, { id, patch }) => {
     const existing = elements.find((e) => e.id === id);
-    if (!existing) return acc;
+    if (!existing || existing.isDeleted) return acc;
     acc.push({
       ...existing,
       ...patch,

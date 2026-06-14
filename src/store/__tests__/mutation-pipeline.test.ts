@@ -131,10 +131,14 @@ describe('deleteElements', () => {
   it('ignores ids that are already deleted', () => {
     const el = createElement(makeDraft());
     deleteElements([el.id]);
-    const versionAfterFirst = useElementsStore.getState().elements.find((e) => e.id === el.id)!.version;
+    const versionAfterFirst = useElementsStore
+      .getState()
+      .elements.find((e) => e.id === el.id)!.version;
 
     deleteElements([el.id]);
-    const versionAfterSecond = useElementsStore.getState().elements.find((e) => e.id === el.id)!.version;
+    const versionAfterSecond = useElementsStore
+      .getState()
+      .elements.find((e) => e.id === el.id)!.version;
     expect(versionAfterSecond).toBe(versionAfterFirst);
   });
 });
@@ -166,6 +170,20 @@ describe('updateElements', () => {
     updateElements([{ id: 'ghost-id', patch: { x: 999 } }]);
     const found = useElementsStore.getState().elements.find((e) => e.id === el.id)!;
     expect(found.version).toBe(1);
+  });
+
+  it('does nothing for a soft-deleted element', () => {
+    const el = createElement(makeDraft({ x: 0 }));
+    deleteElements([el.id]);
+    const versionAfterDelete = useElementsStore
+      .getState()
+      .elements.find((e) => e.id === el.id)!.version;
+
+    updateElements([{ id: el.id, patch: { x: 999 } }]);
+
+    const found = useElementsStore.getState().elements.find((e) => e.id === el.id)!;
+    expect(found.x).toBe(0);
+    expect(found.version).toBe(versionAfterDelete);
   });
 });
 

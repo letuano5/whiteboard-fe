@@ -14,7 +14,9 @@ export const textShapeUtil: ShapeUtil = {
         y={y + (props.fontSize ?? 16)}
         fontSize={props.fontSize ?? 16}
         fontFamily={props.fontFamily ?? 'sans-serif'}
-        textAnchor={props.textAlign === 'center' ? 'middle' : props.textAlign === 'right' ? 'end' : 'start'}
+        textAnchor={
+          props.textAlign === 'center' ? 'middle' : props.textAlign === 'right' ? 'end' : 'start'
+        }
         fill={props.strokeColor}
         opacity={props.opacity}
         transform={angle !== 0 ? `rotate(${(angle * 180) / Math.PI} ${cx} ${cy})` : undefined}
