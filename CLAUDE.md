@@ -57,6 +57,13 @@ vdt-whiteboard/
 - Persistence: localStorage + BroadcastChannel (Phase 1); PostgreSQL + Prisma (Phase 3A+).
 - Conflict resolution: Last-Write-Wins via `version` + `versionNonce`.
 
+### Zustand 5 (v5.0.14)
+
+- Named import only: `import { create } from 'zustand'` (default import removed in v5)
+- Always use curried TypeScript pattern: `create<State & Actions>()((set, get) => ({...}))`
+- Middleware: `import { devtools, subscribeWithSelector } from 'zustand/middleware'`; wrap `devtools` outermost
+- Shallow equality for selectors: `import { useShallow } from 'zustand/react/shallow'`
+
 ## Architecture rules (non-negotiable)
 1. Unified element store — everything is an `Element`; the renderer never holds state.
 2. **Every element mutation goes through ONE mutation pipeline** (`createElement` / `patchElement` / `deleteElements` / `updateElements`). Never mutate the store directly elsewhere. The pipeline handles `version++`, `versionNonce`, `updatedAt`, history capture, local persist, and broadcast.
