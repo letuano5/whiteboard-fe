@@ -28,16 +28,16 @@ vdt-whiteboard/
 | --------------- | ------------------ | ----------------- |
 | Runtime         | Node.js            | 22.x LTS          |
 | Package manager | pnpm               | 10.x              |
-| Bundler         | Vite               | 6.x               |
-| Language        | TypeScript         | 5.8.x             |
+| Bundler         | Vite               | 8.x               |
+| Language        | TypeScript         | 6.x               |
 | UI framework    | React              | 19.x              |
 | State           | Zustand            | 5.x               |
 | Realtime client | socket.io-client   | 4.8.x             |
 | Styling         | Tailwind CSS       | 4.x               |
-| Linter          | ESLint             | 9.x (flat config) |
+| Linter          | ESLint             | 10.x (flat config) |
 | Formatter       | Prettier           | 3.x               |
 | TS lint         | @typescript-eslint | 8.x               |
-| Testing         | Vitest             | 3.x               |
+| Testing         | Vitest             | 4.x               |
 
 ### Backend (separate repo)
 
