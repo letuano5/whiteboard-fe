@@ -87,7 +87,10 @@ export default function SvgLayer({
     selectedIds.length > 0 ? elements.find((el) => el.id === selectedIds[0] && !el.isDeleted) : undefined;
   const overlayElement =
     selectedElement && draftElement?.id === selectedElement.id ? draftElement : selectedElement;
-  const visible = elements.filter((el) => !el.isDeleted).sort((a, b) => a.zIndex - b.zIndex);
+  const isEditingExistingElement = elements.some((el) => el.id === draftElement?.id);
+  const visible = elements
+    .filter((el) => !el.isDeleted && el.id !== draftElement?.id)
+    .sort((a, b) => a.zIndex - b.zIndex);
 
   return (
     <svg
@@ -106,7 +109,7 @@ export default function SvgLayer({
         {draftElement && (() => {
           const util = getShapeUtil(draftElement.type);
           if (!util) return null;
-          return <g opacity={0.6}>{util.render(draftElement)}</g>;
+          return <g opacity={isEditingExistingElement ? 1 : 0.6}>{util.render(draftElement)}</g>;
         })()}
         {overlayElement && (
           <SelectionOverlay element={overlayElement} onHandlePointerDown={onHandlePointerDown} />

@@ -88,6 +88,42 @@ describe('SvgLayer — SelectionOverlay', () => {
     expect(activeCorner).toHaveAttribute('cx', '-20');
     expect(activeCorner).toHaveAttribute('cy', '-30');
   });
+
+  it('renders only the draft copy while an existing element is moving or resizing', () => {
+    const el = makeElement({ id: 'el-1', x: 10, y: 10 });
+    const draft = { ...el, x: 80, y: 60 };
+    useInteractionStore.getState().setSelectedIds([el.id]);
+
+    const { container } = render(
+      <SvgLayer elements={[el]} camera={camera} draftElement={draft} />,
+    );
+
+    const shapeRects = Array.from(container.querySelectorAll('rect')).filter(
+      (rect) => rect.getAttribute('stroke') !== '#3b82f6',
+    );
+    expect(shapeRects).toHaveLength(1);
+    expect(shapeRects[0]).toHaveAttribute('x', '80');
+    expect(shapeRects[0]).toHaveAttribute('y', '60');
+    expect(shapeRects[0].parentElement).toHaveAttribute('opacity', '1');
+  });
+
+  it('still renders a new draft whose id is not in the committed element list', () => {
+    const el = makeElement({ id: 'el-1' });
+    const draft = makeElement({ id: '__draft__', x: 200, y: 150 });
+
+    const { container } = render(
+      <SvgLayer elements={[el]} camera={camera} draftElement={draft} />,
+    );
+
+    const shapeRects = Array.from(container.querySelectorAll('rect')).filter(
+      (rect) => rect.getAttribute('stroke') !== '#3b82f6',
+    );
+    expect(shapeRects).toHaveLength(2);
+    expect(shapeRects.find((rect) => rect.getAttribute('x') === '200')?.parentElement).toHaveAttribute(
+      'opacity',
+      '0.6',
+    );
+  });
 });
 
 describe('SvgLayer — P1A-03 Delete rendering', () => {
