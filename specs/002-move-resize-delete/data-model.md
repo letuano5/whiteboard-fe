@@ -21,13 +21,22 @@ No new fields. The feature mutates existing fields via the pipeline:
 
 ### InteractionState (transient — `interaction.store.ts`)
 
-Three fields to **add** (they appear in `InteractionState` type in `src/types/interaction.ts` but may not be in the store yet):
+Transient fields used by move and resize:
 
 | Field | Type | Purpose |
 |-------|------|---------|
 | `draggingId` | `string \| null` | ID of element being moved or resized; null = idle |
 | `dragStart` | `{ x: number; y: number } \| null` | World-space pointer position at drag start |
-| `resizeHandle` | `HandleId \| null` | Active resize handle; null = body (move) drag |
+| `resizeHandle` | `ResizeHandleId \| null` | Current logical resize handle; null = body (move) drag |
+| `resizeSession` | `ResizeSession \| null` | Original normalized bounds, original handle, and fixed opposite anchor captured at resize start |
+
+```ts
+interface ResizeSession {
+  originalBounds: Rect;
+  originalHandle: ResizeHandleId;
+  anchor: Point;
+}
+```
 
 `draftElement` already exists in the store — reused to hold the in-flight preview copy during drag.
 
@@ -46,9 +55,11 @@ Idle
 Idle
   │  pointerDown on handle (selectedId exists)
   ▼
-Resizing                 draggingId = id, dragStart = worldPt, resizeHandle = handleId
-  │  pointerMove         draftElement = {el, x: newX, y: newY, width: newW, height: newH}
-  │  pointerUp           patchElement(id, {x, y, width, height}); clear all drag state
+Resizing                 capture resizeSession; resizeHandle = original handle
+  │  pointerMove         compute normalized bounds from fixed anchor + pointer;
+  │                      update resizeHandle to current logical handle after flips;
+  │                      draftElement = transformed element using live bounds
+  │  pointerUp           patchElement(id, {x, y, width, height, props?}); clear all drag state
   ▼
 Idle
 
@@ -60,6 +71,7 @@ Idle (with selectedId)
 
 ## Validation Rules
 
-- `width ≥ 1` world unit (enforced in select-tool, before calling patchElement)
-- `height ≥ 1` world unit (same)
+- `width ≥ 1` and `height ≥ 1` world unit in draft and committed state.
+- Pointer crossing an anchor changes which side contains the dragged handle; it never creates negative dimensions.
+- `resizeSession.anchor` stays fixed for the complete gesture even when `resizeHandle` changes logically.
 - No validation needed on `x`/`y` (infinite canvas, any coordinate allowed)

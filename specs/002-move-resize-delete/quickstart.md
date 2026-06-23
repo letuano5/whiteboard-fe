@@ -33,9 +33,9 @@
 ## Scenario 4 — Minimum size clamp
 
 1. Select a small shape.
-2. Drag the `se` handle far inward (past center).
+2. Drag the `se` handle exactly onto its fixed `nw` anchor.
 
-**Expected**: Shape stops at 1×1 world unit; it does NOT invert or disappear.
+**Expected**: Shape remains at 1×1 world unit. Continuing past the anchor starts resize-with-flip instead of stopping.
 
 ## Scenario 5 — Delete with keyboard
 
@@ -59,10 +59,26 @@
 
 **Expected**: The visible line moves and resizes together with its selection box. Clicking the line at its new position still selects it.
 
+## Scenario 8 — Resize through opposite corner
+
+1. Select a rectangle.
+2. Drag the `se` handle past the left side only.
+3. Repeat past the top side only.
+4. Repeat past both the left and top sides.
+
+**Expected**: Resize continues without stopping. The logical corner becomes `sw`, `ne`, then `nw`; the selection handles remain attached and dimensions stay positive.
+
+## Scenario 9 — Flip a line through resize
+
+1. Select a diagonal line.
+2. Drag one corner handle through its fixed opposite corner.
+
+**Expected**: The line mirrors on each crossed axis. Its fixed endpoint remains fixed, its dragged endpoint follows the pointer, and the bbox stays normalized.
+
 ## Automated test run
 
 ```bash
 pnpm test src/canvas/tools/__tests__/select-tool.test.ts
 ```
 
-All 14 AC-tagged criteria should pass (AC-1 through AC-14).
+All 19 AC-tagged criteria should pass (AC-1 through AC-19).

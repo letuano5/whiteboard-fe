@@ -6,6 +6,8 @@ import {
   onSelectHandlePointerDown,
   onSelectKeyDown,
   computeResize,
+  getFlippedHandle,
+  resizeBoundsFromAnchorAndPointer,
 } from '../select-tool';
 import { useElementsStore } from '../../../store/elements.store';
 import { useInteractionStore } from '../../../store/interaction.store';
@@ -157,6 +159,7 @@ function resetDragState() {
   useInteractionStore.getState().setDraggingId(null);
   useInteractionStore.getState().setDragStart(null);
   useInteractionStore.getState().setResizeHandle(null);
+  useInteractionStore.getState().setResizeSession(null);
   useInteractionStore.getState().setDraftElement(null);
 }
 
@@ -291,10 +294,115 @@ describe('P1A-03 — computeResize helper', () => {
   });
 
   // @covers AC-7 (002-move-resize-delete)
-  it('clamps width and height to minimum 1 when dragged past anchor', () => {
-    const result = computeResize(el, 'se', { x: 5, y: 5 }); // way past top-left
-    expect(result.width).toBeGreaterThanOrEqual(1);
-    expect(result.height).toBeGreaterThanOrEqual(1);
+  it('keeps a tiny positive size exactly at the anchor', () => {
+    const result = computeResize(el, 'se', { x: 10, y: 10 });
+    expect(result).toMatchObject({ x: 10, y: 10, width: 1, height: 1 });
+  });
+});
+
+describe('P1A-03 — Resize with flip', () => {
+  const bounds = { x: 10, y: 10, width: 100, height: 50 };
+  const cornerCases = [
+    {
+      handle: 'nw' as const,
+      anchor: { x: 110, y: 60 },
+      horizontal: { pointer: { x: 130, y: 10 }, activeHandle: 'ne' as const },
+      vertical: { pointer: { x: 10, y: 80 }, activeHandle: 'sw' as const },
+      both: { pointer: { x: 130, y: 80 }, activeHandle: 'se' as const },
+    },
+    {
+      handle: 'ne' as const,
+      anchor: { x: 10, y: 60 },
+      horizontal: { pointer: { x: -10, y: 10 }, activeHandle: 'nw' as const },
+      vertical: { pointer: { x: 110, y: 80 }, activeHandle: 'se' as const },
+      both: { pointer: { x: -10, y: 80 }, activeHandle: 'sw' as const },
+    },
+    {
+      handle: 'sw' as const,
+      anchor: { x: 110, y: 10 },
+      horizontal: { pointer: { x: 130, y: 60 }, activeHandle: 'se' as const },
+      vertical: { pointer: { x: 10, y: -10 }, activeHandle: 'nw' as const },
+      both: { pointer: { x: 130, y: -10 }, activeHandle: 'ne' as const },
+    },
+    {
+      handle: 'se' as const,
+      anchor: { x: 10, y: 10 },
+      horizontal: { pointer: { x: -10, y: 60 }, activeHandle: 'sw' as const },
+      vertical: { pointer: { x: 110, y: -10 }, activeHandle: 'ne' as const },
+      both: { pointer: { x: -10, y: -10 }, activeHandle: 'nw' as const },
+    },
+  ];
+
+  for (const cornerCase of cornerCases) {
+    for (const axisCase of ['horizontal', 'vertical', 'both'] as const) {
+      const { pointer, activeHandle } = cornerCase[axisCase];
+
+      // @covers AC-15, AC-16, AC-17 (002-move-resize-delete)
+      it(`${cornerCase.handle} crossing ${axisCase} axis flips to ${activeHandle}`, () => {
+        const result = resizeBoundsFromAnchorAndPointer(
+          {
+            originalBounds: bounds,
+            originalHandle: cornerCase.handle,
+            anchor: cornerCase.anchor,
+          },
+          pointer,
+        );
+
+        expect(result).toMatchObject({
+          x: Math.min(cornerCase.anchor.x, pointer.x),
+          y: Math.min(cornerCase.anchor.y, pointer.y),
+          width: Math.abs(pointer.x - cornerCase.anchor.x),
+          height: Math.abs(pointer.y - cornerCase.anchor.y),
+          activeHandle,
+        });
+        expect(result.width).toBeGreaterThan(0);
+        expect(result.height).toBeGreaterThan(0);
+      });
+    }
+  }
+
+  it('maps edge handles when they cross their fixed anchor', () => {
+    expect(computeResize(makeElement(bounds), 'e', { x: 0, y: 35 })).toMatchObject({
+      x: 0,
+      y: 10,
+      width: 10,
+      height: 50,
+      activeHandle: 'w',
+    });
+    expect(computeResize(makeElement(bounds), 'n', { x: 60, y: 80 })).toMatchObject({
+      x: 10,
+      y: 60,
+      width: 100,
+      height: 20,
+      activeHandle: 's',
+    });
+  });
+
+  it('maps original handles through horizontal and vertical flips', () => {
+    expect(getFlippedHandle('se', true, false)).toBe('sw');
+    expect(getFlippedHandle('se', false, true)).toBe('ne');
+    expect(getFlippedHandle('se', true, true)).toBe('nw');
+  });
+
+  it('keeps the original anchor stable when crossing and crossing back', () => {
+    const el = makeElement({ id: 'stable-anchor' });
+    useElementsStore.getState().setElements([el]);
+    useInteractionStore.getState().setSelectedIds([el.id]);
+    onSelectHandlePointerDown('se', { x: 110, y: 60 });
+
+    onSelectPointerMove({ x: -20, y: -30 });
+    expect(useInteractionStore.getState().resizeHandle).toBe('nw');
+    expect(useInteractionStore.getState().resizeSession?.anchor).toEqual({ x: 10, y: 10 });
+
+    onSelectPointerMove({ x: 140, y: 90 });
+    expect(useInteractionStore.getState().draftElement).toMatchObject({
+      x: 10,
+      y: 10,
+      width: 130,
+      height: 80,
+    });
+    expect(useInteractionStore.getState().resizeHandle).toBe('se');
+    expect(useInteractionStore.getState().resizeSession?.anchor).toEqual({ x: 10, y: 10 });
   });
 });
 
@@ -303,9 +411,8 @@ describe('P1A-03 — Resize via onSelectPointerMove', () => {
   it('pointerUp after resize commits final dimensions with incremented version', () => {
     const el = makeElement({ id: 're-1', x: 10, y: 10, width: 100, height: 50, version: 1 });
     useElementsStore.getState().setElements([el]);
-    useInteractionStore.getState().setDraggingId(el.id);
-    useInteractionStore.getState().setDragStart({ x: 110, y: 60 });
-    useInteractionStore.getState().setResizeHandle('se');
+    useInteractionStore.getState().setSelectedIds([el.id]);
+    onSelectHandlePointerDown('se', { x: 110, y: 60 });
     useInteractionStore.getState().setDraftElement({ ...el, width: 130, height: 70 });
 
     onSelectPointerUp({ x: 140, y: 80 });
@@ -335,9 +442,8 @@ describe('P1A-03 — Resize via onSelectPointerMove', () => {
       },
     });
     useElementsStore.getState().setElements([el]);
-    useInteractionStore.getState().setDraggingId(el.id);
-    useInteractionStore.getState().setDragStart({ x: 110, y: 70 });
-    useInteractionStore.getState().setResizeHandle('se');
+    useInteractionStore.getState().setSelectedIds([el.id]);
+    onSelectHandlePointerDown('se', { x: 110, y: 70 });
 
     onSelectPointerMove({ x: 160, y: 100 });
 
@@ -370,9 +476,8 @@ describe('P1A-03 — Resize via onSelectPointerMove', () => {
       },
     });
     useElementsStore.getState().setElements([el]);
-    useInteractionStore.getState().setDraggingId(el.id);
-    useInteractionStore.getState().setDragStart({ x: 110, y: 20 });
-    useInteractionStore.getState().setResizeHandle('se');
+    useInteractionStore.getState().setSelectedIds([el.id]);
+    onSelectHandlePointerDown('se', { x: 110, y: 20 });
 
     onSelectPointerMove({ x: 140, y: 60 });
 
@@ -380,6 +485,59 @@ describe('P1A-03 — Resize via onSelectPointerMove', () => {
       [10, 20],
       [140, 60],
     ]);
+  });
+
+  // @covers AC-18 (002-move-resize-delete)
+  it('mirrors line point geometry when resized across both axes', () => {
+    const el = makeElement({
+      id: 'line-flip',
+      type: 'line',
+      x: 10,
+      y: 20,
+      width: 100,
+      height: 50,
+      props: {
+        strokeColor: '#000',
+        fillColor: 'none',
+        strokeWidth: 2,
+        strokeStyle: 'solid',
+        opacity: 1,
+        points: [[10, 20], [110, 70]],
+      },
+    });
+    useElementsStore.getState().setElements([el]);
+    useInteractionStore.getState().setSelectedIds([el.id]);
+    onSelectHandlePointerDown('se', { x: 110, y: 70 });
+
+    onSelectPointerMove({ x: -20, y: -30 });
+
+    const draft = useInteractionStore.getState().draftElement;
+    expect(draft).toMatchObject({ x: -20, y: -30, width: 30, height: 50 });
+    expect(draft?.props.points).toEqual([[10, 20], [-20, -30]]);
+    expect(useInteractionStore.getState().resizeHandle).toBe('nw');
+  });
+
+  it('commits normalized positive bounds after flipping across both axes', () => {
+    const el = makeElement({ id: 'rect-flip-commit', version: 1 });
+    useElementsStore.getState().setElements([el]);
+    useInteractionStore.getState().setSelectedIds([el.id]);
+    onSelectHandlePointerDown('se', { x: 110, y: 60 });
+
+    onSelectPointerMove({ x: -20, y: -30 });
+    onSelectPointerUp({ x: -20, y: -30 });
+
+    const updated = useElementsStore.getState().elements.find((item) => item.id === el.id)!;
+    expect(updated).toMatchObject({
+      x: -20,
+      y: -30,
+      width: 30,
+      height: 40,
+      version: 2,
+    });
+    expect(updated.width).toBeGreaterThan(0);
+    expect(updated.height).toBeGreaterThan(0);
+    expect(useInteractionStore.getState().resizeSession).toBeNull();
+    expect(useInteractionStore.getState().resizeHandle).toBeNull();
   });
 });
 
@@ -441,6 +599,11 @@ describe('P1A-03 — onSelectHandlePointerDown', () => {
     expect(useInteractionStore.getState().draggingId).toBe(el.id);
     expect(useInteractionStore.getState().dragStart).toEqual({ x: 110, y: 60 });
     expect(useInteractionStore.getState().resizeHandle).toBe('se');
+    expect(useInteractionStore.getState().resizeSession).toEqual({
+      originalBounds: { x: 10, y: 10, width: 100, height: 50 },
+      originalHandle: 'se',
+      anchor: { x: 10, y: 10 },
+    });
   });
 
   it('is a no-op when no shape is selected', () => {

@@ -18,7 +18,7 @@ import {
 } from './tools/select-tool';
 import SvgLayer from './layers/SvgLayer';
 import Toolbar from '../components/toolbar/Toolbar';
-import type { HandleId } from '../types/interaction';
+import type { ResizeHandleId } from '../types/interaction';
 
 function svgLocalPoint(e: React.PointerEvent) {
   const rect = (e.currentTarget as SVGSVGElement).getBoundingClientRect();
@@ -82,7 +82,10 @@ export default function Whiteboard() {
     cancelShapeDraw();
   }
 
-  function handleHandlePointerDown(handle: HandleId, e: React.PointerEvent<SVGCircleElement>) {
+  function handleHandlePointerDown(
+    handle: ResizeHandleId,
+    e: React.PointerEvent<SVGCircleElement>,
+  ) {
     const svgEl = e.currentTarget.closest('svg') as SVGSVGElement | null;
     if (!svgEl) return;
     const rect = svgEl.getBoundingClientRect();

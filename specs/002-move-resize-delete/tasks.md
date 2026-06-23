@@ -4,7 +4,7 @@
 
 **Prerequisites**: plan.md ✅, spec.md ✅, research.md ✅, data-model.md ✅, acceptance.md ✅
 
-**Tests**: Explicit TDD — one test task per AC-n (AC-1..AC-12), tagged `@covers AC-n`.
+**Tests**: Explicit TDD — acceptance coverage AC-1..AC-19, tagged `@covers AC-n`.
 
 **Organization**: Grouped by user story for independent testing.
 
@@ -53,9 +53,9 @@
 
 ## Phase 3: User Story 2 — Resize Shape (Priority: P1)
 
-**Goal**: Drag any of the 8 handles to resize a shape; clamp to 1×1; commit via `patchElement` on pointer-up.
+**Goal**: Drag any of the 8 handles to resize a shape; keep a 1×1 minimum at the anchor, flip when crossing it, and commit via `patchElement` on pointer-up.
 
-**Independent Test**: Select a shape, drag `se` — width/height grow. Drag `nw` — all four sides move. Drag beyond minimum — shape clamps at 1×1.
+**Independent Test**: Select a shape, drag `se` normally and across each anchor axis. Bounds remain positive, the logical handle flips, and resizing continues.
 
 ### Tests for User Story 2 (write first, verify they FAIL before implementation)
 
@@ -107,6 +107,10 @@
 - [ ] T029 [P] Validate quickstart.md scenarios manually in the browser (move, resize se, resize nw, min-size clamp, delete, no-op delete)
 - [x] T030 [US1] Fix point-based move so line `props.points` are translated and committed with the bounding box; add regression test for AC-13
 - [x] T031 [US2] Fix point-based resize so line `props.points` are transformed and committed with the bounding box; add regression tests for AC-14 and horizontal-line resize
+- [x] T032 [US2] Add transient `ResizeSession` with original bounds, original handle, and fixed anchor
+- [x] T033 [US2] Implement normalized resize-with-flip for corner and edge handles; update logical active handle after crossing
+- [x] T034 [US2] Mirror point geometry on crossed axes and render selection overlay from live draft bounds
+- [x] T035 [US2] Add regression coverage for AC-15..AC-19, including all four corners crossing horizontal, vertical, and both axes
 
 ---
 

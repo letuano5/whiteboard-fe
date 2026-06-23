@@ -40,3 +40,17 @@ AC-12: Given no shape is selected, when the user presses `Delete` or `Backspace`
 AC-13: Given a line stores its rendered geometry as absolute points, when the line is moved by (dx, dy), then every point is translated by (dx, dy) and the committed bounding box and points remain aligned.
 
 AC-14: Given a line stores its rendered geometry as absolute points, when the line is resized from a selection handle, then its points are transformed into the resized bounding box and committed together with `x`, `y`, `width`, and `height`.
+
+## Resize With Flip
+
+Clarification for AC-7: the 1-world-unit clamp applies at or immediately around the fixed anchor. Crossing the anchor is not blocked; crossing behavior is governed by AC-15 through AC-19.
+
+AC-15: Given any corner handle is dragged across the fixed anchor horizontally, then the shape continues resizing on the opposite horizontal side, the logical handle flips horizontally, and stored width remains positive.
+
+AC-16: Given any corner handle is dragged across the fixed anchor vertically, then the shape continues resizing on the opposite vertical side, the logical handle flips vertically, and stored height remains positive.
+
+AC-17: Given any corner handle is dragged across both axes of the fixed anchor, then the logical handle flips on both axes and the normalized bounding box spans the anchor and pointer with positive dimensions.
+
+AC-18: Given a line or other point-based shape is resized across an anchor, then its absolute points are mirrored on each crossed axis, with the fixed anchor and dragged point remaining geometrically consistent.
+
+AC-19: Given a resize is in progress, then the selection border and handles use the live draft bounds and remain attached to the shape before and after a flip.

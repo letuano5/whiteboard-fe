@@ -36,7 +36,7 @@ function makeElement(overrides: Partial<Element> = {}): Element {
 }
 
 beforeEach(() => {
-  useInteractionStore.getState().setSelectedIds([]);
+  useInteractionStore.getState().reset();
 });
 
 describe('SvgLayer — SelectionOverlay', () => {
@@ -67,6 +67,26 @@ describe('SvgLayer — SelectionOverlay', () => {
 
     const circles = container.querySelectorAll('circle');
     expect(circles.length).toBe(0);
+  });
+
+  // @covers AC-19 (002-move-resize-delete)
+  it('keeps the selection overlay attached to draft bounds during resize', () => {
+    const el = makeElement({ id: 'el-1' });
+    const draft = { ...el, x: -20, y: -30, width: 30, height: 40 };
+    useInteractionStore.getState().setSelectedIds([el.id]);
+
+    const { container } = render(
+      <SvgLayer elements={[el]} camera={camera} draftElement={draft} />,
+    );
+
+    const overlay = container.querySelector('rect[stroke="#3b82f6"]');
+    const activeCorner = container.querySelector('circle[data-handle="nw"]');
+    expect(overlay).toHaveAttribute('x', '-20');
+    expect(overlay).toHaveAttribute('y', '-30');
+    expect(overlay).toHaveAttribute('width', '30');
+    expect(overlay).toHaveAttribute('height', '40');
+    expect(activeCorner).toHaveAttribute('cx', '-20');
+    expect(activeCorner).toHaveAttribute('cy', '-30');
   });
 });
 

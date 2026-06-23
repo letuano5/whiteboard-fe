@@ -40,9 +40,12 @@ For each handle, the opposite corner/edge is the **anchor** (fixed point). The d
 | w | x+w | — | anchorX − ptrX | (unchanged) |
 | e | x | — | ptrX − anchorX | (unchanged) |
 
-New `x` = `min(ptrX, anchorX)` for handles that affect x-axis; `x = element.x` otherwise.
-New `y` = `min(ptrY, anchorY)` for handles that affect y-axis; `y = element.y` otherwise.
-Clamp: `width = Math.max(1, computedWidth)`, `height = Math.max(1, computedHeight)`.
+For each affected axis, normalized bounds use the minimum/maximum of the fixed anchor and pointer:
+
+- `x = min(anchorX, ptrX)`, `width = max(1, abs(ptrX - anchorX))`
+- `y = min(anchorY, ptrY)`, `height = max(1, abs(ptrY - anchorY))`
+
+At exact equality, the 1-unit minimum stays on the side implied by the original handle. Once the pointer crosses the anchor, the logical handle flips to the opposite side instead of stopping.
 
 ### D5 — Delete keyboard handler
 
@@ -55,3 +58,11 @@ Clamp: `width = Math.max(1, computedWidth)`, `height = Math.max(1, computedHeigh
 - **Decision**: Treat the bounding box and `props.points` as one geometry unit. Move translates every absolute point by the drag delta. Resize maps every point from the old bounding box into the new bounding box.
 - **Rationale**: Lines render and hit-test from `props.points`; changing only `x`, `y`, `width`, and `height` moves the selection overlay without moving the visible line.
 - **Degenerate bounds**: For horizontal or vertical lines whose old width or height is zero, derive the missing-axis ratio from the non-zero axis (or point order for a zero-length geometry) so a resize can turn the line into a diagonal.
+
+### D7 — Resize session and flip state
+
+- **Decision**: Capture `originalBounds`, `originalHandle`, and the fixed opposite `anchor` on pointer-down. Keep this session unchanged throughout the gesture.
+- **Rationale**: `resizeHandle` changes logically after crossing an axis. Recomputing the anchor from that changing handle would make the anchor jump and destabilize the gesture.
+- **Flip detection**: Compare the pointer side of the anchor with the side represented by the original handle. Crossing x swaps west/east; crossing y swaps north/south.
+- **Rendering**: Selection overlay uses `draftElement` bounds while resizing, so the eight handles remain attached to the live normalized rectangle.
+- **Point geometry**: Normalize each point in the original bounds, invert its normalized ratio (`1 - ratio`) on crossed axes, then map it into the new positive bounds.

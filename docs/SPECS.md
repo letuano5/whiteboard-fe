@@ -120,14 +120,23 @@ interface Camera {
 ### 2.3 Transient interaction state (KHÔNG lưu, KHÔNG sync)
 
 ```ts
+type ResizeHandleId = 'nw' | 'ne' | 'sw' | 'se' | 'n' | 's' | 'e' | 'w';
+
+interface ResizeSession {
+  originalBounds: Rect;
+  originalHandle: ResizeHandleId;
+  anchor: Point;
+}
+
 interface InteractionState {
   tool: ToolId;
   selectedIds: string[];
   draggingId: string | null;
   dragStart: { x: number; y: number } | null;
-  draftElement: Element | null; // shape đang vẽ dở
+  draftElement: Element | null; // preview đang vẽ/move/resize
   marquee: Rect | null; // khung chọn
-  resizeHandle: HandleId | null;
+  resizeHandle: ResizeHandleId | null;
+  resizeSession: ResizeSession | null; // original bounds + handle + fixed anchor
   laserTrail: Point[]; // ephemeral
   remoteCursors: Map<string, Presence>; // từ P2
 }
@@ -238,6 +247,8 @@ applyRemoteElements(incoming: Element[])  // LWW theo version/versionNonce; bỏ
 **FR:** Di chuyển, resize theo trục (chưa xét xoay), xoá.
 
 - [ ] Move cập nhật `x,y`; resize cập nhật `width,height` (+`x,y` khi kéo cạnh trái/trên).
+- [ ] Resize-with-flip: khi kéo handle vượt qua cạnh/corner đối diện, anchor đối diện giữ cố định, logical handle đổi sang phía tương ứng; bbox luôn chuẩn hoá với `width,height > 0` (không lưu kích thước âm).
+- [ ] Point geometry (ví dụ line) phải mirror theo trục flip để nét vẽ, hit-test, bbox và handle tiếp tục khớp nhau.
 - [ ] Delete (Del/Backspace) → `deleteElements` (soft delete).
 
 ### [P1A-04] Style cơ bản

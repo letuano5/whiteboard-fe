@@ -1,16 +1,19 @@
 import type { Camera, Element } from '../../types/shared';
-import type { HandleId } from '../../types/interaction';
+import type { ResizeHandleId } from '../../types/interaction';
 import { getShapeUtil } from '../shapes';
 import { useInteractionStore } from '../../store/interaction.store';
 
 interface SelectionOverlayProps {
   element: Element;
-  onHandlePointerDown?: (handle: HandleId, e: React.PointerEvent<SVGCircleElement>) => void;
+  onHandlePointerDown?: (
+    handle: ResizeHandleId,
+    e: React.PointerEvent<SVGCircleElement>,
+  ) => void;
 }
 
 function SelectionOverlay({ element, onHandlePointerDown }: SelectionOverlayProps) {
   const { x, y, width: w, height: h } = element;
-  const handles: [HandleId, number, number][] = [
+  const handles: [ResizeHandleId, number, number][] = [
     ['nw', x, y],
     ['ne', x + w, y],
     ['sw', x, y + h],
@@ -35,6 +38,7 @@ function SelectionOverlay({ element, onHandlePointerDown }: SelectionOverlayProp
       {handles.map(([id, hx, hy]) => (
         <circle
           key={id}
+          data-handle={id}
           cx={hx}
           cy={hy}
           r={4}
@@ -62,7 +66,10 @@ interface SvgLayerProps {
   onPointerMove?: (e: React.PointerEvent<SVGSVGElement>) => void;
   onPointerUp?: (e: React.PointerEvent<SVGSVGElement>) => void;
   onPointerLeave?: (e: React.PointerEvent<SVGSVGElement>) => void;
-  onHandlePointerDown?: (handle: HandleId, e: React.PointerEvent<SVGCircleElement>) => void;
+  onHandlePointerDown?: (
+    handle: ResizeHandleId,
+    e: React.PointerEvent<SVGCircleElement>,
+  ) => void;
 }
 
 export default function SvgLayer({
@@ -78,6 +85,8 @@ export default function SvgLayer({
   const selectedIds = useInteractionStore((s) => s.selectedIds);
   const selectedElement =
     selectedIds.length > 0 ? elements.find((el) => el.id === selectedIds[0] && !el.isDeleted) : undefined;
+  const overlayElement =
+    selectedElement && draftElement?.id === selectedElement.id ? draftElement : selectedElement;
   const visible = elements.filter((el) => !el.isDeleted).sort((a, b) => a.zIndex - b.zIndex);
 
   return (
@@ -99,8 +108,8 @@ export default function SvgLayer({
           if (!util) return null;
           return <g opacity={0.6}>{util.render(draftElement)}</g>;
         })()}
-        {selectedElement && (
-          <SelectionOverlay element={selectedElement} onHandlePointerDown={onHandlePointerDown} />
+        {overlayElement && (
+          <SelectionOverlay element={overlayElement} onHandlePointerDown={onHandlePointerDown} />
         )}
       </g>
     </svg>
