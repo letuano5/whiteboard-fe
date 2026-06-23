@@ -1,5 +1,38 @@
 import type { Camera, Element } from '../../types/shared';
+import type { HandleId } from '../../types/interaction';
 import { getShapeUtil } from '../shapes';
+import { useInteractionStore } from '../../store/interaction.store';
+
+function SelectionOverlay({ element }: { element: Element }) {
+  const { x, y, width: w, height: h } = element;
+  const handles: [HandleId, number, number][] = [
+    ['nw', x, y],
+    ['ne', x + w, y],
+    ['sw', x, y + h],
+    ['se', x + w, y + h],
+    ['n', x + w / 2, y],
+    ['s', x + w / 2, y + h],
+    ['e', x + w, y + h / 2],
+    ['w', x, y + h / 2],
+  ];
+  return (
+    <g>
+      <rect
+        x={x}
+        y={y}
+        width={w}
+        height={h}
+        fill="none"
+        stroke="#3b82f6"
+        strokeWidth={1.5}
+        strokeDasharray="4 2"
+      />
+      {handles.map(([id, hx, hy]) => (
+        <circle key={id} cx={hx} cy={hy} r={4} fill="white" stroke="#3b82f6" strokeWidth={1.5} />
+      ))}
+    </g>
+  );
+}
 
 interface SvgLayerProps {
   elements: Element[];
@@ -20,6 +53,9 @@ export default function SvgLayer({
   onPointerUp,
   onPointerLeave,
 }: SvgLayerProps) {
+  const selectedIds = useInteractionStore((s) => s.selectedIds);
+  const selectedElement =
+    selectedIds.length > 0 ? elements.find((el) => el.id === selectedIds[0] && !el.isDeleted) : undefined;
   const visible = elements.filter((el) => !el.isDeleted).sort((a, b) => a.zIndex - b.zIndex);
 
   return (
@@ -41,6 +77,7 @@ export default function SvgLayer({
           if (!util) return null;
           return <g opacity={0.6}>{util.render(draftElement)}</g>;
         })()}
+        {selectedElement && <SelectionOverlay element={selectedElement} />}
       </g>
     </svg>
   );

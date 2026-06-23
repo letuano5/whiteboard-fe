@@ -37,8 +37,24 @@ export const lineShapeUtil: ShapeUtil = {
     );
   },
 
-  hitTest(_element, _x, _y) {
-    return false;
+  hitTest(element, x, y) {
+    const HIT_THRESHOLD = 8;
+    if (element.props.points && element.props.points.length >= 2) {
+      const [x1, y1] = element.props.points[0];
+      const [x2, y2] = element.props.points[1];
+      const dx = x2 - x1;
+      const dy = y2 - y1;
+      const len2 = dx * dx + dy * dy;
+      const t = len2 === 0 ? 0 : Math.max(0, Math.min(1, ((x - x1) * dx + (y - y1) * dy) / len2));
+      const dist = Math.sqrt((x - (x1 + t * dx)) ** 2 + (y - (y1 + t * dy)) ** 2);
+      return dist <= HIT_THRESHOLD;
+    }
+    return (
+      x >= element.x - HIT_THRESHOLD &&
+      x <= element.x + element.width + HIT_THRESHOLD &&
+      y >= element.y - HIT_THRESHOLD &&
+      y <= element.y + element.height + HIT_THRESHOLD
+    );
   },
 
   getBounds({ x, y, width, height }) {

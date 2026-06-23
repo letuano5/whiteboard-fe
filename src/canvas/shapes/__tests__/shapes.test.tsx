@@ -173,13 +173,100 @@ describe('textShapeUtil', () => {
   });
 });
 
-describe('hitTest stubs', () => {
-  it('all shapes return false for hitTest', () => {
-    const el = makeElement();
-    expect(rectangleShapeUtil.hitTest(el, 50, 50)).toBe(false);
-    expect(ellipseShapeUtil.hitTest({ ...el, type: 'ellipse' }, 50, 50)).toBe(false);
-    expect(diamondShapeUtil.hitTest({ ...el, type: 'diamond' }, 50, 50)).toBe(false);
-    expect(lineShapeUtil.hitTest({ ...el, type: 'line' }, 50, 50)).toBe(false);
-    expect(textShapeUtil.hitTest({ ...el, type: 'text' }, 50, 50)).toBe(false);
+// makeElement defaults: x=10, y=20, width=100, height=50
+// bbox: x∈[10,110], y∈[20,70]
+// inside point: (60, 45); outside point: (0, 0); boundary: (10, 20)
+
+describe('rectangleShapeUtil.hitTest', () => {
+  it('returns true for point inside bbox', () => {
+    expect(rectangleShapeUtil.hitTest(makeElement(), 60, 45)).toBe(true);
+  });
+
+  it('returns true for point on bbox boundary', () => {
+    expect(rectangleShapeUtil.hitTest(makeElement(), 10, 20)).toBe(true);
+    expect(rectangleShapeUtil.hitTest(makeElement(), 110, 70)).toBe(true);
+  });
+
+  it('returns false for point outside bbox', () => {
+    expect(rectangleShapeUtil.hitTest(makeElement(), 0, 0)).toBe(false);
+    expect(rectangleShapeUtil.hitTest(makeElement(), 200, 200)).toBe(false);
+  });
+
+  it('returns false for zero-size shape (width=0, height=0) — no throw', () => {
+    const el = makeElement({ width: 0, height: 0 });
+    expect(() => rectangleShapeUtil.hitTest(el, 10, 20)).not.toThrow();
+    expect(rectangleShapeUtil.hitTest(el, 10, 20)).toBe(true); // degenerate point hits itself
+    expect(rectangleShapeUtil.hitTest(el, 11, 20)).toBe(false);
+  });
+});
+
+describe('ellipseShapeUtil.hitTest', () => {
+  it('returns true for point inside AABB', () => {
+    const el = makeElement({ type: 'ellipse' });
+    expect(ellipseShapeUtil.hitTest(el, 60, 45)).toBe(true);
+  });
+
+  it('returns false for point outside AABB', () => {
+    const el = makeElement({ type: 'ellipse' });
+    expect(ellipseShapeUtil.hitTest(el, 0, 0)).toBe(false);
+  });
+});
+
+describe('textShapeUtil.hitTest', () => {
+  it('returns true for point inside AABB', () => {
+    const el = makeElement({ type: 'text' });
+    expect(textShapeUtil.hitTest(el, 60, 45)).toBe(true);
+  });
+
+  it('returns false for point outside AABB', () => {
+    const el = makeElement({ type: 'text' });
+    expect(textShapeUtil.hitTest(el, 0, 0)).toBe(false);
+  });
+});
+
+describe('diamondShapeUtil.hitTest', () => {
+  it('returns true for point inside bbox', () => {
+    const el = makeElement({ type: 'diamond' });
+    expect(diamondShapeUtil.hitTest(el, 60, 45)).toBe(true);
+  });
+
+  it('returns false for point outside bbox', () => {
+    const el = makeElement({ type: 'diamond' });
+    expect(diamondShapeUtil.hitTest(el, 0, 0)).toBe(false);
+  });
+});
+
+describe('lineShapeUtil.hitTest', () => {
+  const lineEl = makeElement({
+    type: 'line',
+    props: {
+      strokeColor: '#000',
+      fillColor: 'none',
+      strokeWidth: 2,
+      strokeStyle: 'solid' as const,
+      opacity: 1,
+      points: [[0, 0], [100, 0]] as [number, number][],
+    },
+  });
+
+  it('returns true for point within 8 units of segment', () => {
+    expect(lineShapeUtil.hitTest(lineEl, 50, 5)).toBe(true); // 5 units above midpoint
+    expect(lineShapeUtil.hitTest(lineEl, 50, -7)).toBe(true); // 7 units below midpoint
+  });
+
+  it('returns false for point more than 8 units from segment', () => {
+    expect(lineShapeUtil.hitTest(lineEl, 50, 10)).toBe(false); // 10 units above
+    expect(lineShapeUtil.hitTest(lineEl, 50, -9)).toBe(false); // 9 units below
+  });
+
+  it('returns true for point on segment endpoint', () => {
+    expect(lineShapeUtil.hitTest(lineEl, 0, 0)).toBe(true);
+    expect(lineShapeUtil.hitTest(lineEl, 100, 0)).toBe(true);
+  });
+
+  it('falls back to AABB when no points prop (no throw)', () => {
+    const el = makeElement({ type: 'line' }); // no points prop
+    expect(() => lineShapeUtil.hitTest(el, 60, 45)).not.toThrow();
+    expect(lineShapeUtil.hitTest(el, 60, 45)).toBe(true); // inside expanded AABB
   });
 });

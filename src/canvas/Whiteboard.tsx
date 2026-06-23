@@ -8,6 +8,7 @@ import {
   onShapePointerUp,
   cancelShapeDraw,
 } from './tools/create-shape-tool';
+import { onSelectPointerDown } from './tools/select-tool';
 import SvgLayer from './layers/SvgLayer';
 import Toolbar from '../components/toolbar/Toolbar';
 
@@ -23,6 +24,11 @@ export default function Whiteboard() {
   const draftElement = useInteractionStore((s) => s.draftElement);
 
   function handlePointerDown(e: React.PointerEvent<SVGSVGElement>) {
+    if (tool === 'select') {
+      const local = svgLocalPoint(e);
+      onSelectPointerDown(screenToWorld(local.x, local.y, camera));
+      return;
+    }
     if (!isShapeTool(tool)) return;
     e.currentTarget.setPointerCapture(e.pointerId);
     const local = svgLocalPoint(e);

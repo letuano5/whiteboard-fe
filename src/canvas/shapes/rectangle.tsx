@@ -25,8 +25,8 @@ export const rectangleShapeUtil: ShapeUtil = {
     );
   },
 
-  hitTest(_element, _x, _y) {
-    return false;
+  hitTest(element, x, y) {
+    return x >= element.x && x <= element.x + element.width && y >= element.y && y <= element.y + element.height;
   },
 
   getBounds({ x, y, width, height }) {
