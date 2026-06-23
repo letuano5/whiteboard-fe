@@ -3,7 +3,12 @@ import type { HandleId } from '../../types/interaction';
 import { getShapeUtil } from '../shapes';
 import { useInteractionStore } from '../../store/interaction.store';
 
-function SelectionOverlay({ element }: { element: Element }) {
+interface SelectionOverlayProps {
+  element: Element;
+  onHandlePointerDown?: (handle: HandleId, e: React.PointerEvent<SVGCircleElement>) => void;
+}
+
+function SelectionOverlay({ element, onHandlePointerDown }: SelectionOverlayProps) {
   const { x, y, width: w, height: h } = element;
   const handles: [HandleId, number, number][] = [
     ['nw', x, y],
@@ -28,7 +33,22 @@ function SelectionOverlay({ element }: { element: Element }) {
         strokeDasharray="4 2"
       />
       {handles.map(([id, hx, hy]) => (
-        <circle key={id} cx={hx} cy={hy} r={4} fill="white" stroke="#3b82f6" strokeWidth={1.5} />
+        <circle
+          key={id}
+          cx={hx}
+          cy={hy}
+          r={4}
+          fill="white"
+          stroke="#3b82f6"
+          strokeWidth={1.5}
+          style={{ cursor: 'pointer' }}
+          onPointerDown={(e) => {
+            e.stopPropagation();
+            const svgEl = e.currentTarget.closest('svg') as SVGSVGElement | null;
+            svgEl?.setPointerCapture(e.pointerId);
+            onHandlePointerDown?.(id, e);
+          }}
+        />
       ))}
     </g>
   );
@@ -42,6 +62,7 @@ interface SvgLayerProps {
   onPointerMove?: (e: React.PointerEvent<SVGSVGElement>) => void;
   onPointerUp?: (e: React.PointerEvent<SVGSVGElement>) => void;
   onPointerLeave?: (e: React.PointerEvent<SVGSVGElement>) => void;
+  onHandlePointerDown?: (handle: HandleId, e: React.PointerEvent<SVGCircleElement>) => void;
 }
 
 export default function SvgLayer({
@@ -52,6 +73,7 @@ export default function SvgLayer({
   onPointerMove,
   onPointerUp,
   onPointerLeave,
+  onHandlePointerDown,
 }: SvgLayerProps) {
   const selectedIds = useInteractionStore((s) => s.selectedIds);
   const selectedElement =
@@ -77,7 +99,9 @@ export default function SvgLayer({
           if (!util) return null;
           return <g opacity={0.6}>{util.render(draftElement)}</g>;
         })()}
-        {selectedElement && <SelectionOverlay element={selectedElement} />}
+        {selectedElement && (
+          <SelectionOverlay element={selectedElement} onHandlePointerDown={onHandlePointerDown} />
+        )}
       </g>
     </svg>
   );

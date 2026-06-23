@@ -1,5 +1,12 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { onSelectPointerDown } from '../select-tool';
+import {
+  onSelectPointerDown,
+  onSelectPointerMove,
+  onSelectPointerUp,
+  onSelectHandlePointerDown,
+  onSelectKeyDown,
+  computeResize,
+} from '../select-tool';
 import { useElementsStore } from '../../../store/elements.store';
 import { useInteractionStore } from '../../../store/interaction.store';
 import type { Element } from '../../../types/shared';
@@ -141,5 +148,203 @@ describe('onSelectPointerDown — edge cases', () => {
     onSelectPointerDown({ x: 50, y: 50 });
 
     expect(useInteractionStore.getState().selectedIds).toEqual([]);
+  });
+});
+
+// ─── P1A-03: Move / Resize / Delete ──────────────────────────────────────────
+
+function resetDragState() {
+  useInteractionStore.getState().setDraggingId(null);
+  useInteractionStore.getState().setDragStart(null);
+  useInteractionStore.getState().setResizeHandle(null);
+  useInteractionStore.getState().setDraftElement(null);
+}
+
+beforeEach(() => {
+  resetDragState();
+});
+
+describe('P1A-03 — Move', () => {
+  // @covers AC-1 (002-move-resize-delete)
+  it('pointerMove sets draftElement.x/y to committed position + delta', () => {
+    const el = makeElement({ id: 'mv-1', x: 10, y: 10 });
+    useElementsStore.getState().setElements([el]);
+    useInteractionStore.getState().setDraggingId(el.id);
+    useInteractionStore.getState().setDragStart({ x: 50, y: 50 });
+    useInteractionStore.getState().setResizeHandle(null);
+
+    onSelectPointerMove({ x: 80, y: 70 });
+
+    const draft = useInteractionStore.getState().draftElement;
+    expect(draft?.x).toBe(40); // 10 + (80-50)
+    expect(draft?.y).toBe(30); // 10 + (70-50)
+  });
+
+  // @covers AC-2 (002-move-resize-delete)
+  it('pointerUp commits x/y to the element store with incremented version', () => {
+    const el = makeElement({ id: 'mv-2', x: 10, y: 10, version: 1 });
+    useElementsStore.getState().setElements([el]);
+    useInteractionStore.getState().setDraggingId(el.id);
+    useInteractionStore.getState().setDragStart({ x: 0, y: 0 });
+    useInteractionStore.getState().setDraftElement({ ...el, x: 60, y: 40 });
+    useInteractionStore.getState().setResizeHandle(null);
+
+    onSelectPointerUp({ x: 60, y: 40 });
+
+    const updated = useElementsStore.getState().elements.find((e) => e.id === 'mv-2')!;
+    expect(updated.x).toBe(60);
+    expect(updated.y).toBe(40);
+    expect(updated.version).toBe(2);
+  });
+
+  // @covers AC-3 (002-move-resize-delete)
+  it('pointerDown on empty canvas sets draggingId to null', () => {
+    useElementsStore.getState().setElements([]);
+    useInteractionStore.getState().setSelectedIds([]);
+
+    onSelectPointerDown({ x: 999, y: 999 });
+
+    expect(useInteractionStore.getState().draggingId).toBeNull();
+    expect(useInteractionStore.getState().dragStart).toBeNull();
+  });
+
+  it('pointerUp without prior move (no draftElement) does not patch the store', () => {
+    const el = makeElement({ id: 'mv-3', x: 10, y: 10 });
+    useElementsStore.getState().setElements([el]);
+    useInteractionStore.getState().setDraggingId(el.id);
+    useInteractionStore.getState().setDragStart({ x: 10, y: 10 });
+    // No draftElement set — simulating click with no drag
+
+    onSelectPointerUp({ x: 10, y: 10 });
+
+    const stored = useElementsStore.getState().elements.find((e) => e.id === 'mv-3')!;
+    expect(stored.x).toBe(10); // unchanged
+    expect(stored.version).toBe(1); // not incremented
+  });
+});
+
+describe('P1A-03 — computeResize helper', () => {
+  const el = makeElement({ x: 10, y: 10, width: 100, height: 50 });
+
+  // @covers AC-4 (002-move-resize-delete)
+  it('se handle: width/height grow, x/y unchanged', () => {
+    const result = computeResize(el, 'se', { x: 140, y: 80 });
+    expect(result.width).toBe(130); // 140 - 10
+    expect(result.height).toBe(70); // 80 - 10
+    expect(result.x).toBe(10);
+    expect(result.y).toBe(10);
+  });
+
+  // @covers AC-5 (002-move-resize-delete)
+  it('nw handle: x and y shift, width and height adjust inversely', () => {
+    const result = computeResize(el, 'nw', { x: 40, y: 30 });
+    expect(result.x).toBe(40);
+    expect(result.y).toBe(30);
+    expect(result.width).toBe(70); // 110 - 40
+    expect(result.height).toBe(30); // 60 - 30
+  });
+
+  // @covers AC-6 (002-move-resize-delete)
+  it('n handle: y shifts, height adjusts; x and width unchanged', () => {
+    const result = computeResize(el, 'n', { x: 60, y: 30 });
+    expect(result.y).toBe(30);
+    expect(result.height).toBe(30); // 60 - 30
+    expect(result.x).toBe(10);
+    expect(result.width).toBe(100);
+  });
+
+  // @covers AC-7 (002-move-resize-delete)
+  it('clamps width and height to minimum 1 when dragged past anchor', () => {
+    const result = computeResize(el, 'se', { x: 5, y: 5 }); // way past top-left
+    expect(result.width).toBeGreaterThanOrEqual(1);
+    expect(result.height).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe('P1A-03 — Resize via onSelectPointerMove', () => {
+  // @covers AC-8 (002-move-resize-delete)
+  it('pointerUp after resize commits final dimensions with incremented version', () => {
+    const el = makeElement({ id: 're-1', x: 10, y: 10, width: 100, height: 50, version: 1 });
+    useElementsStore.getState().setElements([el]);
+    useInteractionStore.getState().setDraggingId(el.id);
+    useInteractionStore.getState().setDragStart({ x: 110, y: 60 });
+    useInteractionStore.getState().setResizeHandle('se');
+    useInteractionStore.getState().setDraftElement({ ...el, width: 130, height: 70 });
+
+    onSelectPointerUp({ x: 140, y: 80 });
+
+    const updated = useElementsStore.getState().elements.find((e) => e.id === 're-1')!;
+    expect(updated.width).toBe(130);
+    expect(updated.height).toBe(70);
+    expect(updated.version).toBe(2);
+  });
+});
+
+describe('P1A-03 — Delete', () => {
+  // @covers AC-9 (002-move-resize-delete)
+  it('Delete key sets isDeleted = true on the selected element', () => {
+    const el = makeElement({ id: 'del-1' });
+    useElementsStore.getState().setElements([el]);
+    useInteractionStore.getState().setSelectedIds([el.id]);
+
+    onSelectKeyDown('Delete');
+
+    const after = useElementsStore.getState().elements.find((e) => e.id === 'del-1')!;
+    expect(after.isDeleted).toBe(true);
+  });
+
+  // @covers AC-11 (002-move-resize-delete)
+  it('Delete key clears selectedIds', () => {
+    const el = makeElement({ id: 'del-2' });
+    useElementsStore.getState().setElements([el]);
+    useInteractionStore.getState().setSelectedIds([el.id]);
+
+    onSelectKeyDown('Delete');
+
+    expect(useInteractionStore.getState().selectedIds).toEqual([]);
+  });
+
+  // @covers AC-12 (002-move-resize-delete)
+  it('Delete key is a no-op when no shape is selected', () => {
+    const el = makeElement({ id: 'del-3' });
+    useElementsStore.getState().setElements([el]);
+    useInteractionStore.getState().setSelectedIds([]);
+
+    expect(() => onSelectKeyDown('Delete')).not.toThrow();
+    const stored = useElementsStore.getState().elements.find((e) => e.id === 'del-3')!;
+    expect(stored.isDeleted).toBe(false);
+  });
+
+  it('Backspace key also triggers soft delete', () => {
+    const el = makeElement({ id: 'del-4' });
+    useElementsStore.getState().setElements([el]);
+    useInteractionStore.getState().setSelectedIds([el.id]);
+
+    onSelectKeyDown('Backspace');
+
+    const after = useElementsStore.getState().elements.find((e) => e.id === 'del-4')!;
+    expect(after.isDeleted).toBe(true);
+  });
+});
+
+describe('P1A-03 — onSelectHandlePointerDown', () => {
+  it('sets draggingId, dragStart, and resizeHandle from selected shape', () => {
+    const el = makeElement({ id: 'res-1' });
+    useElementsStore.getState().setElements([el]);
+    useInteractionStore.getState().setSelectedIds([el.id]);
+
+    onSelectHandlePointerDown('se', { x: 110, y: 60 });
+
+    expect(useInteractionStore.getState().draggingId).toBe(el.id);
+    expect(useInteractionStore.getState().dragStart).toEqual({ x: 110, y: 60 });
+    expect(useInteractionStore.getState().resizeHandle).toBe('se');
+  });
+
+  it('is a no-op when no shape is selected', () => {
+    useInteractionStore.getState().setSelectedIds([]);
+
+    onSelectHandlePointerDown('se', { x: 110, y: 60 });
+
+    expect(useInteractionStore.getState().draggingId).toBeNull();
   });
 });

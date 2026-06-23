@@ -69,3 +69,20 @@ describe('SvgLayer — SelectionOverlay', () => {
     expect(circles.length).toBe(0);
   });
 });
+
+describe('SvgLayer — P1A-03 Delete rendering', () => {
+  // @covers AC-10 (002-move-resize-delete)
+  it('does not render a soft-deleted element even when it is selected', () => {
+    const del = makeElement({ id: 'del-1', isDeleted: true });
+    useInteractionStore.getState().setSelectedIds(['del-1']);
+
+    const { container } = render(<SvgLayer elements={[del]} camera={camera} />);
+
+    // Rectangle shape renders <rect>; SelectionOverlay also renders <rect>
+    // Neither should appear for a deleted element
+    const rects = container.querySelectorAll('rect');
+    expect(rects.length).toBe(0);
+    const circles = container.querySelectorAll('circle');
+    expect(circles.length).toBe(0);
+  });
+});
