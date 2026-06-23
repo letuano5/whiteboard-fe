@@ -131,6 +131,23 @@ export function onShapePointerUp(
     };
     createElement(draft);
     setTool('select');
+  } else if (dragStart && type === 'text') {
+    // Click-to-create text: use a default bounding box when no meaningful drag occurred
+    const draft: ElementDraft = {
+      type: 'text',
+      x: dragStart.x,
+      y: dragStart.y,
+      width: 200,
+      height: 40,
+      props: getDefaultProps('text'),
+      angle: 0,
+      groupId: null,
+      frameId: null,
+      locked: false,
+      createdBy,
+    };
+    createElement(draft);
+    setTool('select');
   }
 
   setDragStart(null);

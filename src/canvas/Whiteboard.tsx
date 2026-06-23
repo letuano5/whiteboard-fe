@@ -35,6 +35,15 @@ export default function Whiteboard() {
   useEffect(() => {
     if (tool !== 'select') return;
     function handleKeyDown(e: KeyboardEvent) {
+      const target = e.target as HTMLElement;
+      if (
+        target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        target.tagName === 'SELECT' ||
+        target.isContentEditable
+      ) {
+        return;
+      }
       onSelectKeyDown(e.key);
     }
     window.addEventListener('keydown', handleKeyDown);
@@ -42,6 +51,7 @@ export default function Whiteboard() {
   }, [tool]);
 
   function handlePointerDown(e: React.PointerEvent<SVGSVGElement>) {
+    if (!(e.target instanceof SVGElement)) return;
     if (tool === 'select') {
       const local = svgLocalPoint(e);
       onSelectPointerDown(screenToWorld(local.x, local.y, camera));

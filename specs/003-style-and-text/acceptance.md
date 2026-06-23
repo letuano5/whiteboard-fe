@@ -24,3 +24,9 @@ AC-13: Setting text alignment to "left" renders the text anchored to the left of
 AC-14: Setting text alignment to "center" renders the text centered within the bounding box.
 AC-15: Setting text alignment to "right" renders the text anchored to the right of the bounding box.
 AC-16: Text property changes (fontSize, fontFamily, textAlign) go through patchElement (version incremented).
+
+## Bug Fixes (post-implementation)
+
+AC-17: While a form control in the detail panel has keyboard focus (e.g., stroke width input), pressing Backspace or Delete does NOT delete the selected element — only edits the input field.
+AC-18: Clicking any control in the detail panel (color picker, number input, range slider, select, buttons) does NOT deselect the currently selected element.
+AC-19: Clicking the canvas with the text tool without dragging creates a text element at the click position with a default bounding box of 200px wide × 40px tall.

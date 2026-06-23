@@ -20,6 +20,7 @@ export default function DetailPanel() {
 
   return (
     <div
+      onPointerDown={(e) => e.stopPropagation()}
       style={{
         position: 'fixed',
         right: 16,

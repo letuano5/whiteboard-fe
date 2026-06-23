@@ -1,10 +1,13 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   isShapeTool,
   buildDraftFromPoints,
   isValidSize,
   SHAPE_TOOLS,
+  onShapePointerUp,
 } from '../create-shape-tool';
+import { useInteractionStore } from '../../../store/interaction.store';
+import * as pipeline from '../../../store/mutation-pipeline';
 import type { Point } from '../../../types/geometry';
 
 const pt = (x: number, y: number): Point => ({ x, y });
@@ -80,6 +83,50 @@ describe('buildDraftFromPoints — text', () => {
   it('normalizes bounds like rectangle', () => {
     const result = buildDraftFromPoints('text', pt(200, 50), pt(0, 0));
     expect(result).toMatchObject({ x: 0, y: 0, width: 200, height: 50 });
+  });
+});
+
+// @covers AC-19
+describe('onShapePointerUp — text click-to-create', () => {
+  let createSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    createSpy = vi.spyOn(pipeline, 'createElement').mockImplementation(
+      () => ({}) as ReturnType<typeof pipeline.createElement>,
+    );
+    useInteractionStore.getState().setDragStart({ x: 100, y: 200 });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    useInteractionStore.getState().reset();
+  });
+
+  it('creates text with default 200×40 when click (start === end)', () => {
+    onShapePointerUp('text', { x: 100, y: 200 });
+    expect(createSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'text', x: 100, y: 200, width: 200, height: 40 }),
+    );
+  });
+
+  it('creates text with default 200×40 when drag is too small (< 5px)', () => {
+    onShapePointerUp('text', { x: 103, y: 203 });
+    expect(createSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'text', x: 100, y: 200, width: 200, height: 40 }),
+    );
+  });
+
+  it('creates text with dragged bounds when drag is large enough', () => {
+    onShapePointerUp('text', { x: 310, y: 250 });
+    expect(createSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'text', x: 100, y: 200, width: 210, height: 50 }),
+    );
+  });
+
+  it('does not create when dragStart is null', () => {
+    useInteractionStore.getState().setDragStart(null);
+    onShapePointerUp('text', { x: 100, y: 200 });
+    expect(createSpy).not.toHaveBeenCalled();
   });
 });
 

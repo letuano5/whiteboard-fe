@@ -93,6 +93,20 @@
 
 ---
 
+## Phase 6: Bug Fixes (post-implementation)
+
+**Purpose**: Fix three behavior bugs found during P1A-04/05 manual testing.
+
+- [x] T027 Fix keydown guard in `src/canvas/Whiteboard.tsx`: in `handleKeyDown` effect, check `e.target.tagName` (INPUT/TEXTAREA/SELECT) and `isContentEditable` before calling `onSelectKeyDown` — `@covers AC-17`
+- [x] T028 Guard SVG pointer events in `src/canvas/Whiteboard.tsx`: in `handlePointerDown`, early-return when `!(e.target instanceof SVGElement)` to prevent spurious deselection from non-SVG events — `@covers AC-18`
+- [x] T029 Prevent event leakage from panel in `src/components/detail-panel/DetailPanel.tsx`: add `onPointerDown={(e) => e.stopPropagation()}` to the root div — `@covers AC-18`
+- [x] T030 Fix text click-to-create in `src/canvas/tools/create-shape-tool.ts`: in `onShapePointerUp`, add else-if branch for `type === 'text'` that creates a 200×40 element at `dragStart` when `isValidSize` returns false — `@covers AC-19`
+- [x] T031 [P] Test: text click-to-create — `src/canvas/tools/__tests__/create-shape-tool.test.ts` — verify `createElement` called with `width=200, height=40` when pointerUp at same/near point as start — `@covers AC-19`
+
+**Checkpoint**: All three bugs resolved; all tests pass.
+
+---
+
 ## Phase 5: Polish & Verification
 
 - [ ] T023 Run `pnpm typecheck` and fix any TypeScript errors in new/modified files
