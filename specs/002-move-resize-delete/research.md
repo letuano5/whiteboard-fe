@@ -49,3 +49,9 @@ Clamp: `width = Math.max(1, computedWidth)`, `height = Math.max(1, computedHeigh
 - **Decision**: `useEffect` in `Whiteboard.tsx`, listener on `window`, event `keydown`. Check `e.key === 'Delete' || e.key === 'Backspace'` with `selectedIds.length > 0` guard.
 - **Rationale**: Consistent with standard whiteboard apps. Window-level listener avoids focus issues with SVG.
 - **Cleanup**: Return the `removeEventListener` from the effect.
+
+### D6 — Point-based geometry during move and resize
+
+- **Decision**: Treat the bounding box and `props.points` as one geometry unit. Move translates every absolute point by the drag delta. Resize maps every point from the old bounding box into the new bounding box.
+- **Rationale**: Lines render and hit-test from `props.points`; changing only `x`, `y`, `width`, and `height` moves the selection overlay without moving the visible line.
+- **Degenerate bounds**: For horizontal or vertical lines whose old width or height is zero, derive the missing-axis ratio from the non-zero axis (or point order for a zero-length geometry) so a resize can turn the line into a diagonal.

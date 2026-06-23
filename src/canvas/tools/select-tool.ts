@@ -6,6 +6,46 @@ import type { Point } from '../../types/geometry';
 import type { HandleId } from '../../types/interaction';
 import type { Element } from '../../types/shared';
 
+function translatePointGeometry(el: Element, dx: number, dy: number): Element['props'] {
+  if (!el.props.points) return el.props;
+  return {
+    ...el.props,
+    points: el.props.points.map(([x, y]) => [x + dx, y + dy]),
+  };
+}
+
+function resizePointGeometry(
+  el: Element,
+  bounds: { x: number; y: number; width: number; height: number },
+): Element['props'] {
+  const points = el.props.points;
+  if (!points) return el.props;
+
+  return {
+    ...el.props,
+    points: points.map(([px, py], index) => {
+      const sequenceRatio = points.length <= 1 ? 0 : index / (points.length - 1);
+      const xRatio =
+        el.width !== 0
+          ? (px - el.x) / el.width
+          : el.height !== 0
+            ? (py - el.y) / el.height
+            : sequenceRatio;
+      const yRatio =
+        el.height !== 0
+          ? (py - el.y) / el.height
+          : el.width !== 0
+            ? (px - el.x) / el.width
+            : sequenceRatio;
+
+      return [
+        bounds.x + xRatio * bounds.width,
+        bounds.y + yRatio * bounds.height,
+      ];
+    }),
+  };
+}
+
 export function onSelectPointerDown(worldPt: Point): void {
   const elements = useElementsStore.getState().elements;
   const visible = elements.filter((el) => !el.isDeleted).sort((a, b) => b.zIndex - a.zIndex);
@@ -84,11 +124,21 @@ export function onSelectPointerMove(worldPt: Point): void {
 
   if (resizeHandle) {
     const { x, y, width, height } = computeResize(el, resizeHandle, worldPt);
-    setDraftElement({ ...el, x, y, width, height });
+    const bounds = { x, y, width, height };
+    setDraftElement({
+      ...el,
+      ...bounds,
+      props: resizePointGeometry(el, bounds),
+    });
   } else {
     const dx = worldPt.x - dragStart.x;
     const dy = worldPt.y - dragStart.y;
-    setDraftElement({ ...el, x: el.x + dx, y: el.y + dy });
+    setDraftElement({
+      ...el,
+      x: el.x + dx,
+      y: el.y + dy,
+      props: translatePointGeometry(el, dx, dy),
+    });
   }
 }
 
@@ -111,9 +161,14 @@ export function onSelectPointerUp(_worldPt: Point): void {
         y: draftElement.y,
         width: draftElement.width,
         height: draftElement.height,
+        ...(draftElement.props.points ? { props: draftElement.props } : {}),
       });
     } else {
-      patchElement(draggingId, { x: draftElement.x, y: draftElement.y });
+      patchElement(draggingId, {
+        x: draftElement.x,
+        y: draftElement.y,
+        ...(draftElement.props.points ? { props: draftElement.props } : {}),
+      });
     }
   }
 

@@ -51,10 +51,18 @@
 
 **Expected**: Nothing happens; no error in console.
 
+## Scenario 7 — Move and resize a line
+
+1. Draw a diagonal line and select it.
+2. Drag the line body, then release.
+3. Drag the `se` handle to resize it.
+
+**Expected**: The visible line moves and resizes together with its selection box. Clicking the line at its new position still selects it.
+
 ## Automated test run
 
 ```bash
 pnpm test src/canvas/tools/__tests__/select-tool.test.ts
 ```
 
-All 12 AC-tagged tests should pass (AC-1 through AC-12).
+All 14 AC-tagged criteria should pass (AC-1 through AC-14).

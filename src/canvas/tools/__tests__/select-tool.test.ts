@@ -221,6 +221,43 @@ describe('P1A-03 — Move', () => {
     expect(stored.x).toBe(10); // unchanged
     expect(stored.version).toBe(1); // not incremented
   });
+
+  // @covers AC-13 (002-move-resize-delete)
+  it('moves line points together with the bounding box', () => {
+    const el = makeElement({
+      id: 'line-move',
+      type: 'line',
+      x: 10,
+      y: 20,
+      width: 100,
+      height: 50,
+      props: {
+        strokeColor: '#000',
+        fillColor: 'none',
+        strokeWidth: 2,
+        strokeStyle: 'solid',
+        opacity: 1,
+        points: [[10, 20], [110, 70]],
+      },
+    });
+    useElementsStore.getState().setElements([el]);
+    useInteractionStore.getState().setDraggingId(el.id);
+    useInteractionStore.getState().setDragStart({ x: 60, y: 45 });
+    useInteractionStore.getState().setResizeHandle(null);
+
+    onSelectPointerMove({ x: 90, y: 65 });
+
+    expect(useInteractionStore.getState().draftElement?.props.points).toEqual([
+      [40, 40],
+      [140, 90],
+    ]);
+
+    onSelectPointerUp({ x: 90, y: 65 });
+
+    const updated = useElementsStore.getState().elements.find((e) => e.id === el.id)!;
+    expect(updated).toMatchObject({ x: 40, y: 40 });
+    expect(updated.props.points).toEqual([[40, 40], [140, 90]]);
+  });
 });
 
 describe('P1A-03 — computeResize helper', () => {
@@ -277,6 +314,72 @@ describe('P1A-03 — Resize via onSelectPointerMove', () => {
     expect(updated.width).toBe(130);
     expect(updated.height).toBe(70);
     expect(updated.version).toBe(2);
+  });
+
+  // @covers AC-14 (002-move-resize-delete)
+  it('resizes line points together with the bounding box', () => {
+    const el = makeElement({
+      id: 'line-resize',
+      type: 'line',
+      x: 10,
+      y: 20,
+      width: 100,
+      height: 50,
+      props: {
+        strokeColor: '#000',
+        fillColor: 'none',
+        strokeWidth: 2,
+        strokeStyle: 'solid',
+        opacity: 1,
+        points: [[110, 20], [10, 70]],
+      },
+    });
+    useElementsStore.getState().setElements([el]);
+    useInteractionStore.getState().setDraggingId(el.id);
+    useInteractionStore.getState().setDragStart({ x: 110, y: 70 });
+    useInteractionStore.getState().setResizeHandle('se');
+
+    onSelectPointerMove({ x: 160, y: 100 });
+
+    const draft = useInteractionStore.getState().draftElement;
+    expect(draft).toMatchObject({ x: 10, y: 20, width: 150, height: 80 });
+    expect(draft?.props.points).toEqual([[160, 20], [10, 100]]);
+
+    onSelectPointerUp({ x: 160, y: 100 });
+
+    const updated = useElementsStore.getState().elements.find((e) => e.id === el.id)!;
+    expect(updated).toMatchObject({ x: 10, y: 20, width: 150, height: 80 });
+    expect(updated.props.points).toEqual([[160, 20], [10, 100]]);
+  });
+
+  it('can resize a horizontal line into a diagonal line', () => {
+    const el = makeElement({
+      id: 'horizontal-line-resize',
+      type: 'line',
+      x: 10,
+      y: 20,
+      width: 100,
+      height: 0,
+      props: {
+        strokeColor: '#000',
+        fillColor: 'none',
+        strokeWidth: 2,
+        strokeStyle: 'solid',
+        opacity: 1,
+        points: [[10, 20], [110, 20]],
+      },
+    });
+    useElementsStore.getState().setElements([el]);
+    useInteractionStore.getState().setDraggingId(el.id);
+    useInteractionStore.getState().setDragStart({ x: 110, y: 20 });
+    useInteractionStore.getState().setResizeHandle('se');
+
+    onSelectPointerMove({ x: 140, y: 60 });
+
+    expect(useInteractionStore.getState().draftElement?.props.points).toEqual([
+      [10, 20],
+      [140, 60],
+    ]);
   });
 });
 

@@ -34,3 +34,9 @@ AC-10: Given a shape has been soft-deleted (`isDeleted = true`), then it is no l
 AC-11: Given a shape has been deleted, then `selectedIds` in the interaction store is cleared to `[]`.
 
 AC-12: Given no shape is selected, when the user presses `Delete` or `Backspace`, then no state change occurs (no-op).
+
+## Point Geometry Consistency
+
+AC-13: Given a line stores its rendered geometry as absolute points, when the line is moved by (dx, dy), then every point is translated by (dx, dy) and the committed bounding box and points remain aligned.
+
+AC-14: Given a line stores its rendered geometry as absolute points, when the line is resized from a selection handle, then its points are transformed into the resized bounding box and committed together with `x`, `y`, `width`, and `height`.

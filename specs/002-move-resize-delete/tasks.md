@@ -105,6 +105,8 @@
 - [ ] T027 Run typecheck: `pnpm typecheck` — zero errors
 - [ ] T028 Run linter: `pnpm lint` — zero warnings/errors
 - [ ] T029 [P] Validate quickstart.md scenarios manually in the browser (move, resize se, resize nw, min-size clamp, delete, no-op delete)
+- [x] T030 [US1] Fix point-based move so line `props.points` are translated and committed with the bounding box; add regression test for AC-13
+- [x] T031 [US2] Fix point-based resize so line `props.points` are transformed and committed with the bounding box; add regression tests for AC-14 and horizontal-line resize
 
 ---
 

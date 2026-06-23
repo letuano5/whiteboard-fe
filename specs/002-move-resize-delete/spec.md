@@ -23,6 +23,7 @@ A user has selected a shape on the canvas. They click and drag the shape body (n
 1. **Given** a shape is selected and the select tool is active, **When** the user presses the pointer on the shape body and drags by (dx, dy) world units, **Then** the shape visually follows the pointer (live preview); the committed `x` and `y` in the element store are updated on pointer release (covered by scenario 2).
 2. **Given** a shape is being dragged, **When** the pointer is released, **Then** the element in the store has updated `x`, `y`, incremented `version`, and new `versionNonce`.
 3. **Given** no shape is selected, **When** the user presses the pointer on the canvas, **Then** no drag-move interaction begins (click-to-select behavior from P1A-02 applies instead).
+4. **Given** a line stores its rendered geometry as absolute points, **When** the line is moved by (dx, dy), **Then** every point is translated by the same delta so the rendered line, hit area, and selection bounds remain aligned.
 
 ---
 
@@ -41,6 +42,7 @@ A user has selected a shape and sees 8 resize handles around its bounding box. T
 3. **Given** a shape is selected, **When** the user drags the `n` handle by (0, dy), **Then** `y` changes by `+dy` and `height` changes by `−dy`; `x` and `width` are unchanged.
 4. **Given** a resize drag would reduce `width` or `height` below 1 world unit, **Then** the dimension is clamped to 1 (the shape does not invert).
 5. **Given** a shape is being resized, **When** the pointer is released, **Then** the element in the store reflects the final dimensions with `version` incremented and new `versionNonce`.
+6. **Given** a line stores its rendered geometry as absolute points, **When** its selection bounds are resized, **Then** every point is transformed into the new bounds so the rendered line and selection handles remain aligned.
 
 ---
 
@@ -84,6 +86,7 @@ A user has selected a shape. They press `Delete` or `Backspace`. The shape disap
 - **FR-010**: Pressing `Delete`/`Backspace` when no shape is selected MUST be a no-op.
 - **FR-011**: During a drag (move or resize), the pointer MUST be captured so the interaction continues even if the pointer leaves the SVG element.
 - **FR-012**: A drag-move interaction MUST be distinguished from a resize-handle drag; clicking a handle starts resize, clicking the shape body starts move.
+- **FR-013**: For point-based shapes such as lines, move and resize MUST update both the bounding box and the absolute point geometry in one committed mutation.
 
 ### Key Entities
 
@@ -99,6 +102,7 @@ A user has selected a shape. They press `Delete` or `Backspace`. The shape disap
 - **SC-003**: No resize operation can produce a shape with a dimension smaller than 1 world unit (no inverted or zero-size shapes).
 - **SC-004**: A selected shape can be removed from the canvas with a single `Delete` or `Backspace` keypress; the shape disappears within one render frame.
 - **SC-005**: All mutations produced by move, resize, and delete have a correctly incremented `version` and fresh `versionNonce` (verified by store state after each operation).
+- **SC-006**: After moving or resizing a line, its rendered stroke, hit-test geometry, and selection bounds remain spatially aligned.
 
 ## Assumptions
 
@@ -108,3 +112,4 @@ A user has selected a shape. They press `Delete` or `Backspace`. The shape disap
 - The drag threshold to begin a move is zero pixels (any pointer movement after pointerdown on shape body triggers move).
 - The `interactionStore` fields `draggingId`, `dragStart`, and `resizeHandle` are available or can be added; they are transient and never persisted.
 - Pointer capture (`setPointerCapture`) is available and should be used during drag, consistent with the existing `create-shape-tool.ts` pattern.
+- Line `props.points` are absolute world coordinates and must be transformed whenever the line bounding box changes.
