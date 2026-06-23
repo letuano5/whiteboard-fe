@@ -189,5 +189,5 @@ pnpm test:coverage
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan at
-`specs/003-style-and-text/plan.md`.
+`specs/004-zoom-pan/plan.md`.
 <!-- SPECKIT END -->
