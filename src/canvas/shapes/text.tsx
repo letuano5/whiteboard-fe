@@ -8,15 +8,21 @@ export const textShapeUtil: ShapeUtil = {
     const { x, y, angle, props } = element;
     const cx = x + element.width / 2;
     const cy = y + element.height / 2;
+    const textAnchor =
+      props.textAlign === 'center' ? 'middle' : props.textAlign === 'right' ? 'end' : 'start';
+    const textX =
+      props.textAlign === 'center'
+        ? x + element.width / 2
+        : props.textAlign === 'right'
+          ? x + element.width
+          : x;
     return (
       <text
-        x={x}
+        x={textX}
         y={y + (props.fontSize ?? 16)}
         fontSize={props.fontSize ?? 16}
         fontFamily={props.fontFamily ?? 'sans-serif'}
-        textAnchor={
-          props.textAlign === 'center' ? 'middle' : props.textAlign === 'right' ? 'end' : 'start'
-        }
+        textAnchor={textAnchor}
         fill={props.strokeColor}
         opacity={props.opacity}
         transform={angle !== 0 ? `rotate(${(angle * 180) / Math.PI} ${cx} ${cy})` : undefined}

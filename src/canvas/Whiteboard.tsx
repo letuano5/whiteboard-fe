@@ -18,6 +18,7 @@ import {
 } from './tools/select-tool';
 import SvgLayer from './layers/SvgLayer';
 import Toolbar from '../components/toolbar/Toolbar';
+import DetailPanel from '../components/detail-panel/DetailPanel';
 import type { ResizeHandleId } from '../types/interaction';
 
 function svgLocalPoint(e: React.PointerEvent) {
@@ -106,6 +107,7 @@ export default function Whiteboard() {
         onHandlePointerDown={handleHandlePointerDown}
       />
       <Toolbar />
+      <DetailPanel />
     </div>
   );
 }

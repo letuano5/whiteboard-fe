@@ -212,6 +212,75 @@ describe('ellipseShapeUtil.hitTest', () => {
   });
 });
 
+// @covers AC-13
+describe('textShapeUtil textAlign x-anchor: left', () => {
+  it('renders with x = element.x and textAnchor="start" for left align', () => {
+    const el = makeElement({
+      type: 'text',
+      x: 10,
+      width: 100,
+      props: {
+        strokeColor: '#000',
+        fillColor: 'none',
+        strokeWidth: 1,
+        strokeStyle: 'solid',
+        opacity: 1,
+        textAlign: 'left',
+      },
+    });
+    const jsx = textShapeUtil.render(el);
+    const p = jsx.props as AnyProps;
+    expect(p['x']).toBe(10);
+    expect(p['textAnchor']).toBe('start');
+  });
+});
+
+// @covers AC-14
+describe('textShapeUtil textAlign x-anchor: center', () => {
+  it('renders with x = element.x + width/2 and textAnchor="middle" for center align', () => {
+    const el = makeElement({
+      type: 'text',
+      x: 10,
+      width: 100,
+      props: {
+        strokeColor: '#000',
+        fillColor: 'none',
+        strokeWidth: 1,
+        strokeStyle: 'solid',
+        opacity: 1,
+        textAlign: 'center',
+      },
+    });
+    const jsx = textShapeUtil.render(el);
+    const p = jsx.props as AnyProps;
+    expect(p['x']).toBe(60); // 10 + 100/2
+    expect(p['textAnchor']).toBe('middle');
+  });
+});
+
+// @covers AC-15
+describe('textShapeUtil textAlign x-anchor: right', () => {
+  it('renders with x = element.x + width and textAnchor="end" for right align', () => {
+    const el = makeElement({
+      type: 'text',
+      x: 10,
+      width: 100,
+      props: {
+        strokeColor: '#000',
+        fillColor: 'none',
+        strokeWidth: 1,
+        strokeStyle: 'solid',
+        opacity: 1,
+        textAlign: 'right',
+      },
+    });
+    const jsx = textShapeUtil.render(el);
+    const p = jsx.props as AnyProps;
+    expect(p['x']).toBe(110); // 10 + 100
+    expect(p['textAnchor']).toBe('end');
+  });
+});
+
 describe('textShapeUtil.hitTest', () => {
   it('returns true for point inside AABB', () => {
     const el = makeElement({ type: 'text' });
