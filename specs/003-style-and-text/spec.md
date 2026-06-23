@@ -86,6 +86,7 @@ Style changes made via the detail panel persist across selections — when a use
 - **FR-011**: When a `text` element is selected, the panel MUST additionally show text alignment buttons (left / center / right).
 - **FR-012**: Text property changes (fontSize, fontFamily, textAlign) MUST be committed via `patchElement` immediately.
 - **FR-013**: Style changes MUST NOT bypass the mutation pipeline (no direct store writes).
+- **FR-014**: Newly created text elements MUST have visible default content (`"Text"`) until the later in-place text editor can collect user-entered content.
 
 ### Key Entities
 
@@ -108,6 +109,7 @@ Style changes made via the detail panel persist across selections — when a use
 - Multi-selection style editing is out of scope for P1A; the detail panel handles exactly one selected element at a time.
 - `strokeStyle` (solid/dashed/dotted) control is not required for P1A-04 (it is part of P1A and may be added if straightforward, but is not a blocker).
 - Auto-sizing the text bounding box to content is out of scope for P1A-05 (deferred to P1B-03). The text element's `width`/`height` remain as set at creation.
+- In-place editing text content is out of scope for P1A-05 (deferred to P1B-03); the creation tool uses visible default content so the new element can be seen and selected.
 - Font families offered in the selector are a fixed short list: `sans-serif`, `serif`, `monospace` (expandable later).
 - The detail panel is a floating/side panel rendered inside the Whiteboard component; its exact layout is determined in the plan.
 - The text tool already exists in the toolbar and uses `create-shape-tool.ts`; P1A-05 only adds property-editing controls, not a new creation flow.

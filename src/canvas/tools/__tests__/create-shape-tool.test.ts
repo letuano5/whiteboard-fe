@@ -74,7 +74,7 @@ describe('buildDraftFromPoints — line', () => {
 describe('buildDraftFromPoints — text', () => {
   it('has text-specific default props', () => {
     const result = buildDraftFromPoints('text', pt(0, 0), pt(200, 50));
-    expect(result.props.text).toBe('');
+    expect(result.props.text).toBe('Text');
     expect(result.props.fontSize).toBe(16);
     expect(result.props.fontFamily).toBe('sans-serif');
     expect(result.props.textAlign).toBe('left');
@@ -105,7 +105,14 @@ describe('onShapePointerUp — text click-to-create', () => {
   it('creates text with default 200×40 when click (start === end)', () => {
     onShapePointerUp('text', { x: 100, y: 200 });
     expect(createSpy).toHaveBeenCalledWith(
-      expect.objectContaining({ type: 'text', x: 100, y: 200, width: 200, height: 40 }),
+      expect.objectContaining({
+        type: 'text',
+        x: 100,
+        y: 200,
+        width: 200,
+        height: 40,
+        props: expect.objectContaining({ text: 'Text' }),
+      }),
     );
   });
 

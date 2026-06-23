@@ -30,3 +30,4 @@ AC-16: Text property changes (fontSize, fontFamily, textAlign) go through patchE
 AC-17: While a form control in the detail panel has keyboard focus (e.g., stroke width input), pressing Backspace or Delete does NOT delete the selected element — only edits the input field.
 AC-18: Clicking any control in the detail panel (color picker, number input, range slider, select, buttons) does NOT deselect the currently selected element.
 AC-19: Clicking the canvas with the text tool without dragging creates a text element at the click position with a default bounding box of 200px wide × 40px tall.
+AC-20: Newly created text elements use visible default content `"Text"` so the text tool produces an immediately visible element before in-place text editing exists.

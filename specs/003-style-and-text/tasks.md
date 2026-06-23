@@ -102,6 +102,8 @@
 - [x] T029 Prevent event leakage from panel in `src/components/detail-panel/DetailPanel.tsx`: add `onPointerDown={(e) => e.stopPropagation()}` to the root div — `@covers AC-18`
 - [x] T030 Fix text click-to-create in `src/canvas/tools/create-shape-tool.ts`: in `onShapePointerUp`, add else-if branch for `type === 'text'` that creates a 200×40 element at `dragStart` when `isValidSize` returns false — `@covers AC-19`
 - [x] T031 [P] Test: text click-to-create — `src/canvas/tools/__tests__/create-shape-tool.test.ts` — verify `createElement` called with `width=200, height=40` when pointerUp at same/near point as start — `@covers AC-19`
+- [x] T032 Fix text default content in `src/canvas/tools/create-shape-tool.ts`: set newly created text elements to visible default `"Text"` until in-place editing ships — `@covers AC-20`
+- [x] T033 [P] Test: text default props include visible content — `src/canvas/tools/__tests__/create-shape-tool.test.ts` — verify `props.text === "Text"` for text drafts and click-to-create — `@covers AC-20`
 
 **Checkpoint**: All three bugs resolved; all tests pass.
 

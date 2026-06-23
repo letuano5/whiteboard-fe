@@ -23,7 +23,7 @@ const TEXT_EXTRA: Partial<ElementProps> = {
   strokeColor: '#1a1a1a',
   fillColor: 'transparent',
   strokeWidth: 0,
-  text: '',
+  text: 'Text',
   fontSize: 16,
   fontFamily: 'sans-serif',
   textAlign: 'left',

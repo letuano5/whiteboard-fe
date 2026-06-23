@@ -92,6 +92,8 @@
 - [ ] T017 [P] Write edge-case test in `src/canvas/shapes/__tests__/shapes.test.tsx`: `hitTest` called with zero-size shape (width=0, height=0) → must return `false` and not throw
 - [ ] T018 [P] Write edge-case test: `onSelectPointerDown` with empty elements store → returns without error, selectedIds stays `[]`
 - [ ] T019 [P] Write hitTest unit tests in `src/canvas/shapes/__tests__/shapes.test.tsx` for all 5 shape types: point inside bbox → true; point outside bbox → false; for line: point within 8 world units of segment → true, point >8 units → false
+- [x] T023 [P] Test: toolbar tool selection clears current selection and transient select state — `src/components/toolbar/__tests__/Toolbar.test.tsx` — `@covers AC-8`
+- [x] T024 Implement toolbar deselect behavior in `src/components/toolbar/Toolbar.tsx`: when any toolbar tool is chosen, call `setSelectedIds([])` and clear drag/resize/draft transient state — `@covers AC-8`
 
 ---
 

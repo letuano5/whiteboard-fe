@@ -27,6 +27,22 @@ const TOOLS: ToolButton[] = [
 export default function Toolbar() {
   const tool = useInteractionStore((s) => s.tool);
   const setTool = useInteractionStore((s) => s.setTool);
+  const setSelectedIds = useInteractionStore((s) => s.setSelectedIds);
+  const setDraggingId = useInteractionStore((s) => s.setDraggingId);
+  const setDragStart = useInteractionStore((s) => s.setDragStart);
+  const setDraftElement = useInteractionStore((s) => s.setDraftElement);
+  const setResizeHandle = useInteractionStore((s) => s.setResizeHandle);
+  const setResizeSession = useInteractionStore((s) => s.setResizeSession);
+
+  function chooseTool(id: ToolId) {
+    setTool(id);
+    setSelectedIds([]);
+    setDraggingId(null);
+    setDragStart(null);
+    setDraftElement(null);
+    setResizeHandle(null);
+    setResizeSession(null);
+  }
 
   return (
     <div
@@ -49,7 +65,7 @@ export default function Toolbar() {
         <button
           key={id}
           title={label}
-          onClick={() => setTool(id)}
+          onClick={() => chooseTool(id)}
           style={{
             width: 36,
             height: 36,

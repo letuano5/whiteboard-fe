@@ -57,6 +57,7 @@ A user clicks on an empty area of the canvas (not hitting any shape) and any cur
 - **FR-004**: Clicking on empty canvas space (hitting no shape) MUST clear the current selection.
 - **FR-005**: Selection state MUST be stored in transient `interactionStore.selectedIds` and MUST NOT be written to the elements store or persisted.
 - **FR-006**: Hit-test calculations MUST assume `angle = 0` (no rotation) for this phase.
+- **FR-007**: Choosing a tool from the toolbar MUST clear the current selection and any transient select interaction state.
 
 ### Key Entities
 
@@ -72,6 +73,7 @@ A user clicks on an empty area of the canvas (not hitting any shape) and any cur
 - **SC-002**: When two shapes overlap, the topmost shape (highest `zIndex`) is selected 100% of the time regardless of render order or draw timing.
 - **SC-003**: Clicking empty canvas reliably clears all selections in 100% of cases with no ghost highlights remaining.
 - **SC-004**: Selection state never leaks into the element store or localStorage — confirmed by inspecting store state after selection interactions.
+- **SC-005**: Switching tools from the toolbar removes the selection overlay immediately, before the next canvas interaction.
 
 ## Assumptions
 
