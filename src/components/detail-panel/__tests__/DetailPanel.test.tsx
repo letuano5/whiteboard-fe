@@ -292,6 +292,28 @@ describe('AC-8 (text): fontSize persists in panel after store update', () => {
   });
 });
 
+// @covers AC-14 (008-rotate-resize)
+describe('AC-14: angle field shows and edits rotation', () => {
+  it('displays current angle in degrees rounded to nearest integer', () => {
+    const el = makeElement({ id: 'el-1', angle: Math.PI / 2 }); // 90°
+    useElementsStore.setState({ elements: [el] });
+    useInteractionStore.getState().setSelectedIds(['el-1']);
+    render(<DetailPanel />);
+    const input = screen.getByLabelText(/angle/i) as HTMLInputElement;
+    expect(Number(input.value)).toBe(90);
+  });
+
+  it('calls patchElement with angle in radians when user changes the field', () => {
+    const el = makeElement({ id: 'el-1', angle: 0 });
+    useElementsStore.setState({ elements: [el] });
+    useInteractionStore.getState().setSelectedIds(['el-1']);
+    render(<DetailPanel />);
+    fireEvent.change(screen.getByLabelText(/angle/i), { target: { value: '45' } });
+    const expectedRad = (45 * Math.PI) / 180;
+    expect(patchSpy).toHaveBeenCalledWith('el-1', { angle: expectedRad });
+  });
+});
+
 // @covers AC-7 (005-detail-panel-toolbar)
 describe('AC-7 (005): panel pointerDown does not deselect shape', () => {
   it('selectedIds unchanged after pointerdown on panel root', () => {

@@ -41,6 +41,23 @@ export default function DetailPanel() {
       }}
     >
       <div style={{ fontWeight: 600, fontSize: 12, color: '#aaa', textTransform: 'uppercase', letterSpacing: 1 }}>
+        Transform
+      </div>
+
+      <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+        <span>Angle (°)</span>
+        <input
+          type="number"
+          min={-180}
+          max={180}
+          step={1}
+          value={Math.round((element.angle * 180) / Math.PI)}
+          onChange={(e) => patchElement(element.id, { angle: (Number(e.target.value) * Math.PI) / 180 })}
+          style={{ width: 56, background: '#2a2a2a', border: '1px solid #444', borderRadius: 4, padding: '2px 6px', color: 'inherit', fontSize: 13 }}
+        />
+      </label>
+
+      <div style={{ fontWeight: 600, fontSize: 12, color: '#aaa', textTransform: 'uppercase', letterSpacing: 1, marginTop: 4 }}>
         Style
       </div>
 

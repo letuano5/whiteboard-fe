@@ -2,7 +2,7 @@ import { useElementsStore } from '../../store/elements.store';
 import { useInteractionStore } from '../../store/interaction.store';
 import { patchElement, deleteElements } from '../../store/mutation-pipeline';
 import { getShapeUtil } from '../shapes';
-import { unrotatePoint } from '../../utils/geometry';
+import { rotatePoint, unrotatePoint } from '../../utils/geometry';
 import type { Point, Rect } from '../../types/geometry';
 import type { ResizeHandleId, ResizeSession } from '../../types/interaction';
 import type { Element } from '../../types/shared';
@@ -265,24 +265,54 @@ export function onSelectPointerMove(worldPt: Point): void {
   }
 
   if (resizeSession) {
-    // AC-8: un-rotate pointer into element's local frame so resize works for rotated shapes.
-    // Anchor is already in local coordinates (getResizeAnchor uses el.x/y/width/height directly).
-    const effectivePointer =
-      el.angle !== 0
-        ? unrotatePoint(worldPt, {
-            x: resizeSession.originalBounds.x + resizeSession.originalBounds.width / 2,
-            y: resizeSession.originalBounds.y + resizeSession.originalBounds.height / 2,
-          }, el.angle)
-        : worldPt;
-    const { x, y, width, height, flippedX, flippedY, activeHandle } =
-      resizeBoundsFromAnchorAndPointer(resizeSession, effectivePointer);
-    const bounds = { x, y, width, height };
-    setDraftElement({
-      ...el,
-      ...bounds,
-      props: resizePointGeometry(el, bounds, flippedX, flippedY),
-    });
-    setResizeHandle(activeHandle);
+    if (el.angle !== 0) {
+      // AC-8: resize in local frame; anchor stays at the same WORLD position.
+      // 1. Compute anchor world position from original bounds (constant during drag).
+      const center0 = {
+        x: resizeSession.originalBounds.x + resizeSession.originalBounds.width / 2,
+        y: resizeSession.originalBounds.y + resizeSession.originalBounds.height / 2,
+      };
+      const anchorWorld = rotatePoint(resizeSession.anchor, center0, el.angle);
+
+      // 2. Un-rotate world pointer into element local frame.
+      const localPointer = unrotatePoint(worldPt, center0, el.angle);
+
+      // 3. Compute new dimensions in local frame.
+      const { x: xl, y: yl, width, height, flippedX, flippedY, activeHandle } =
+        resizeBoundsFromAnchorAndPointer(resizeSession, localPointer);
+
+      // 4. The session.anchor may be at any corner/edge of the new box.
+      //    Compute its fraction within the new box (0=min edge, 1=max edge).
+      const fx = (resizeSession.anchor.x - xl) / width;
+      const fy = (resizeSession.anchor.y - yl) / height;
+
+      // 5. Find the new center so that the anchor lands on anchorWorld after rotation.
+      //    anchorWorld = center1 + rotateVector({(fx-0.5)*w, (fy-0.5)*h}, angle)
+      const cos = Math.cos(el.angle);
+      const sin = Math.sin(el.angle);
+      const dax = (fx - 0.5) * width;
+      const day = (fy - 0.5) * height;
+      const cx1 = anchorWorld.x - (dax * cos - day * sin);
+      const cy1 = anchorWorld.y - (dax * sin + day * cos);
+
+      const bounds = { x: cx1 - width / 2, y: cy1 - height / 2, width, height };
+      setDraftElement({
+        ...el,
+        ...bounds,
+        props: resizePointGeometry(el, bounds, flippedX, flippedY),
+      });
+      setResizeHandle(activeHandle);
+    } else {
+      const { x, y, width, height, flippedX, flippedY, activeHandle } =
+        resizeBoundsFromAnchorAndPointer(resizeSession, worldPt);
+      const bounds = { x, y, width, height };
+      setDraftElement({
+        ...el,
+        ...bounds,
+        props: resizePointGeometry(el, bounds, flippedX, flippedY),
+      });
+      setResizeHandle(activeHandle);
+    }
   } else {
     const dx = worldPt.x - dragStart.x;
     const dy = worldPt.y - dragStart.y;

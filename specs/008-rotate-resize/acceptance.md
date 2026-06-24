@@ -27,3 +27,7 @@ AC-11: For elements with `props.points` (line, polygon), resize scales and mirro
 
 AC-12: Shapes with `angle = 0` behave identically to Phase 1A — no change in hit-test or resize behavior.
 AC-13: Rotate and resize mutations are persisted to localStorage and restored correctly on page reload.
+
+## Detail Panel Integration
+
+AC-14: The detail panel displays the selected element's rotation angle in degrees (rounded to nearest integer) and allows the user to type a new angle; changing the value calls `patchElement` with `angle` updated in radians, and the shape visually rotates immediately.

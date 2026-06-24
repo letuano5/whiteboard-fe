@@ -5,6 +5,7 @@ import {
   onSelectPointerUp,
   onSelectHandlePointerDown,
 } from '../select-tool';
+import { rotatePoint } from '../../../utils/geometry';
 import { useElementsStore } from '../../../store/elements.store';
 import { useInteractionStore } from '../../../store/interaction.store';
 import type { Element } from '../../../types/shared';
@@ -172,6 +173,37 @@ describe('US3 — Resize for rotated shapes', () => {
     expect(draft!.height).toBeCloseTo(70, 0);
     // Angle must be unchanged
     expect(draft!.angle).toBeCloseTo(angle, 4);
+  });
+
+  // @covers AC-8 (anchor world position is preserved during rotated resize)
+  it('NW anchor corner stays at the same world position after rotated resize', () => {
+    const angle = Math.PI / 6;
+    const el = makeElement({ id: 'rot-anchor', x: 10, y: 10, width: 100, height: 50, angle });
+    useElementsStore.getState().setElements([el]);
+    useInteractionStore.getState().setSelectedIds([el.id]);
+
+    // Compute anchor (NW corner) world position before resize
+    const center0 = { x: 60, y: 35 };
+    const anchorLocalBefore = { x: 10, y: 10 };
+    const anchorWorldBefore = rotatePoint(anchorLocalBefore, center0, angle);
+
+    onSelectHandlePointerDown('se', { x: 110, y: 60 });
+
+    // World pointer corresponding to local target (160, 80)
+    const cos = Math.cos(angle), sin = Math.sin(angle);
+    const worldPointer = {
+      x: center0.x + (160 - center0.x) * cos - (80 - center0.y) * sin,
+      y: center0.y + (160 - center0.x) * sin + (80 - center0.y) * cos,
+    };
+
+    onSelectPointerMove(worldPointer);
+
+    const draft = useInteractionStore.getState().draftElement!;
+    const newCenter = { x: draft.x + draft.width / 2, y: draft.y + draft.height / 2 };
+    const anchorWorldAfter = rotatePoint({ x: draft.x, y: draft.y }, newCenter, angle);
+
+    expect(anchorWorldAfter.x).toBeCloseTo(anchorWorldBefore.x, 3);
+    expect(anchorWorldAfter.y).toBeCloseTo(anchorWorldBefore.y, 3);
   });
 
   // @covers AC-9
