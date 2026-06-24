@@ -1,7 +1,7 @@
 import type React from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { useElementsStore, useInteractionStore, useCameraStore } from '../store';
-import { screenToWorld } from '../utils/camera';
+import { screenToWorld, ZOOM_SENSITIVITY } from '../utils/camera';
 import {
   isShapeTool,
   onShapePointerDown,
@@ -19,6 +19,7 @@ import {
 import SvgLayer from './layers/SvgLayer';
 import Toolbar from '../components/toolbar/Toolbar';
 import DetailPanel from '../components/detail-panel/DetailPanel';
+import BackToContent from '../components/back-to-content/BackToContent';
 import type { ResizeHandleId } from '../types/interaction';
 
 function svgLocalPoint(e: React.PointerEvent) {
@@ -38,16 +39,30 @@ export default function Whiteboard() {
   const [spaceDown, setSpaceDown] = useState(false);
   const [isPanning, setIsPanning] = useState(false);
 
-  // T008: non-passive wheel listener for scroll-zoom (covers AC-1 – AC-4)
+  // T008/T013: non-passive wheel listener — pan or zoom based on ctrlKey (AC-6, AC-7, AC-8, AC-12)
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
     function handleWheel(e: WheelEvent) {
       e.preventDefault();
-      const { camera: cam, zoomTo } = useCameraStore.getState();
-      const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
       const rect = el!.getBoundingClientRect();
-      zoomTo(cam.zoom * factor, { x: e.clientX - rect.left, y: e.clientY - rect.top });
+      const { camera: cam, zoomTo, panBy } = useCameraStore.getState();
+
+      // Normalize delta for LINE/PAGE modes (AC-12)
+      const normY =
+        e.deltaMode === 1 ? e.deltaY * 16 : e.deltaMode === 2 ? e.deltaY * rect.height : e.deltaY;
+      const normX =
+        e.deltaMode === 1 ? e.deltaX * 16 : e.deltaMode === 2 ? e.deltaX * rect.width : e.deltaX;
+
+      if (e.ctrlKey || e.metaKey) {
+        // Zoom: trackpad pinch (browser sets ctrlKey=true) or Ctrl/Cmd + wheel (AC-7)
+        // Smooth sensitivity via exp formula (AC-8): ZOOM_SENSITIVITY = 0.001
+        const factor = Math.exp(-normY * ZOOM_SENSITIVITY);
+        zoomTo(cam.zoom * factor, { x: e.clientX - rect.left, y: e.clientY - rect.top });
+      } else {
+        // Two-finger scroll → pan (AC-6)
+        panBy(normX / cam.zoom, normY / cam.zoom);
+      }
     }
     el.addEventListener('wheel', handleWheel, { passive: false });
     return () => el.removeEventListener('wheel', handleWheel);
@@ -210,6 +225,22 @@ export default function Whiteboard() {
       />
       <Toolbar />
       <DetailPanel />
+      <BackToContent containerRef={containerRef} />
+      {tool === 'select' && (
+        <div
+          style={{
+            position: 'absolute',
+            bottom: '12px',
+            left: '12px',
+            fontSize: '12px',
+            color: '#aaa',
+            pointerEvents: 'none',
+            userSelect: 'none',
+          }}
+        >
+          Click chuột giữa để scroll canvas
+        </div>
+      )}
     </div>
   );
 }

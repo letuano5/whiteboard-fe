@@ -189,5 +189,5 @@ pnpm test:coverage
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan at
-`specs/006-localstorage-zorder/plan.md`.
+`specs/007-back-to-content-trackpad/plan.md`.
 <!-- SPECKIT END -->
