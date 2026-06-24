@@ -93,10 +93,12 @@ interface SvgLayerProps {
   elements: Element[];
   camera: Camera;
   draftElement?: Element | null;
+  editingId?: string | null;
   onPointerDown?: (e: React.PointerEvent<SVGSVGElement>) => void;
   onPointerMove?: (e: React.PointerEvent<SVGSVGElement>) => void;
   onPointerUp?: (e: React.PointerEvent<SVGSVGElement>) => void;
   onPointerLeave?: (e: React.PointerEvent<SVGSVGElement>) => void;
+  onDoubleClick?: (e: React.MouseEvent<SVGSVGElement>) => void;
   onHandlePointerDown?: (
     handle: HandleId,
     e: React.PointerEvent<SVGCircleElement>,
@@ -107,10 +109,12 @@ export default function SvgLayer({
   elements,
   camera,
   draftElement,
+  editingId,
   onPointerDown,
   onPointerMove,
   onPointerUp,
   onPointerLeave,
+  onDoubleClick,
   onHandlePointerDown,
 }: SvgLayerProps) {
   const selectedIds = useInteractionStore((s) => s.selectedIds);
@@ -130,12 +134,17 @@ export default function SvgLayer({
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerLeave={onPointerLeave}
+      onDoubleClick={onDoubleClick}
     >
       <g transform={`scale(${camera.zoom}) translate(${-camera.x} ${-camera.y})`}>
         {visible.map((el) => {
           const util = getShapeUtil(el.type);
           if (!util) return null;
-          return <g key={el.id}>{util.render(el)}</g>;
+          return (
+            <g key={el.id} opacity={el.id === editingId ? 0 : undefined}>
+              {util.render(el)}
+            </g>
+          );
         })}
         {draftElement && (() => {
           const util = getShapeUtil(draftElement.type);

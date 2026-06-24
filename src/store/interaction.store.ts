@@ -18,6 +18,7 @@ const DEFAULT_STATE: InteractionState = {
   resizeHandle: null,
   resizeSession: null,
   isRotating: false,
+  editingId: null,
   laserTrail: [],
   remoteCursors: new Map(),
 };
@@ -32,6 +33,7 @@ interface InteractionActions {
   setResizeHandle: (h: ResizeHandleId | null) => void;
   setResizeSession: (session: ResizeSession | null) => void;
   setIsRotating: (v: boolean) => void;
+  setEditingId: (id: string | null) => void;
   setLaserTrail: (trail: Point[]) => void;
   setRemoteCursors: (cursors: Map<string, Presence>) => void;
   reset: () => void;
@@ -49,6 +51,7 @@ export const useInteractionStore = create<InteractionState & InteractionActions>
   setResizeHandle: (resizeHandle) => set({ resizeHandle }),
   setResizeSession: (resizeSession) => set({ resizeSession }),
   setIsRotating: (isRotating) => set({ isRotating }),
+  setEditingId: (editingId) => set({ editingId }),
   setLaserTrail: (laserTrail) => set({ laserTrail }),
   setRemoteCursors: (remoteCursors) => set({ remoteCursors }),
   reset: () => set({ ...DEFAULT_STATE, remoteCursors: new Map() }),

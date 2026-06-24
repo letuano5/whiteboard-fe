@@ -17,6 +17,7 @@ import {
   onSelectKeyDown,
   onRotateHandlePointerDown,
 } from './tools/select-tool';
+import TextEditor, { onCanvasDoubleClick } from './tools/text-editor';
 import SvgLayer from './layers/SvgLayer';
 import Toolbar from '../components/toolbar/Toolbar';
 import DetailPanel from '../components/detail-panel/DetailPanel';
@@ -33,6 +34,10 @@ export default function Whiteboard() {
   const camera = useCameraStore((s) => s.camera);
   const tool = useInteractionStore((s) => s.tool);
   const draftElement = useInteractionStore((s) => s.draftElement);
+  const editingId = useInteractionStore((s) => s.editingId);
+  const editingElement = editingId
+    ? elements.find((el) => el.id === editingId && !el.isDeleted) ?? null
+    : null;
 
   // T001: refs and state for pan/zoom
   const containerRef = useRef<HTMLDivElement>(null);
@@ -195,6 +200,16 @@ export default function Whiteboard() {
     cancelShapeDraw();
   }
 
+  function handleDoubleClick(e: React.MouseEvent<SVGSVGElement>) {
+    if (tool !== 'select') return;
+    if (editingId) return;
+    const { draggingId, isRotating, resizeSession } = useInteractionStore.getState();
+    if (draggingId || isRotating || resizeSession) return;
+    const rect = (e.currentTarget as SVGSVGElement).getBoundingClientRect();
+    const local = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    onCanvasDoubleClick(screenToWorld(local.x, local.y, camera));
+  }
+
   function handleHandlePointerDown(
     handle: HandleId,
     e: React.PointerEvent<SVGCircleElement>,
@@ -223,12 +238,17 @@ export default function Whiteboard() {
         elements={elements}
         camera={camera}
         draftElement={draftElement}
+        editingId={editingId}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerLeave={handlePointerLeave}
+        onDoubleClick={handleDoubleClick}
         onHandlePointerDown={handleHandlePointerDown}
       />
+      {editingElement && (
+        <TextEditor element={editingElement} camera={camera} />
+      )}
       <Toolbar />
       <DetailPanel />
       <BackToContent containerRef={containerRef} />
