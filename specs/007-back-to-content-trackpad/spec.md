@@ -25,6 +25,7 @@ A user is working on a whiteboard with shapes drawn. They accidentally pan/zoom 
 3. **Given** no shapes exist on the canvas (canvas is empty), **When** the user views the canvas, **Then** the "Back to content" button is NOT shown.
 4. **Given** at least one shape is visible within the current viewport, **When** the user views the canvas, **Then** the "Back to content" button is NOT shown.
 5. **Given** the canvas has only soft-deleted shapes (`isDeleted: true`), **When** the user views the canvas, **Then** the "Back to content" button is NOT shown (deleted shapes do not count as content).
+6. **Given** the bottom toolbar is visible and "Back to content" is visible, **When** the user views the canvas overlay, **Then** "Back to content" is directly above the toolbar with a small gap and does not overlap it.
 
 ---
 
@@ -93,6 +94,7 @@ A user in Select mode is not aware they can pan the canvas using the middle mous
 - **FR-002**: When at least one non-deleted element intersects the current viewport, the "Back to content" button MUST NOT be displayed.
 - **FR-003**: When the element store contains no non-deleted elements, the "Back to content" button MUST NOT be displayed.
 - **FR-004**: Clicking "Back to content" MUST update the camera so that the bounding box of all non-deleted elements is fully visible with uniform padding (approximately 10–15% of the smaller viewport dimension on each side).
+- **FR-004a**: The "Back to content" button MUST be positioned directly above the bottom toolbar, with a visible gap, and MUST NOT overlap the toolbar.
 - **FR-005**: Wheel events WITHOUT Ctrl/Cmd held MUST pan the canvas by `(deltaX, deltaY)`, not zoom.
 - **FR-006**: Wheel events WITH Ctrl/Cmd held, OR events flagged as pinch by the browser (ctrlKey=true from trackpad pinch), MUST zoom the canvas.
 - **FR-007**: Trackpad zoom sensitivity MUST be reduced so that typical pinch deltas produce small incremental zoom steps (factor applied to raw delta before computing new zoom level).

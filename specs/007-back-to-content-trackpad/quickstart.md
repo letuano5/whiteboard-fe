@@ -11,7 +11,7 @@ pnpm dev     # start dev server
 
 1. Draw at least one shape on the canvas.
 2. Pan far away (hold Space + drag, or use middle mouse button) until no shapes are visible.
-3. **Expected**: A "Back to content" button appears near the bottom-center of the canvas.
+3. **Expected**: A "Back to content" button appears near the bottom-center of the canvas, directly above the toolbar with a small gap and no overlap.
 4. Click the button.
 5. **Expected**: The camera moves so all shapes are visible with padding; no shape is cropped.
 6. Delete all shapes. Pan to an empty area.

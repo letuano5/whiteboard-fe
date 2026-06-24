@@ -134,5 +134,5 @@ No interaction needed; display depends solely on `tool === 'select'`.
 
 **Decision 7 — BackToContent placement**
 
-Fixed bottom-center overlay (absolute positioning inside the container div).
+Fixed bottom-center overlay (absolute positioning inside the container div), placed directly above the bottom toolbar with a small gap so the two controls never overlap.
 Visible only when: `elements.some(e => !e.isDeleted)` AND no non-deleted element intersects the viewport.

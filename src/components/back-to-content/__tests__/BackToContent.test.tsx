@@ -1,4 +1,4 @@
-// @covers AC-1 AC-2 AC-3 AC-4 AC-5 (007-back-to-content-trackpad)
+// @covers AC-1 AC-2 AC-3 AC-4 AC-5 AC-13 (007-back-to-content-trackpad)
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import BackToContent from '../BackToContent';
@@ -103,6 +103,14 @@ describe('AC-1 (007): button shown when all elements are off-screen', () => {
     useElementsStore.getState().setElements([makeEl('a', 10000, 10000, 100, 100)]);
     render(<BackToContent containerRef={makeContainerRef()} />);
     expect(screen.getByRole('button', { name: /back to content/i })).toBeInTheDocument();
+  });
+
+  it('positions the button directly above the bottom toolbar', () => {
+    useCameraStore.getState().setCamera({ x: 0, y: 0, zoom: 1 });
+    useElementsStore.getState().setElements([makeEl('a', 10000, 10000, 100, 100)]);
+    render(<BackToContent containerRef={makeContainerRef()} />);
+    const btn = screen.getByRole('button', { name: /back to content/i });
+    expect(btn.parentElement).toHaveStyle({ bottom: '74px' });
   });
 
   it('shows button when element is to the left of viewport (negative world)', () => {

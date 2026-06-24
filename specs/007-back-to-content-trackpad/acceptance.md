@@ -15,3 +15,4 @@ AC-9: Zoom is clamped within [0.1, 8] for all zoom operations.
 AC-10: While the Select tool is active, the hint text "Click chuột giữa để scroll canvas" is displayed on the canvas.
 AC-11: When the user switches to any tool other than Select, the hint text disappears.
 AC-12: deltaMode normalization: LINE mode (deltaMode=1) multiplies delta by 16; PAGE mode (deltaMode=2) multiplies by the container dimension before applying.
+AC-13: When the "Back to content" button is visible, it is positioned directly above the bottom toolbar with a small gap and does not overlap the toolbar.

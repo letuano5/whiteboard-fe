@@ -8,6 +8,11 @@ interface BackToContentProps {
   containerRef: React.RefObject<HTMLDivElement | null>;
 }
 
+const TOOLBAR_BOTTOM_PX = 16;
+const TOOLBAR_HEIGHT_PX = 50;
+const TOOLBAR_GAP_PX = 8;
+const BACK_TO_CONTENT_BOTTOM_PX = TOOLBAR_BOTTOM_PX + TOOLBAR_HEIGHT_PX + TOOLBAR_GAP_PX;
+
 export default function BackToContent({ containerRef }: BackToContentProps) {
   const elements = useElementsStore((s) => s.elements);
   const camera = useCameraStore((s) => s.camera);
@@ -46,7 +51,7 @@ export default function BackToContent({ containerRef }: BackToContentProps) {
     <div
       style={{
         position: 'absolute',
-        bottom: '16px',
+        bottom: `${BACK_TO_CONTENT_BOTTOM_PX}px`,
         left: '50%',
         transform: 'translateX(-50%)',
         zIndex: 10,

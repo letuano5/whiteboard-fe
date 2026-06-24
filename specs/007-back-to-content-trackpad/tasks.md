@@ -41,11 +41,11 @@
 - [ ] T005 [US1] Add unit tests for `getContentBounds` in `src/utils/camera.test.ts` — test: empty array → null, all isDeleted → null, mixed → correct bbox (@covers AC-3, AC-5)
 - [ ] T006 [US1] Add unit tests for `isAnyElementVisible` in `src/utils/camera.test.ts` — test: element inside viewport → true, element outside → false, deleted element → false (@covers AC-1, AC-2, AC-5)
 - [ ] T007 [US1] Add unit tests for `fitToContent` in `src/utils/camera.test.ts` — test: single element → camera centers on it with padding; deleted elements excluded (@covers AC-4, AC-5)
-- [ ] T008 [P] [US1] Create `src/components/back-to-content/__tests__/BackToContent.test.tsx` — render with elements all off-screen → button visible; ≥1 element on-screen → no button; empty elements → no button; click → calls setCamera with fit result (@covers AC-1, AC-2, AC-3, AC-4, AC-5)
+- [ ] T008 [P] [US1] Create `src/components/back-to-content/__tests__/BackToContent.test.tsx` — render with elements all off-screen → button visible and positioned above the toolbar without overlap; ≥1 element on-screen → no button; empty elements → no button; click → calls setCamera with fit result (@covers AC-1, AC-2, AC-3, AC-4, AC-5, AC-13)
 
 ### Implementation for User Story 1
 
-- [ ] T009 [US1] Create `src/components/back-to-content/BackToContent.tsx` — subscribes to `useElementsStore` and `useCameraStore`; accepts `containerRef: React.RefObject<HTMLDivElement>`; reads `containerRef.current.getBoundingClientRect()` to get viewport size; computes `showButton = hasContent && !isAnyElementVisible(...)`; renders an absolutely-positioned button at bottom-center of container
+- [ ] T009 [US1] Create `src/components/back-to-content/BackToContent.tsx` — subscribes to `useElementsStore` and `useCameraStore`; accepts `containerRef: React.RefObject<HTMLDivElement>`; reads `containerRef.current.getBoundingClientRect()` to get viewport size; computes `showButton = hasContent && !isAnyElementVisible(...)`; renders an absolutely-positioned button at bottom-center of container, directly above the toolbar with a small gap
 - [ ] T010 [US1] Import and render `<BackToContent containerRef={containerRef} />` inside the container div in `src/canvas/Whiteboard.tsx` (after `<DetailPanel />`)
 
 **Checkpoint**: `pnpm test` passes for US1 tests. Draw shape → pan away → button visible → click → content fits.
