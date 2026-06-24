@@ -41,14 +41,14 @@ beforeEach(() => {
 
 describe('SvgLayer — SelectionOverlay', () => {
   // @covers AC-7
-  it('renders exactly 8 handle circles when a shape is selected', () => {
+  it('renders exactly 9 handle circles when a shape is selected (8 resize + 1 rotate)', () => {
     const el = makeElement({ id: 'el-1' });
     useInteractionStore.getState().setSelectedIds(['el-1']);
 
     const { container } = render(<SvgLayer elements={[el]} camera={camera} />);
 
     const circles = container.querySelectorAll('circle');
-    expect(circles.length).toBe(8);
+    expect(circles.length).toBe(9);
   });
 
   it('renders no handles when selectedIds is empty', () => {

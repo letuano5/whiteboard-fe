@@ -17,6 +17,7 @@ const DEFAULT_STATE: InteractionState = {
   marquee: null,
   resizeHandle: null,
   resizeSession: null,
+  isRotating: false,
   laserTrail: [],
   remoteCursors: new Map(),
 };
@@ -30,6 +31,7 @@ interface InteractionActions {
   setMarquee: (rect: Rect | null) => void;
   setResizeHandle: (h: ResizeHandleId | null) => void;
   setResizeSession: (session: ResizeSession | null) => void;
+  setIsRotating: (v: boolean) => void;
   setLaserTrail: (trail: Point[]) => void;
   setRemoteCursors: (cursors: Map<string, Presence>) => void;
   reset: () => void;
@@ -46,6 +48,7 @@ export const useInteractionStore = create<InteractionState & InteractionActions>
   setMarquee: (marquee) => set({ marquee }),
   setResizeHandle: (resizeHandle) => set({ resizeHandle }),
   setResizeSession: (resizeSession) => set({ resizeSession }),
+  setIsRotating: (isRotating) => set({ isRotating }),
   setLaserTrail: (laserTrail) => set({ laserTrail }),
   setRemoteCursors: (remoteCursors) => set({ remoteCursors }),
   reset: () => set({ ...DEFAULT_STATE, remoteCursors: new Map() }),

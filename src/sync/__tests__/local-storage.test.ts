@@ -250,6 +250,47 @@ describe('startLocalStoragePersistence — debounce write', () => {
     cleanup();
   });
 
+  // @covers AC-13 (008-rotate-resize)
+  it('persists an element with angle ≠ 0 and restores it correctly', () => {
+    vi.useFakeTimers();
+    const cleanup = startLocalStoragePersistence();
+
+    createElement({
+      type: 'rectangle',
+      x: 0,
+      y: 0,
+      width: 50,
+      height: 50,
+      angle: Math.PI / 4,
+      props: {
+        strokeColor: '#000',
+        fillColor: '#fff',
+        strokeWidth: 1,
+        strokeStyle: 'solid',
+        opacity: 1,
+      },
+      groupId: null,
+      frameId: null,
+      locked: false,
+      createdBy: 'test',
+    });
+
+    vi.advanceTimersByTime(300);
+
+    const raw = localStorage.getItem(STORAGE_KEY);
+    expect(raw).not.toBeNull();
+    const parsed = JSON.parse(raw!);
+    expect(parsed.elements[0].angle).toBeCloseTo(Math.PI / 4);
+
+    // Simulate reload: clear store, restore from localStorage
+    useElementsStore.setState({ elements: [] });
+    initLocalStoragePersistence();
+    const restored = useElementsStore.getState().elements[0];
+    expect(restored.angle).toBeCloseTo(Math.PI / 4);
+
+    cleanup();
+  });
+
   it('does not write before the debounce window expires', () => {
     vi.useFakeTimers();
     const cleanup = startLocalStoragePersistence();

@@ -15,12 +15,13 @@ import {
   onSelectPointerMove,
   onSelectPointerUp,
   onSelectKeyDown,
+  onRotateHandlePointerDown,
 } from './tools/select-tool';
 import SvgLayer from './layers/SvgLayer';
 import Toolbar from '../components/toolbar/Toolbar';
 import DetailPanel from '../components/detail-panel/DetailPanel';
 import BackToContent from '../components/back-to-content/BackToContent';
-import type { ResizeHandleId } from '../types/interaction';
+import type { HandleId } from '../types/interaction';
 
 function svgLocalPoint(e: React.PointerEvent) {
   const rect = (e.currentTarget as SVGSVGElement).getBoundingClientRect();
@@ -195,14 +196,19 @@ export default function Whiteboard() {
   }
 
   function handleHandlePointerDown(
-    handle: ResizeHandleId,
+    handle: HandleId,
     e: React.PointerEvent<SVGCircleElement>,
   ) {
     const svgEl = e.currentTarget.closest('svg') as SVGSVGElement | null;
     if (!svgEl) return;
     const rect = svgEl.getBoundingClientRect();
     const worldPt = screenToWorld(e.clientX - rect.left, e.clientY - rect.top, camera);
-    onSelectHandlePointerDown(handle, worldPt);
+    if (handle === 'rotate') {
+      svgEl.setPointerCapture(e.pointerId);
+      onRotateHandlePointerDown(worldPt);
+    } else {
+      onSelectHandlePointerDown(handle, worldPt);
+    }
   }
 
   // T023: cursor style based on pan/zoom mode

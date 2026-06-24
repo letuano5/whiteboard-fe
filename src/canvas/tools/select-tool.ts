@@ -2,6 +2,7 @@ import { useElementsStore } from '../../store/elements.store';
 import { useInteractionStore } from '../../store/interaction.store';
 import { patchElement, deleteElements } from '../../store/mutation-pipeline';
 import { getShapeUtil } from '../shapes';
+import { unrotatePoint } from '../../utils/geometry';
 import type { Point, Rect } from '../../types/geometry';
 import type { ResizeHandleId, ResizeSession } from '../../types/interaction';
 import type { Element } from '../../types/shared';
@@ -175,7 +176,10 @@ export function onSelectPointerDown(worldPt: Point): void {
 
   for (const el of visible) {
     const util = getShapeUtil(el.type);
-    if (util && util.hitTest(el, worldPt.x, worldPt.y)) {
+    // AC-5/AC-6: un-rotate the test point into the element's local frame before AABB hit-test
+    const center = { x: el.x + el.width / 2, y: el.y + el.height / 2 };
+    const localPt = el.angle !== 0 ? unrotatePoint(worldPt, center, el.angle) : worldPt;
+    if (util && util.hitTest(el, localPt.x, localPt.y)) {
       setSelectedIds([el.id]);
       setDraggingId(el.id);
       setDragStart(worldPt);
@@ -240,6 +244,7 @@ export function onSelectPointerMove(worldPt: Point): void {
     draggingId,
     dragStart,
     resizeSession,
+    isRotating,
     setDraftElement,
     setResizeHandle,
   } = useInteractionStore.getState();
@@ -249,9 +254,28 @@ export function onSelectPointerMove(worldPt: Point): void {
   const el = elements.find((e) => e.id === draggingId);
   if (!el) return;
 
+  // AC-1: rotate branch — compute angle from element center to pointer, offset by π/2
+  if (isRotating) {
+    const cx = el.x + el.width / 2;
+    const cy = el.y + el.height / 2;
+    const rawAngle = Math.atan2(worldPt.y - cy, worldPt.x - cx) + Math.PI / 2;
+    const angle = ((rawAngle + Math.PI) % (2 * Math.PI)) - Math.PI;
+    setDraftElement({ ...el, angle });
+    return;
+  }
+
   if (resizeSession) {
+    // AC-8: un-rotate pointer into element's local frame so resize works for rotated shapes.
+    // Anchor is already in local coordinates (getResizeAnchor uses el.x/y/width/height directly).
+    const effectivePointer =
+      el.angle !== 0
+        ? unrotatePoint(worldPt, {
+            x: resizeSession.originalBounds.x + resizeSession.originalBounds.width / 2,
+            y: resizeSession.originalBounds.y + resizeSession.originalBounds.height / 2,
+          }, el.angle)
+        : worldPt;
     const { x, y, width, height, flippedX, flippedY, activeHandle } =
-      resizeBoundsFromAnchorAndPointer(resizeSession, worldPt);
+      resizeBoundsFromAnchorAndPointer(resizeSession, effectivePointer);
     const bounds = { x, y, width, height };
     setDraftElement({
       ...el,
@@ -277,15 +301,20 @@ export function onSelectPointerUp(_worldPt: Point): void {
     dragStart,
     draftElement,
     resizeSession,
+    isRotating,
     setDraggingId,
     setDragStart,
     setResizeHandle,
     setResizeSession,
+    setIsRotating,
     setDraftElement,
   } = useInteractionStore.getState();
 
   if (draggingId && dragStart && draftElement) {
-    if (resizeSession) {
+    // AC-2: commit rotate via patchElement
+    if (isRotating) {
+      patchElement(draggingId, { angle: draftElement.angle });
+    } else if (resizeSession) {
       patchElement(draggingId, {
         x: draftElement.x,
         y: draftElement.y,
@@ -306,7 +335,22 @@ export function onSelectPointerUp(_worldPt: Point): void {
   setDragStart(null);
   setResizeHandle(null);
   setResizeSession(null);
+  setIsRotating(false);
   setDraftElement(null);
+}
+
+// AC-1: initiate rotate drag on the selected element
+export function onRotateHandlePointerDown(worldPt: Point): void {
+  const { selectedIds, setDraggingId, setDragStart, setIsRotating } =
+    useInteractionStore.getState();
+  if (selectedIds.length === 0) return;
+  const el = useElementsStore
+    .getState()
+    .elements.find((e) => e.id === selectedIds[0] && !e.isDeleted);
+  if (!el) return;
+  setDraggingId(el.id);
+  setDragStart(worldPt);
+  setIsRotating(true);
 }
 
 export function onSelectKeyDown(key: string): void {

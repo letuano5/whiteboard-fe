@@ -1,18 +1,22 @@
 import type { Camera, Element } from '../../types/shared';
-import type { ResizeHandleId } from '../../types/interaction';
+import type { HandleId, ResizeHandleId } from '../../types/interaction';
 import { getShapeUtil } from '../shapes';
 import { useInteractionStore } from '../../store/interaction.store';
+
+const ROTATE_HANDLE_OFFSET = 24;
 
 interface SelectionOverlayProps {
   element: Element;
   onHandlePointerDown?: (
-    handle: ResizeHandleId,
+    handle: HandleId,
     e: React.PointerEvent<SVGCircleElement>,
   ) => void;
 }
 
 function SelectionOverlay({ element, onHandlePointerDown }: SelectionOverlayProps) {
-  const { x, y, width: w, height: h } = element;
+  const { x, y, width: w, height: h, angle } = element;
+  const cx = x + w / 2;
+  const cy = y + h / 2;
   const handles: [ResizeHandleId, number, number][] = [
     ['nw', x, y],
     ['ne', x + w, y],
@@ -23,8 +27,10 @@ function SelectionOverlay({ element, onHandlePointerDown }: SelectionOverlayProp
     ['e', x + w, y + h / 2],
     ['w', x, y + h / 2],
   ];
+  const rotateTransform =
+    angle !== 0 ? `rotate(${(angle * 180) / Math.PI} ${cx} ${cy})` : undefined;
   return (
-    <g>
+    <g transform={rotateTransform}>
       <rect
         x={x}
         y={y}
@@ -54,6 +60,31 @@ function SelectionOverlay({ element, onHandlePointerDown }: SelectionOverlayProp
           }}
         />
       ))}
+      {/* Rotate handle */}
+      <line
+        x1={cx}
+        y1={y}
+        x2={cx}
+        y2={y - ROTATE_HANDLE_OFFSET}
+        stroke="#3b82f6"
+        strokeWidth={1}
+      />
+      <circle
+        data-handle="rotate"
+        cx={cx}
+        cy={y - ROTATE_HANDLE_OFFSET}
+        r={5}
+        fill="white"
+        stroke="#3b82f6"
+        strokeWidth={1.5}
+        style={{ cursor: 'crosshair' }}
+        onPointerDown={(e) => {
+          e.stopPropagation();
+          const svgEl = e.currentTarget.closest('svg') as SVGSVGElement | null;
+          svgEl?.setPointerCapture(e.pointerId);
+          onHandlePointerDown?.('rotate', e);
+        }}
+      />
     </g>
   );
 }
@@ -67,7 +98,7 @@ interface SvgLayerProps {
   onPointerUp?: (e: React.PointerEvent<SVGSVGElement>) => void;
   onPointerLeave?: (e: React.PointerEvent<SVGSVGElement>) => void;
   onHandlePointerDown?: (
-    handle: ResizeHandleId,
+    handle: HandleId,
     e: React.PointerEvent<SVGCircleElement>,
   ) => void;
 }

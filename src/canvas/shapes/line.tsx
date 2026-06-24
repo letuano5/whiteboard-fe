@@ -6,34 +6,41 @@ export const lineShapeUtil: ShapeUtil = {
   type: 'line',
 
   render(element) {
-    const { x, y, width, height, props } = element;
+    const { x, y, width, height, angle, props } = element;
     const dasharray = strokeDashArray(props.strokeStyle);
+    const cx = x + width / 2;
+    const cy = y + height / 2;
+    const transform = angle !== 0 ? `rotate(${(angle * 180) / Math.PI} ${cx} ${cy})` : undefined;
 
     if (props.points && props.points.length >= 2) {
       const pointsStr = props.points.map(([px, py]) => `${px},${py}`).join(' ');
       return (
-        <polyline
-          points={pointsStr}
-          fill="none"
+        <g transform={transform}>
+          <polyline
+            points={pointsStr}
+            fill="none"
+            stroke={props.strokeColor}
+            strokeWidth={props.strokeWidth}
+            strokeDasharray={dasharray}
+            opacity={props.opacity}
+          />
+        </g>
+      );
+    }
+
+    return (
+      <g transform={transform}>
+        <line
+          x1={x}
+          y1={y}
+          x2={x + width}
+          y2={y + height}
           stroke={props.strokeColor}
           strokeWidth={props.strokeWidth}
           strokeDasharray={dasharray}
           opacity={props.opacity}
         />
-      );
-    }
-
-    return (
-      <line
-        x1={x}
-        y1={y}
-        x2={x + width}
-        y2={y + height}
-        stroke={props.strokeColor}
-        strokeWidth={props.strokeWidth}
-        strokeDasharray={dasharray}
-        opacity={props.opacity}
-      />
+      </g>
     );
   },
 

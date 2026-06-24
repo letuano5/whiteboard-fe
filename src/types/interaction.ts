@@ -39,6 +39,7 @@ export interface InteractionState {
   marquee: Rect | null;
   resizeHandle: ResizeHandleId | null;
   resizeSession: ResizeSession | null;
+  isRotating: boolean;
   laserTrail: Point[];
   remoteCursors: Map<string, Presence>;
 }

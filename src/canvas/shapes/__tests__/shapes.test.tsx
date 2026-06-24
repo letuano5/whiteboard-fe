@@ -112,7 +112,10 @@ describe('lineShapeUtil', () => {
   it('renders a <line> element when no points prop', () => {
     const el = makeElement({ type: 'line' });
     const jsx = lineShapeUtil.render(el);
-    expect(jsx.type).toBe('line');
+    // Line shape wraps in <g> for rotation support; child is the actual <line>
+    expect(jsx.type).toBe('g');
+    const child = (jsx.props as { children: { type: string } }).children;
+    expect(child.type).toBe('line');
   });
 
   it('renders a <polyline> when points are provided', () => {
@@ -132,7 +135,10 @@ describe('lineShapeUtil', () => {
       },
     });
     const jsx = lineShapeUtil.render(el);
-    expect(jsx.type).toBe('polyline');
+    // Line shape wraps in <g> for rotation support; child is the actual <polyline>
+    expect(jsx.type).toBe('g');
+    const child = (jsx.props as { children: { type: string } }).children;
+    expect(child.type).toBe('polyline');
   });
 
   it('getBounds returns element bounds', () => {
