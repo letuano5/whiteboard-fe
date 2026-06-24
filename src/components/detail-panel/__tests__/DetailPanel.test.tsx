@@ -60,6 +60,7 @@ afterEach(() => {
 });
 
 // @covers AC-1
+// @covers AC-2 (005-detail-panel-toolbar)
 describe('AC-1: panel renders when one shape is selected', () => {
   it('shows stroke color control when a shape is selected', () => {
     const el = makeElement({ id: 'el-1' });
@@ -71,6 +72,8 @@ describe('AC-1: panel renders when one shape is selected', () => {
 });
 
 // @covers AC-2
+// @covers AC-1 (005-detail-panel-toolbar)
+// @covers AC-3 (005-detail-panel-toolbar)
 describe('AC-2: panel hidden when nothing selected', () => {
   it('renders nothing when selectedIds is empty', () => {
     const el = makeElement({ id: 'el-1' });
@@ -90,6 +93,7 @@ describe('AC-2: panel hidden when nothing selected', () => {
 });
 
 // @covers AC-3
+// @covers AC-4 (005-detail-panel-toolbar)
 describe('AC-3: stroke color change updates element immediately', () => {
   it('calls patchElement with new strokeColor', () => {
     const el = makeElement({ id: 'el-1' });
@@ -154,6 +158,7 @@ describe('AC-6: opacity change updates element', () => {
 });
 
 // @covers AC-7
+// @covers AC-5 (005-detail-panel-toolbar)
 describe('AC-7: changes go through patchElement (mutation pipeline)', () => {
   it('patchElement is called exactly once per change', () => {
     const el = makeElement({ id: 'el-1' });
@@ -166,6 +171,7 @@ describe('AC-7: changes go through patchElement (mutation pipeline)', () => {
 });
 
 // @covers AC-8
+// @covers AC-6 (005-detail-panel-toolbar)
 describe('AC-8: style values reflect current element props', () => {
   it('displays current strokeColor value from store', () => {
     const el = makeElement({ id: 'el-1', props: { ...makeElement().props, strokeColor: '#ff0000' } });
@@ -283,5 +289,18 @@ describe('AC-8 (text): fontSize persists in panel after store update', () => {
     render(<DetailPanel />);
     const input = screen.getByLabelText(/font size/i) as HTMLInputElement;
     expect(Number(input.value)).toBe(24);
+  });
+});
+
+// @covers AC-7 (005-detail-panel-toolbar)
+describe('AC-7 (005): panel pointerDown does not deselect shape', () => {
+  it('selectedIds unchanged after pointerdown on panel root', () => {
+    const el = makeElement({ id: 'el-1' });
+    useElementsStore.setState({ elements: [el] });
+    useInteractionStore.getState().setSelectedIds(['el-1']);
+    const { container } = render(<DetailPanel />);
+    const panelRoot = container.firstChild as HTMLElement;
+    fireEvent.pointerDown(panelRoot);
+    expect(useInteractionStore.getState().selectedIds).toEqual(['el-1']);
   });
 });
