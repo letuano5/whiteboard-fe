@@ -126,6 +126,44 @@ describe('SvgLayer — SelectionOverlay', () => {
   });
 });
 
+describe('SvgLayer — P1A-10 Z-order render order', () => {
+  // @covers AC-8 (006-localstorage-zorder)
+  it('renders lower-zIndex element before higher-zIndex element in DOM order', () => {
+    const elA = makeElement({ id: 'shape-a', type: 'rectangle', zIndex: 1 });
+    const elB = makeElement({ id: 'shape-b', type: 'ellipse', zIndex: 2 });
+
+    const { container } = render(<SvgLayer elements={[elA, elB]} camera={camera} />);
+
+    // Both shapes render inside the transform <g>; query all shape-level <g> wrappers
+    const shapeGroups = container.querySelectorAll('svg > g > g');
+    expect(shapeGroups.length).toBeGreaterThanOrEqual(2);
+
+    // First <g> wraps the lower-zIndex shape (rectangle renders a <rect>)
+    const firstShape = shapeGroups[0].querySelector('rect');
+    const secondShape = shapeGroups[1].querySelector('ellipse');
+    expect(firstShape).not.toBeNull();  // rectangle (zIndex 1) is first
+    expect(secondShape).not.toBeNull(); // ellipse (zIndex 2) is second
+  });
+
+  // @covers AC-8 (006-localstorage-zorder)
+  it('renders correct order even when elements array is given in reverse zIndex order', () => {
+    const elHigh = makeElement({ id: 'high', type: 'ellipse', zIndex: 5 });
+    const elLow = makeElement({ id: 'low', type: 'rectangle', zIndex: 1 });
+
+    // Pass high-zIndex element first in array
+    const { container } = render(<SvgLayer elements={[elHigh, elLow]} camera={camera} />);
+
+    const shapeGroups = container.querySelectorAll('svg > g > g');
+    expect(shapeGroups.length).toBeGreaterThanOrEqual(2);
+
+    // Rectangle (zIndex 1) must still be rendered first regardless of array order
+    const firstShape = shapeGroups[0].querySelector('rect');
+    const secondShape = shapeGroups[1].querySelector('ellipse');
+    expect(firstShape).not.toBeNull();
+    expect(secondShape).not.toBeNull();
+  });
+});
+
 describe('SvgLayer — P1A-03 Delete rendering', () => {
   // @covers AC-10 (002-move-resize-delete)
   it('does not render a soft-deleted element even when it is selected', () => {

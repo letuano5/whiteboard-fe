@@ -55,6 +55,7 @@ describe('createElement', () => {
     expect(elements[0].id).toBe(el.id);
   });
 
+  // @covers AC-11 (006-localstorage-zorder)
   it('assigns zIndex = 1 when store is empty', () => {
     const el = createElement(makeDraft());
     expect(el.zIndex).toBe(1);
@@ -64,6 +65,22 @@ describe('createElement', () => {
     const el1 = createElement(makeDraft());
     const el2 = createElement(makeDraft());
     expect(el2.zIndex).toBe(el1.zIndex + 1);
+  });
+
+  // @covers AC-10 (006-localstorage-zorder)
+  it('assigns zIndex = max(existing) + 1 when existing elements have non-sequential zIndex values', () => {
+    // Seed store with elements at zIndex 3, 7, 2 — max is 7
+    const base = { ...makeDraft(), version: 1, versionNonce: 1, updatedAt: 0, isDeleted: false };
+    useElementsStore.setState({
+      elements: [
+        { ...base, id: 'seed-a', zIndex: 3 },
+        { ...base, id: 'seed-b', zIndex: 7 },
+        { ...base, id: 'seed-c', zIndex: 2 },
+      ],
+    });
+
+    const el = createElement(makeDraft());
+    expect(el.zIndex).toBe(8); // max(3, 7, 2) + 1 = 8
   });
 
   it('generates unique IDs for each element', () => {

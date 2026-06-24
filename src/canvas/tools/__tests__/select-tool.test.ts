@@ -58,7 +58,8 @@ describe('onSelectPointerDown — User Story 1: click to select', () => {
     expect(useInteractionStore.getState().selectedIds).toContain('rect-1');
   });
 
-  // @covers AC-2
+  // @covers AC-2 (001-select-shape)
+  // @covers AC-9 (006-localstorage-zorder)
   it('overlapping shapes: higher zIndex shape is selected', () => {
     const low = makeElement({ id: 'low-z', x: 0, y: 0, width: 100, height: 100, zIndex: 1 });
     const high = makeElement({ id: 'high-z', x: 0, y: 0, width: 100, height: 100, zIndex: 2 });
