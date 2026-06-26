@@ -1,7 +1,12 @@
 import { create } from 'zustand';
 import type { Element, Presence } from '../types/shared';
 import type { Point, Rect } from '../types/geometry';
-import type { HandleId, InteractionState, ToolId } from '../types/interaction';
+import type {
+  InteractionState,
+  ResizeHandleId,
+  ResizeSession,
+  ToolId,
+} from '../types/interaction';
 
 const DEFAULT_STATE: InteractionState = {
   tool: 'select',
@@ -11,7 +16,11 @@ const DEFAULT_STATE: InteractionState = {
   draftElement: null,
   marquee: null,
   resizeHandle: null,
+  resizeSession: null,
+  isRotating: false,
+  editingId: null,
   laserTrail: [],
+  laserFading: false,
   remoteCursors: new Map(),
 };
 
@@ -22,8 +31,12 @@ interface InteractionActions {
   setDragStart: (pt: Point | null) => void;
   setDraftElement: (el: Element | null) => void;
   setMarquee: (rect: Rect | null) => void;
-  setResizeHandle: (h: HandleId | null) => void;
+  setResizeHandle: (h: ResizeHandleId | null) => void;
+  setResizeSession: (session: ResizeSession | null) => void;
+  setIsRotating: (v: boolean) => void;
+  setEditingId: (id: string | null) => void;
   setLaserTrail: (trail: Point[]) => void;
+  setLaserFading: (v: boolean) => void;
   setRemoteCursors: (cursors: Map<string, Presence>) => void;
   reset: () => void;
 }
@@ -38,7 +51,11 @@ export const useInteractionStore = create<InteractionState & InteractionActions>
   setDraftElement: (draftElement) => set({ draftElement }),
   setMarquee: (marquee) => set({ marquee }),
   setResizeHandle: (resizeHandle) => set({ resizeHandle }),
+  setResizeSession: (resizeSession) => set({ resizeSession }),
+  setIsRotating: (isRotating) => set({ isRotating }),
+  setEditingId: (editingId) => set({ editingId }),
   setLaserTrail: (laserTrail) => set({ laserTrail }),
+  setLaserFading: (laserFading) => set({ laserFading }),
   setRemoteCursors: (remoteCursors) => set({ remoteCursors }),
   reset: () => set({ ...DEFAULT_STATE, remoteCursors: new Map() }),
 }));

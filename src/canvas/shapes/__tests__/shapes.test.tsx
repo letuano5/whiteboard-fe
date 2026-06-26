@@ -112,7 +112,10 @@ describe('lineShapeUtil', () => {
   it('renders a <line> element when no points prop', () => {
     const el = makeElement({ type: 'line' });
     const jsx = lineShapeUtil.render(el);
-    expect(jsx.type).toBe('line');
+    // Line shape wraps in <g> for rotation support; child is the actual <line>
+    expect(jsx.type).toBe('g');
+    const child = (jsx.props as { children: { type: string } }).children;
+    expect(child.type).toBe('line');
   });
 
   it('renders a <polyline> when points are provided', () => {
@@ -132,7 +135,10 @@ describe('lineShapeUtil', () => {
       },
     });
     const jsx = lineShapeUtil.render(el);
-    expect(jsx.type).toBe('polyline');
+    // Line shape wraps in <g> for rotation support; child is the actual <polyline>
+    expect(jsx.type).toBe('g');
+    const child = (jsx.props as { children: { type: string } }).children;
+    expect(child.type).toBe('polyline');
   });
 
   it('getBounds returns element bounds', () => {
@@ -142,7 +148,7 @@ describe('lineShapeUtil', () => {
 });
 
 describe('textShapeUtil', () => {
-  it('renders a <text> element', () => {
+  it('renders a <text> element with a tspan child containing the text', () => {
     const el = makeElement({
       type: 'text',
       props: {
@@ -156,15 +162,45 @@ describe('textShapeUtil', () => {
     });
     const jsx = textShapeUtil.render(el);
     const p = jsx.props as AnyProps;
+    const children = p['children'] as Array<{ type: string; props: AnyProps }>;
     expect(jsx.type).toBe('text');
-    expect(p['children']).toBe('Hello');
+    expect(Array.isArray(children)).toBe(true);
+    expect(children).toHaveLength(1);
+    expect(children[0].type).toBe('tspan');
+    expect(children[0].props['children']).toBe('Hello');
   });
 
-  it('renders empty string when text prop is missing', () => {
+  it('renders empty string when text prop is missing — single tspan with empty content', () => {
     const el = makeElement({ type: 'text' });
     const jsx = textShapeUtil.render(el);
     const p = jsx.props as AnyProps;
-    expect(p['children']).toBe('');
+    const children = p['children'] as Array<{ type: string; props: AnyProps }>;
+    expect(children).toHaveLength(1);
+    expect(children[0].type).toBe('tspan');
+    expect(children[0].props['children']).toBe('');
+  });
+
+  it('renders multi-line text as multiple tspan elements with dy offsets', () => {
+    const el = makeElement({
+      type: 'text',
+      props: {
+        strokeColor: '#333',
+        fillColor: 'none',
+        strokeWidth: 1,
+        strokeStyle: 'solid',
+        opacity: 1,
+        text: 'Hello\nWorld',
+        fontSize: 16,
+      },
+    });
+    const jsx = textShapeUtil.render(el);
+    const p = jsx.props as AnyProps;
+    const children = p['children'] as Array<{ type: string; props: AnyProps }>;
+    expect(children).toHaveLength(2);
+    expect(children[0].props['children']).toBe('Hello');
+    expect(children[0].props['dy']).toBe(0);
+    expect(children[1].props['children']).toBe('World');
+    expect(children[1].props['dy']).toBeCloseTo(16 * 1.2); // fontSize * lineHeight ratio
   });
 
   it('getBounds returns element bounds', () => {
@@ -173,13 +209,169 @@ describe('textShapeUtil', () => {
   });
 });
 
-describe('hitTest stubs', () => {
-  it('all shapes return false for hitTest', () => {
-    const el = makeElement();
-    expect(rectangleShapeUtil.hitTest(el, 50, 50)).toBe(false);
-    expect(ellipseShapeUtil.hitTest({ ...el, type: 'ellipse' }, 50, 50)).toBe(false);
-    expect(diamondShapeUtil.hitTest({ ...el, type: 'diamond' }, 50, 50)).toBe(false);
-    expect(lineShapeUtil.hitTest({ ...el, type: 'line' }, 50, 50)).toBe(false);
-    expect(textShapeUtil.hitTest({ ...el, type: 'text' }, 50, 50)).toBe(false);
+// makeElement defaults: x=10, y=20, width=100, height=50
+// bbox: x∈[10,110], y∈[20,70]
+// inside point: (60, 45); outside point: (0, 0); boundary: (10, 20)
+
+describe('rectangleShapeUtil.hitTest', () => {
+  it('returns true for point inside bbox', () => {
+    expect(rectangleShapeUtil.hitTest(makeElement(), 60, 45)).toBe(true);
+  });
+
+  it('returns true for point on bbox boundary', () => {
+    expect(rectangleShapeUtil.hitTest(makeElement(), 10, 20)).toBe(true);
+    expect(rectangleShapeUtil.hitTest(makeElement(), 110, 70)).toBe(true);
+  });
+
+  it('returns false for point outside bbox', () => {
+    expect(rectangleShapeUtil.hitTest(makeElement(), 0, 0)).toBe(false);
+    expect(rectangleShapeUtil.hitTest(makeElement(), 200, 200)).toBe(false);
+  });
+
+  it('returns false for zero-size shape (width=0, height=0) — no throw', () => {
+    const el = makeElement({ width: 0, height: 0 });
+    expect(() => rectangleShapeUtil.hitTest(el, 10, 20)).not.toThrow();
+    expect(rectangleShapeUtil.hitTest(el, 10, 20)).toBe(true); // degenerate point hits itself
+    expect(rectangleShapeUtil.hitTest(el, 11, 20)).toBe(false);
+  });
+});
+
+describe('ellipseShapeUtil.hitTest', () => {
+  it('returns true for point inside AABB', () => {
+    const el = makeElement({ type: 'ellipse' });
+    expect(ellipseShapeUtil.hitTest(el, 60, 45)).toBe(true);
+  });
+
+  it('returns false for point outside AABB', () => {
+    const el = makeElement({ type: 'ellipse' });
+    expect(ellipseShapeUtil.hitTest(el, 0, 0)).toBe(false);
+  });
+});
+
+// @covers AC-13
+describe('textShapeUtil textAlign x-anchor: left', () => {
+  it('renders with x = element.x and textAnchor="start" for left align', () => {
+    const el = makeElement({
+      type: 'text',
+      x: 10,
+      width: 100,
+      props: {
+        strokeColor: '#000',
+        fillColor: 'none',
+        strokeWidth: 1,
+        strokeStyle: 'solid',
+        opacity: 1,
+        textAlign: 'left',
+      },
+    });
+    const jsx = textShapeUtil.render(el);
+    const p = jsx.props as AnyProps;
+    expect(p['x']).toBe(10);
+    expect(p['textAnchor']).toBe('start');
+  });
+});
+
+// @covers AC-14
+describe('textShapeUtil textAlign x-anchor: center', () => {
+  it('renders with x = element.x + width/2 and textAnchor="middle" for center align', () => {
+    const el = makeElement({
+      type: 'text',
+      x: 10,
+      width: 100,
+      props: {
+        strokeColor: '#000',
+        fillColor: 'none',
+        strokeWidth: 1,
+        strokeStyle: 'solid',
+        opacity: 1,
+        textAlign: 'center',
+      },
+    });
+    const jsx = textShapeUtil.render(el);
+    const p = jsx.props as AnyProps;
+    expect(p['x']).toBe(60); // 10 + 100/2
+    expect(p['textAnchor']).toBe('middle');
+  });
+});
+
+// @covers AC-15
+describe('textShapeUtil textAlign x-anchor: right', () => {
+  it('renders with x = element.x + width and textAnchor="end" for right align', () => {
+    const el = makeElement({
+      type: 'text',
+      x: 10,
+      width: 100,
+      props: {
+        strokeColor: '#000',
+        fillColor: 'none',
+        strokeWidth: 1,
+        strokeStyle: 'solid',
+        opacity: 1,
+        textAlign: 'right',
+      },
+    });
+    const jsx = textShapeUtil.render(el);
+    const p = jsx.props as AnyProps;
+    expect(p['x']).toBe(110); // 10 + 100
+    expect(p['textAnchor']).toBe('end');
+  });
+});
+
+describe('textShapeUtil.hitTest', () => {
+  it('returns true for point inside AABB', () => {
+    const el = makeElement({ type: 'text' });
+    expect(textShapeUtil.hitTest(el, 60, 45)).toBe(true);
+  });
+
+  it('returns false for point outside AABB', () => {
+    const el = makeElement({ type: 'text' });
+    expect(textShapeUtil.hitTest(el, 0, 0)).toBe(false);
+  });
+});
+
+describe('diamondShapeUtil.hitTest', () => {
+  it('returns true for point inside bbox', () => {
+    const el = makeElement({ type: 'diamond' });
+    expect(diamondShapeUtil.hitTest(el, 60, 45)).toBe(true);
+  });
+
+  it('returns false for point outside bbox', () => {
+    const el = makeElement({ type: 'diamond' });
+    expect(diamondShapeUtil.hitTest(el, 0, 0)).toBe(false);
+  });
+});
+
+describe('lineShapeUtil.hitTest', () => {
+  const lineEl = makeElement({
+    type: 'line',
+    props: {
+      strokeColor: '#000',
+      fillColor: 'none',
+      strokeWidth: 2,
+      strokeStyle: 'solid' as const,
+      opacity: 1,
+      points: [[0, 0], [100, 0]] as [number, number][],
+    },
+  });
+
+  it('returns true for point within 8 units of segment', () => {
+    expect(lineShapeUtil.hitTest(lineEl, 50, 5)).toBe(true); // 5 units above midpoint
+    expect(lineShapeUtil.hitTest(lineEl, 50, -7)).toBe(true); // 7 units below midpoint
+  });
+
+  it('returns false for point more than 8 units from segment', () => {
+    expect(lineShapeUtil.hitTest(lineEl, 50, 10)).toBe(false); // 10 units above
+    expect(lineShapeUtil.hitTest(lineEl, 50, -9)).toBe(false); // 9 units below
+  });
+
+  it('returns true for point on segment endpoint', () => {
+    expect(lineShapeUtil.hitTest(lineEl, 0, 0)).toBe(true);
+    expect(lineShapeUtil.hitTest(lineEl, 100, 0)).toBe(true);
+  });
+
+  it('falls back to AABB when no points prop (no throw)', () => {
+    const el = makeElement({ type: 'line' }); // no points prop
+    expect(() => lineShapeUtil.hitTest(el, 60, 45)).not.toThrow();
+    expect(lineShapeUtil.hitTest(el, 60, 45)).toBe(true); // inside expanded AABB
   });
 });

@@ -35,10 +35,11 @@ export const useCameraStore = create<CameraState & CameraActions>()((set) => ({
       const clampedZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom));
       if (!pivot) return { camera: { ...state.camera, zoom: clampedZoom } };
 
-      // Adjust pan so the pivot point stays fixed in screen space
+      // Keep the world point under the pivot screen-coord fixed after zoom.
+      // Derived from: pivot.x/newZoom + newX == pivot.x/oldZoom + oldX
       const { camera } = state;
-      const newX = pivot.x / clampedZoom - pivot.x / camera.zoom + camera.x;
-      const newY = pivot.y / clampedZoom - pivot.y / camera.zoom + camera.y;
+      const newX = pivot.x / camera.zoom - pivot.x / clampedZoom + camera.x;
+      const newY = pivot.y / camera.zoom - pivot.y / clampedZoom + camera.y;
       return { camera: { x: newX, y: newY, zoom: clampedZoom } };
     }),
 

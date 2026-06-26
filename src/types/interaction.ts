@@ -22,6 +22,13 @@ export type ToolId =
   | 'laser';
 
 export type HandleId = 'nw' | 'ne' | 'sw' | 'se' | 'n' | 's' | 'e' | 'w' | 'rotate';
+export type ResizeHandleId = Exclude<HandleId, 'rotate'>;
+
+export interface ResizeSession {
+  originalBounds: Rect;
+  originalHandle: ResizeHandleId;
+  anchor: Point;
+}
 
 export interface InteractionState {
   tool: ToolId;
@@ -30,7 +37,11 @@ export interface InteractionState {
   dragStart: Point | null;
   draftElement: Element | null;
   marquee: Rect | null;
-  resizeHandle: HandleId | null;
+  resizeHandle: ResizeHandleId | null;
+  resizeSession: ResizeSession | null;
+  isRotating: boolean;
+  editingId: string | null;
   laserTrail: Point[];
+  laserFading: boolean;
   remoteCursors: Map<string, Presence>;
 }
