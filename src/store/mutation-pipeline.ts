@@ -24,6 +24,10 @@ function fireHooks(event: MutationEvent): void {
   _hooks.forEach((h) => h(event));
 }
 
+export function dispatchMutationEvent(event: MutationEvent): void {
+  fireHooks(event);
+}
+
 function nextNonce(): number {
   return Math.floor(Math.random() * 1_000_000_000);
 }
