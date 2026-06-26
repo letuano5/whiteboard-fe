@@ -1,6 +1,6 @@
 import type React from 'react';
 import { useEffect, useRef, useState } from 'react';
-import { useElementsStore, useInteractionStore, useCameraStore } from '../store';
+import { useElementsStore, useInteractionStore, useCameraStore, useHistoryStore } from '../store';
 import { screenToWorld, ZOOM_SENSITIVITY } from '../utils/camera';
 import {
   isShapeTool,
@@ -118,6 +118,31 @@ export default function Whiteboard() {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [tool]);
+
+  // Undo / Redo — active in all tool modes (AC-15: guard text inputs)
+  useEffect(() => {
+    function handleUndoRedo(e: KeyboardEvent) {
+      const target = e.target as HTMLElement;
+      if (
+        target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        target.tagName === 'SELECT' ||
+        target.isContentEditable
+      )
+        return;
+      const isMod = e.ctrlKey || e.metaKey;
+      if (!isMod) return;
+      if (e.key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        useHistoryStore.getState().undo();
+      } else if (e.key === 'z' && e.shiftKey) {
+        e.preventDefault();
+        useHistoryStore.getState().redo();
+      }
+    }
+    window.addEventListener('keydown', handleUndoRedo);
+    return () => window.removeEventListener('keydown', handleUndoRedo);
+  }, []);
 
   // T002/T003: pan trigger helper — checked FIRST in every pointer handler
   function isPanTrigger(e: React.PointerEvent) {

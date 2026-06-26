@@ -5,6 +5,7 @@ import { useElementsStore } from './elements.store';
 export interface MutationEvent {
   type: 'create' | 'patch' | 'delete' | 'update';
   elements: Element[];
+  before: Element[];
 }
 
 type MutationHook = (event: MutationEvent) => void;
@@ -47,7 +48,7 @@ export function createElement(draft: ElementDraft): Element {
   };
 
   useElementsStore.getState().addElement(element);
-  fireHooks({ type: 'create', elements: [element] });
+  fireHooks({ type: 'create', elements: [element], before: [] });
   return element;
 }
 
@@ -69,7 +70,7 @@ export function patchElement(
   };
 
   useElementsStore.getState().updateElement(updated);
-  fireHooks({ type: 'patch', elements: [updated] });
+  fireHooks({ type: 'patch', elements: [updated], before: [existing] });
 }
 
 export function deleteElements(ids: string[]): void {
@@ -77,20 +78,19 @@ export function deleteElements(ids: string[]): void {
   const now = Date.now();
   const idSet = new Set(ids);
 
-  const softDeleted = elements
-    .filter((e) => idSet.has(e.id) && !e.isDeleted)
-    .map((e) => ({
-      ...e,
-      isDeleted: true,
-      version: e.version + 1,
-      versionNonce: nextNonce(),
-      updatedAt: now,
-    }));
+  const originals = elements.filter((e) => idSet.has(e.id) && !e.isDeleted);
+  const softDeleted = originals.map((e) => ({
+    ...e,
+    isDeleted: true,
+    version: e.version + 1,
+    versionNonce: nextNonce(),
+    updatedAt: now,
+  }));
 
   if (softDeleted.length === 0) return;
 
   useElementsStore.getState().updateElements(softDeleted);
-  fireHooks({ type: 'delete', elements: softDeleted });
+  fireHooks({ type: 'delete', elements: softDeleted, before: originals });
 }
 
 export function updateElements(
@@ -102,6 +102,7 @@ export function updateElements(
   const { elements } = useElementsStore.getState();
   const now = Date.now();
 
+  const beforeMap = new Map(elements.map((e) => [e.id, e]));
   const updated = patches.reduce<Element[]>((acc, { id, patch }) => {
     const existing = elements.find((e) => e.id === id);
     if (!existing || existing.isDeleted) return acc;
@@ -118,6 +119,27 @@ export function updateElements(
 
   if (updated.length === 0) return;
 
+  const before = updated.map((el) => beforeMap.get(el.id)!);
   useElementsStore.getState().updateElements(updated);
-  fireHooks({ type: 'update', elements: updated });
+  fireHooks({ type: 'update', elements: updated, before });
+}
+
+export function applySnapshot(elements: Element[]): void {
+  if (elements.length === 0) return;
+  const now = Date.now();
+  const storeElements = useElementsStore.getState().elements;
+  const bumped = elements.map((el) => {
+    const current = storeElements.find((s) => s.id === el.id);
+    // Increment from the current store version so it is always monotonically increasing (AC-14)
+    const baseVersion = current ? current.version : el.version;
+    return {
+      ...el,
+      version: baseVersion + 1,
+      versionNonce: nextNonce(),
+      updatedAt: now,
+    };
+  });
+  // Use the Zustand store setter directly (NOT the pipeline updateElements) to avoid version-doubling
+  useElementsStore.getState().updateElements(bumped);
+  fireHooks({ type: 'update', elements: bumped, before: elements });
 }
