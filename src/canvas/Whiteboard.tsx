@@ -18,6 +18,7 @@ import {
   onRotateHandlePointerDown,
 } from './tools/select-tool';
 import TextEditor, { onCanvasDoubleClick } from './tools/text-editor';
+import { onLaserPointerMove, onLaserPointerLeave } from './tools/laser-tool';
 import SvgLayer from './layers/SvgLayer';
 import Toolbar from '../components/toolbar/Toolbar';
 import DetailPanel from '../components/detail-panel/DetailPanel';
@@ -160,6 +161,13 @@ export default function Whiteboard() {
       return;
     }
 
+    if (tool === 'laser') {
+      e.currentTarget.setPointerCapture(e.pointerId);
+      const local = svgLocalPoint(e);
+      onLaserPointerMove(screenToWorld(local.x, local.y, camera));
+      return;
+    }
+
     if (!(e.target instanceof SVGElement)) return;
     if (tool === 'select') {
       const local = svgLocalPoint(e);
@@ -186,6 +194,12 @@ export default function Whiteboard() {
       return;
     }
 
+    if (tool === 'laser') {
+      const local = svgLocalPoint(e);
+      onLaserPointerMove(screenToWorld(local.x, local.y, camera));
+      return;
+    }
+
     if (tool === 'select') {
       const local = svgLocalPoint(e);
       onSelectPointerMove(screenToWorld(local.x, local.y, camera));
@@ -204,6 +218,10 @@ export default function Whiteboard() {
       return;
     }
 
+    if (tool === 'laser') {
+      return;
+    }
+
     if (tool === 'select') {
       const local = svgLocalPoint(e);
       onSelectPointerUp(screenToWorld(local.x, local.y, camera));
@@ -219,6 +237,10 @@ export default function Whiteboard() {
     if (panStart.current) {
       panStart.current = null;
       setIsPanning(false);
+      return;
+    }
+    if (tool === 'laser') {
+      onLaserPointerLeave();
       return;
     }
     if (!isShapeTool(tool)) return;
@@ -252,7 +274,13 @@ export default function Whiteboard() {
   }
 
   // T023: cursor style based on pan/zoom mode
-  const cursor = isPanning ? 'grabbing' : tool === 'hand' || spaceDown ? 'grab' : undefined;
+  const cursor = isPanning
+    ? 'grabbing'
+    : tool === 'hand' || spaceDown
+      ? 'grab'
+      : tool === 'laser'
+        ? 'crosshair'
+        : undefined;
 
   return (
     <div

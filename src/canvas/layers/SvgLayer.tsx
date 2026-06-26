@@ -118,6 +118,8 @@ export default function SvgLayer({
   onHandlePointerDown,
 }: SvgLayerProps) {
   const selectedIds = useInteractionStore((s) => s.selectedIds);
+  const laserTrail = useInteractionStore((s) => s.laserTrail);
+  const laserFading = useInteractionStore((s) => s.laserFading);
   const selectedElement =
     selectedIds.length > 0 ? elements.find((el) => el.id === selectedIds[0] && !el.isDeleted) : undefined;
   const overlayElement =
@@ -153,6 +155,21 @@ export default function SvgLayer({
         })()}
         {overlayElement && (
           <SelectionOverlay element={overlayElement} onHandlePointerDown={onHandlePointerDown} />
+        )}
+        {laserTrail.length >= 2 && (
+          <polyline
+            points={laserTrail.map((p) => `${p.x},${p.y}`).join(' ')}
+            fill="none"
+            stroke="#ef4444"
+            strokeWidth={3}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            opacity={laserFading ? 0 : 1}
+            style={{
+              transition: laserFading ? 'opacity 0.5s ease-out' : 'none',
+              pointerEvents: 'none',
+            }}
+          />
         )}
       </g>
     </svg>

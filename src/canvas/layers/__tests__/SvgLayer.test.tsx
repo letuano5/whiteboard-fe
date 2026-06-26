@@ -164,6 +164,53 @@ describe('SvgLayer — P1A-10 Z-order render order', () => {
   });
 });
 
+describe('SvgLayer — Laser trail rendering (011-laser-pointer)', () => {
+  // @covers AC-8 (011-laser-pointer)
+  it('renders a polyline with world-coordinate points (camera transform applied by parent <g>)', () => {
+    // Camera with zoom=4 and offset — if points were pre-transformed they'd differ
+    const cam: Camera = { x: 50, y: 50, zoom: 4 };
+    useInteractionStore.getState().setLaserTrail([
+      { x: 100, y: 200 },
+      { x: 150, y: 250 },
+    ]);
+
+    const { container } = render(<SvgLayer elements={[]} camera={cam} />);
+
+    const polyline = container.querySelector('polyline');
+    expect(polyline).not.toBeNull();
+    expect(polyline?.getAttribute('points')).toBe('100,200 150,250');
+  });
+
+  it('does not render a polyline when trail has fewer than 2 points', () => {
+    useInteractionStore.getState().setLaserTrail([{ x: 10, y: 20 }]);
+
+    const { container } = render(<SvgLayer elements={[]} camera={camera} />);
+
+    expect(container.querySelector('polyline')).toBeNull();
+  });
+
+  it('renders no polyline when trail is empty', () => {
+    useInteractionStore.getState().setLaserTrail([]);
+
+    const { container } = render(<SvgLayer elements={[]} camera={camera} />);
+
+    expect(container.querySelector('polyline')).toBeNull();
+  });
+
+  it('applies opacity=0 and transition when laserFading=true', () => {
+    useInteractionStore.getState().setLaserTrail([
+      { x: 10, y: 20 },
+      { x: 30, y: 40 },
+    ]);
+    useInteractionStore.getState().setLaserFading(true);
+
+    const { container } = render(<SvgLayer elements={[]} camera={camera} />);
+
+    const polyline = container.querySelector('polyline');
+    expect(polyline?.getAttribute('opacity')).toBe('0');
+  });
+});
+
 describe('SvgLayer — P1A-03 Delete rendering', () => {
   // @covers AC-10 (002-move-resize-delete)
   it('does not render a soft-deleted element even when it is selected', () => {

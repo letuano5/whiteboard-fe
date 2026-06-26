@@ -20,6 +20,7 @@ const DEFAULT_STATE: InteractionState = {
   isRotating: false,
   editingId: null,
   laserTrail: [],
+  laserFading: false,
   remoteCursors: new Map(),
 };
 
@@ -35,6 +36,7 @@ interface InteractionActions {
   setIsRotating: (v: boolean) => void;
   setEditingId: (id: string | null) => void;
   setLaserTrail: (trail: Point[]) => void;
+  setLaserFading: (v: boolean) => void;
   setRemoteCursors: (cursors: Map<string, Presence>) => void;
   reset: () => void;
 }
@@ -53,6 +55,7 @@ export const useInteractionStore = create<InteractionState & InteractionActions>
   setIsRotating: (isRotating) => set({ isRotating }),
   setEditingId: (editingId) => set({ editingId }),
   setLaserTrail: (laserTrail) => set({ laserTrail }),
+  setLaserFading: (laserFading) => set({ laserFading }),
   setRemoteCursors: (remoteCursors) => set({ remoteCursors }),
   reset: () => set({ ...DEFAULT_STATE, remoteCursors: new Map() }),
 }));

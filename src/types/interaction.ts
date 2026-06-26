@@ -42,5 +42,6 @@ export interface InteractionState {
   isRotating: boolean;
   editingId: string | null;
   laserTrail: Point[];
+  laserFading: boolean;
   remoteCursors: Map<string, Presence>;
 }

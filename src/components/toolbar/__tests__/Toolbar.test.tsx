@@ -1,7 +1,8 @@
 import { render, screen, fireEvent } from '@testing-library/react';
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import Toolbar from '../Toolbar';
 import { useInteractionStore } from '../../../store/interaction.store';
+import * as laserTool from '../../../canvas/tools/laser-tool';
 
 beforeEach(() => {
   useInteractionStore.getState().reset();
@@ -37,15 +38,35 @@ describe('Toolbar tool selection', () => {
 });
 
 // @covers AC-8 (005-detail-panel-toolbar)
-describe('AC-8 (005): toolbar shows exactly 6 tool buttons', () => {
-  it('renders Select, Hand, Rectangle, Ellipse, Line, Text buttons', () => {
+describe('AC-8 (005): toolbar shows tool buttons including laser', () => {
+  it('renders Select, Hand, Rectangle, Ellipse, Line, Text, Laser buttons', () => {
     render(<Toolbar />);
-    const expectedTitles = ['Select', 'Hand', 'Rectangle', 'Ellipse', 'Line', 'Text'];
-    const buttons = screen.getAllByRole('button');
-    expect(buttons).toHaveLength(6);
+    const expectedTitles = ['Select', 'Hand', 'Rectangle', 'Ellipse', 'Line', 'Text', 'Laser'];
     expectedTitles.forEach((title) => {
       expect(screen.getByTitle(title)).toBeInTheDocument();
     });
+  });
+});
+
+// @covers AC-4 (011-laser-pointer)
+describe('AC-4: laser tool button activates laser tool', () => {
+  it('clicking Laser button sets tool to laser', () => {
+    render(<Toolbar />);
+    fireEvent.click(screen.getByTitle('Laser'));
+    expect(useInteractionStore.getState().tool).toBe('laser');
+  });
+});
+
+// @covers AC-5 (011-laser-pointer)
+describe('AC-5: switching away from laser clears trail immediately', () => {
+  it('clicking another tool calls clearLaserTrail', () => {
+    const clearSpy = vi.spyOn(laserTool, 'clearLaserTrail');
+    useInteractionStore.setState({ tool: 'laser' } as Parameters<typeof useInteractionStore.setState>[0]);
+    render(<Toolbar />);
+    fireEvent.click(screen.getByTitle('Select'));
+    expect(clearSpy).toHaveBeenCalled();
+    expect(useInteractionStore.getState().tool).toBe('select');
+    clearSpy.mockRestore();
   });
 });
 

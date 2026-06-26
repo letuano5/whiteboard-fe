@@ -5,8 +5,10 @@ import {
   Circle,
   Minus,
   Type,
+  Zap,
 } from 'lucide-react';
 import { useInteractionStore } from '../../store/interaction.store';
+import { clearLaserTrail } from '../../canvas/tools/laser-tool';
 import type { ToolId } from '../../types/interaction';
 
 interface ToolButton {
@@ -22,6 +24,7 @@ const TOOLS: ToolButton[] = [
   { id: 'ellipse', label: 'Ellipse', Icon: Circle },
   { id: 'line', label: 'Line', Icon: Minus },
   { id: 'text', label: 'Text', Icon: Type },
+  { id: 'laser', label: 'Laser', Icon: Zap },
 ];
 
 export default function Toolbar() {
@@ -35,6 +38,7 @@ export default function Toolbar() {
   const setResizeSession = useInteractionStore((s) => s.setResizeSession);
 
   function chooseTool(id: ToolId) {
+    clearLaserTrail();
     setTool(id);
     setSelectedIds([]);
     setDraggingId(null);
