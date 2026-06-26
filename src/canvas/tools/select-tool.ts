@@ -47,16 +47,8 @@ function affectsBottom(handle: ResizeHandleId): boolean {
 
 function getResizeAnchor(el: Element, handle: ResizeHandleId): Point {
   return {
-    x: affectsLeft(handle)
-      ? el.x + el.width
-      : affectsRight(handle)
-        ? el.x
-        : el.x + el.width / 2,
-    y: affectsTop(handle)
-      ? el.y + el.height
-      : affectsBottom(handle)
-        ? el.y
-        : el.y + el.height / 2,
+    x: affectsLeft(handle) ? el.x + el.width : affectsRight(handle) ? el.x : el.x + el.width / 2,
+    y: affectsTop(handle) ? el.y + el.height : affectsBottom(handle) ? el.y : el.y + el.height / 2,
   };
 }
 
@@ -80,10 +72,8 @@ export function resizeBoundsFromAnchorAndPointer(
   const { originalBounds, originalHandle, anchor } = session;
   const changesX = affectsLeft(originalHandle) || affectsRight(originalHandle);
   const changesY = affectsTop(originalHandle) || affectsBottom(originalHandle);
-  const pointerIsLeft =
-    pointer.x === anchor.x ? affectsLeft(originalHandle) : pointer.x < anchor.x;
-  const pointerIsTop =
-    pointer.y === anchor.y ? affectsTop(originalHandle) : pointer.y < anchor.y;
+  const pointerIsLeft = pointer.x === anchor.x ? affectsLeft(originalHandle) : pointer.x < anchor.x;
+  const pointerIsTop = pointer.y === anchor.y ? affectsTop(originalHandle) : pointer.y < anchor.y;
   const flippedX =
     changesX &&
     ((affectsLeft(originalHandle) && !pointerIsLeft) ||
@@ -116,6 +106,91 @@ export function resizeBoundsFromAnchorAndPointer(
     flippedY,
     activeHandle: getFlippedHandle(originalHandle, flippedX, flippedY),
   };
+}
+
+function boundsFromAnchorAndSize(
+  anchor: Point,
+  activeHandle: ResizeHandleId,
+  width: number,
+  height: number,
+): Rect {
+  return {
+    x: affectsLeft(activeHandle)
+      ? anchor.x - width
+      : affectsRight(activeHandle)
+        ? anchor.x
+        : anchor.x - width / 2,
+    y: affectsTop(activeHandle)
+      ? anchor.y - height
+      : affectsBottom(activeHandle)
+        ? anchor.y
+        : anchor.y - height / 2,
+    width,
+    height,
+  };
+}
+
+export function computeTextResizeScale(
+  session: ResizeSession,
+  bounds: { width: number; height: number },
+): number {
+  const ratios: number[] = [];
+  if (affectsLeft(session.originalHandle) || affectsRight(session.originalHandle)) {
+    ratios.push(session.originalBounds.width > 0 ? bounds.width / session.originalBounds.width : 1);
+  }
+  if (affectsTop(session.originalHandle) || affectsBottom(session.originalHandle)) {
+    ratios.push(
+      session.originalBounds.height > 0 ? bounds.height / session.originalBounds.height : 1,
+    );
+  }
+  if (ratios.length === 0) return 1;
+
+  const minRatio = Math.min(...ratios);
+  const maxRatio = Math.max(...ratios);
+  const rawScale = minRatio < 1 ? minRatio : maxRatio;
+  const minWidthScale =
+    session.originalBounds.width > 0 ? MIN_RESIZE_SIZE / session.originalBounds.width : 1;
+  const minHeightScale =
+    session.originalBounds.height > 0 ? MIN_RESIZE_SIZE / session.originalBounds.height : 1;
+  return Math.max(rawScale, minWidthScale, minHeightScale);
+}
+
+function fitTextBoundsToFontScale(
+  session: ResizeSession,
+  bounds: Rect,
+  activeHandle: ResizeHandleId,
+): Rect {
+  const scale = computeTextResizeScale(session, bounds);
+  return boundsFromAnchorAndSize(
+    session.anchor,
+    activeHandle,
+    Math.max(MIN_RESIZE_SIZE, session.originalBounds.width * scale),
+    Math.max(MIN_RESIZE_SIZE, session.originalBounds.height * scale),
+  );
+}
+
+function computeResizeProps(
+  el: Element,
+  session: ResizeSession,
+  bounds: { x: number; y: number; width: number; height: number },
+  flippedX: boolean,
+  flippedY: boolean,
+): Element['props'] {
+  const baseProps = resizePointGeometry(el, bounds, flippedX, flippedY);
+  if (el.type !== 'text') return baseProps;
+  return {
+    ...baseProps,
+    fontSize: computeTextResizeFontSize(el, session, bounds),
+  };
+}
+
+export function computeTextResizeFontSize(
+  el: Element,
+  session: ResizeSession,
+  bounds: { width: number; height: number },
+): number {
+  const originalFontSize = el.props.fontSize ?? 16;
+  return Math.max(1, originalFontSize * computeTextResizeScale(session, bounds));
 }
 
 function translatePointGeometry(el: Element, dx: number, dy: number): Element['props'] {
@@ -166,13 +241,8 @@ function resizePointGeometry(
 export function onSelectPointerDown(worldPt: Point): void {
   const elements = useElementsStore.getState().elements;
   const visible = elements.filter((el) => !el.isDeleted).sort((a, b) => b.zIndex - a.zIndex);
-  const {
-    setSelectedIds,
-    setDraggingId,
-    setDragStart,
-    setResizeHandle,
-    setResizeSession,
-  } = useInteractionStore.getState();
+  const { setSelectedIds, setDraggingId, setDragStart, setResizeHandle, setResizeSession } =
+    useInteractionStore.getState();
 
   for (const el of visible) {
     const util = getShapeUtil(el.type);
@@ -196,13 +266,8 @@ export function onSelectPointerDown(worldPt: Point): void {
 }
 
 export function onSelectHandlePointerDown(handle: ResizeHandleId, worldPt: Point): void {
-  const {
-    selectedIds,
-    setDraggingId,
-    setDragStart,
-    setResizeHandle,
-    setResizeSession,
-  } = useInteractionStore.getState();
+  const { selectedIds, setDraggingId, setDragStart, setResizeHandle, setResizeSession } =
+    useInteractionStore.getState();
   if (selectedIds.length === 0) return;
   const selected = useElementsStore
     .getState()
@@ -240,14 +305,8 @@ export function computeResize(
 }
 
 export function onSelectPointerMove(worldPt: Point): void {
-  const {
-    draggingId,
-    dragStart,
-    resizeSession,
-    isRotating,
-    setDraftElement,
-    setResizeHandle,
-  } = useInteractionStore.getState();
+  const { draggingId, dragStart, resizeSession, isRotating, setDraftElement, setResizeHandle } =
+    useInteractionStore.getState();
   if (!draggingId || !dragStart) return;
 
   const elements = useElementsStore.getState().elements;
@@ -278,8 +337,18 @@ export function onSelectPointerMove(worldPt: Point): void {
       const localPointer = unrotatePoint(worldPt, center0, el.angle);
 
       // 3. Compute new dimensions in local frame.
-      const { x: xl, y: yl, width, height, flippedX, flippedY, activeHandle } =
-        resizeBoundsFromAnchorAndPointer(resizeSession, localPointer);
+      const { flippedX, flippedY, activeHandle, ...rawBounds } = resizeBoundsFromAnchorAndPointer(
+        resizeSession,
+        localPointer,
+      );
+      const {
+        x: xl,
+        y: yl,
+        width,
+        height,
+      } = el.type === 'text'
+        ? fitTextBoundsToFontScale(resizeSession, rawBounds, activeHandle)
+        : rawBounds;
 
       // 4. The session.anchor may be at any corner/edge of the new box.
       //    Compute its fraction within the new box (0=min edge, 1=max edge).
@@ -299,17 +368,22 @@ export function onSelectPointerMove(worldPt: Point): void {
       setDraftElement({
         ...el,
         ...bounds,
-        props: resizePointGeometry(el, bounds, flippedX, flippedY),
+        props: computeResizeProps(el, resizeSession, bounds, flippedX, flippedY),
       });
       setResizeHandle(activeHandle);
     } else {
-      const { x, y, width, height, flippedX, flippedY, activeHandle } =
-        resizeBoundsFromAnchorAndPointer(resizeSession, worldPt);
-      const bounds = { x, y, width, height };
+      const { flippedX, flippedY, activeHandle, ...rawBounds } = resizeBoundsFromAnchorAndPointer(
+        resizeSession,
+        worldPt,
+      );
+      const bounds =
+        el.type === 'text'
+          ? fitTextBoundsToFontScale(resizeSession, rawBounds, activeHandle)
+          : rawBounds;
       setDraftElement({
         ...el,
         ...bounds,
-        props: resizePointGeometry(el, bounds, flippedX, flippedY),
+        props: computeResizeProps(el, resizeSession, bounds, flippedX, flippedY),
       });
       setResizeHandle(activeHandle);
     }
@@ -350,7 +424,9 @@ export function onSelectPointerUp(_worldPt: Point): void {
         y: draftElement.y,
         width: draftElement.width,
         height: draftElement.height,
-        ...(draftElement.props.points ? { props: draftElement.props } : {}),
+        ...(draftElement.props.points || draftElement.type === 'text'
+          ? { props: draftElement.props }
+          : {}),
       });
     } else {
       patchElement(draggingId, {

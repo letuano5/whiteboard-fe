@@ -386,3 +386,28 @@ describe('editingId lifecycle — AC-8', () => {
     expect(useInteractionStore.getState().editingId).toBeNull();
   });
 });
+
+// ─── AC-4b: auto-bbox uses natural content dimensions ────────────────────────
+
+describe('TextEditor — AC-4b (auto-bbox uses content dimensions)', () => {
+  // @covers AC-4
+  it('committed size reflects scrollWidth/scrollHeight regardless of initial element dimensions', () => {
+    const el = makeTextElement({ id: 'text-1', width: 200, height: 40 });
+    useInteractionStore.getState().setEditingId(el.id);
+
+    const { container } = render(<TextEditor element={el} camera={defaultCamera} />);
+    const div = container.querySelector('[contenteditable]') as HTMLElement;
+
+    // Narrow content — narrower than the stored 200px width
+    Object.defineProperty(div, 'scrollWidth', { configurable: true, value: 60 });
+    Object.defineProperty(div, 'scrollHeight', { configurable: true, value: 20 });
+
+    act(() => { fireEvent.blur(div); });
+
+    // patchElement must use the measured content size, not the stored element size
+    expect(mockPatchElement).toHaveBeenCalledWith(
+      'text-1',
+      expect.objectContaining({ width: 60, height: 20 }),
+    );
+  });
+});

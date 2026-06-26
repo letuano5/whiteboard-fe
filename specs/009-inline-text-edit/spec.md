@@ -8,7 +8,7 @@
 
 **Input**: User description: "[P1B-03] Double-click mở ô chỉnh tại chỗ (contenteditable trong layer transform). Blur/Esc commit vào `props.text` (qua `patchElement`); bbox co theo nội dung."
 
-## User Scenarios & Testing *(mandatory)*
+## User Scenarios & Testing _(mandatory)_
 
 ### User Story 1 — Edit Text of an Existing Text Element (Priority: P1)
 
@@ -63,27 +63,30 @@ A user double-clicks on a rectangle, ellipse, or other non-text element. No inli
 - What if the text contains newlines? → Newlines are preserved in `props.text`; bbox reflects multi-line height.
 - What if the canvas is panning when double-click occurs? → Editor does not open (pan gesture takes priority).
 
-## Requirements *(mandatory)*
+## Requirements _(mandatory)_
 
 ### Functional Requirements
 
 - **FR-001**: System MUST open an inline `contenteditable` editor when the user double-clicks a `text`-type element while the select tool is active.
+- **FR-011**: System MUST automatically open the inline editor immediately after a new `text` element is created (via click or drag with the text tool), switching to the select tool and entering editing mode without requiring a separate double-click.
 - **FR-002**: The inline editor MUST be positioned and scaled to match the element's world-coordinate bounding box under the current camera transform (zoom + pan).
 - **FR-003**: System MUST commit the editor's content to `props.text` via `patchElement` when the editor loses focus (blur event).
 - **FR-004**: System MUST commit the editor's content to `props.text` via `patchElement` when the user presses the Escape key while the editor is focused.
 - **FR-005**: After committing, system MUST measure the rendered text dimensions and update the element's `width` and `height` via `patchElement` so the bounding box fits the content (auto-bbox).
 - **FR-006**: System MUST NOT open an inline editor when the user double-clicks any non-text element type.
 - **FR-007**: The inline editor MUST initialize with the current `props.text` content so the user can see and edit existing text.
-- **FR-008**: While the inline editor is open, the element MUST be visually represented as editable (the SVG text rendering may be hidden or overlaid by the editor).
+- **FR-008**: While the inline editor is open, the element MUST be visually represented as editable (the SVG text rendering may be hidden or overlaid by the editor). The selection bounding box and transform handles MUST NOT be shown while the editor is open; they only appear when transforming (move, resize, rotate) or when the element is selected but not being edited.
 - **FR-009**: System MUST track which element is being edited in transient interaction state (`editingId`) — never in committed element state.
 - **FR-010**: The inline editor MUST support multi-line text; the Enter key inserts a newline (natural `contenteditable` behavior).
+- **FR-012**: When the user resizes a text element with any resize handle (corner or edge), `props.fontSize` MUST adapt to the size change. Text resize behaves as uniform scaling: derive a scale from the dragged bbox ratio, update `fontSize = max(1, originalFontSize × scale)`, then adjust both bbox dimensions to the same scale so the bbox always fits the rendered text. Edge handles (top, bottom, left, right) MUST scale the font too; the non-dragged bbox dimension is expanded or shrunk as needed to keep the bbox proportional to the font.
+- **FR-013**: When the user changes `fontSize` via the detail panel, the element's `width` and `height` MUST scale by the same ratio (`newSize / oldSize`) so the bounding box stays proportional to the new font size.
 
 ### Key Entities
 
 - **Text Element**: An `Element` with `type === 'text'`, carrying `props.text`, `props.fontSize`, `props.fontFamily`, `props.textAlign`, `x`, `y`, `width`, `height`, `angle`.
 - **Editing Session**: Transient state (`editingId: string | null`) tracking which element is currently being inline-edited. Lives in `interaction.store.ts`.
 
-## Success Criteria *(mandatory)*
+## Success Criteria _(mandatory)_
 
 ### Measurable Outcomes
 
@@ -92,13 +95,16 @@ A user double-clicks on a rectangle, ellipse, or other non-text element. No inli
 - **SC-003**: The inline editor appears within one animation frame of the double-click (visually immediate, no perceptible delay).
 - **SC-004**: Both blur and Escape correctly commit changes on 100% of attempts (no lost edits).
 - **SC-005**: Double-clicking a non-text element never opens the inline editor.
+- **SC-006**: Resizing a text element to 2× in either width or height results in `fontSize` exactly doubling and the other bbox dimension also doubling so the bbox stays fitted to the text.
+- **SC-007**: Changing `fontSize` from 16 to 32 in the detail panel causes the element's `width` and `height` to also double.
 
 ## Assumptions
 
 - Inline text editing applies only to elements with `type === 'text'` in this phase. Shapes with text labels (rectangle, ellipse, etc.) are out of scope — they do not render text yet.
 - The Enter key in the editor inserts a newline (natural `contenteditable` behavior); a separate "confirm" key is not added.
 - Escape commits (does not discard) the current text, matching the spec's stated behavior.
-- Creating a new text element does NOT automatically open the inline editor; the user must explicitly double-click.
+- Creating a new text element automatically opens the inline editor (FR-011); the initial text ("Text") is pre-selected so the user can type immediately to replace it.
+- **Color field semantics for text elements**: `strokeColor` = font/text color; `fillColor` = text outline/border color; `strokeWidth` = text outline thickness. The detail panel relabels these as "Font color", "Border color", and "Border width" when a text element is selected. The SVG renderer uses `stroke={fillColor}` with `paint-order: stroke fill` to draw the outline behind the glyph fill.
 - The auto-bbox measurement is done via the DOM dimensions of the `contenteditable` div at commit time.
 - The `editingId` field is added to `InteractionState` in `interaction.store.ts` as transient state, never synced or persisted.
 - Text element rotation (`angle !== 0`) is handled: the editor overlay is positioned using a CSS transform that includes both translation and rotation.

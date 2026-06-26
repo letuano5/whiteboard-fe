@@ -13,6 +13,7 @@ export default function DetailPanel() {
   if (!element) return null;
 
   const { props } = element;
+  const isText = element.type === 'text';
 
   function patch(partial: Partial<ElementProps>) {
     patchElement(element!.id, { props: { ...props, ...partial } });
@@ -62,7 +63,7 @@ export default function DetailPanel() {
       </div>
 
       <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-        <span>Stroke color</span>
+        <span>{isText ? 'Font color' : 'Stroke color'}</span>
         <input
           type="color"
           value={props.strokeColor}
@@ -73,10 +74,10 @@ export default function DetailPanel() {
 
       {element.type !== 'line' && (
         <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-          <span>Fill color</span>
+          <span>{isText ? 'Border color' : 'Fill color'}</span>
           <input
             type="color"
-            value={props.fillColor === 'none' ? '#ffffff' : props.fillColor}
+            value={props.fillColor === 'none' || props.fillColor === 'transparent' ? '#ffffff' : props.fillColor}
             onChange={(e) => patch({ fillColor: e.target.value })}
             style={{ width: 36, height: 24, padding: 2, border: 'none', background: 'none', cursor: 'pointer' }}
           />
@@ -84,10 +85,10 @@ export default function DetailPanel() {
       )}
 
       <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-        <span>Stroke width</span>
+        <span>{isText ? 'Border width' : 'Stroke width'}</span>
         <input
           type="number"
-          min={1}
+          min={isText ? 0 : 1}
           value={props.strokeWidth}
           onChange={(e) => patch({ strokeWidth: Number(e.target.value) })}
           style={{ width: 56, background: '#2a2a2a', border: '1px solid #444', borderRadius: 4, padding: '2px 6px', color: 'inherit', fontSize: 13 }}
@@ -118,7 +119,16 @@ export default function DetailPanel() {
               type="number"
               min={1}
               value={props.fontSize ?? 16}
-              onChange={(e) => patch({ fontSize: Number(e.target.value) })}
+              onChange={(e) => {
+                const newFontSize = Math.max(1, Number(e.target.value));
+                const oldFontSize = props.fontSize ?? 16;
+                const scale = oldFontSize > 0 ? newFontSize / oldFontSize : 1;
+                patchElement(element.id, {
+                  props: { ...props, fontSize: newFontSize },
+                  width: Math.max(1, element.width * scale),
+                  height: Math.max(1, element.height * scale),
+                });
+              }}
               style={{ width: 56, background: '#2a2a2a', border: '1px solid #444', borderRadius: 4, padding: '2px 6px', color: 'inherit', fontSize: 13 }}
             />
           </label>

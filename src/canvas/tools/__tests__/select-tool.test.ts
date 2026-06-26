@@ -241,7 +241,10 @@ describe('P1A-03 — Move', () => {
         strokeWidth: 2,
         strokeStyle: 'solid',
         opacity: 1,
-        points: [[10, 20], [110, 70]],
+        points: [
+          [10, 20],
+          [110, 70],
+        ],
       },
     });
     useElementsStore.getState().setElements([el]);
@@ -260,7 +263,10 @@ describe('P1A-03 — Move', () => {
 
     const updated = useElementsStore.getState().elements.find((e) => e.id === el.id)!;
     expect(updated).toMatchObject({ x: 40, y: 40 });
-    expect(updated.props.points).toEqual([[40, 40], [140, 90]]);
+    expect(updated.props.points).toEqual([
+      [40, 40],
+      [140, 90],
+    ]);
   });
 });
 
@@ -439,7 +445,10 @@ describe('P1A-03 — Resize via onSelectPointerMove', () => {
         strokeWidth: 2,
         strokeStyle: 'solid',
         opacity: 1,
-        points: [[110, 20], [10, 70]],
+        points: [
+          [110, 20],
+          [10, 70],
+        ],
       },
     });
     useElementsStore.getState().setElements([el]);
@@ -450,13 +459,19 @@ describe('P1A-03 — Resize via onSelectPointerMove', () => {
 
     const draft = useInteractionStore.getState().draftElement;
     expect(draft).toMatchObject({ x: 10, y: 20, width: 150, height: 80 });
-    expect(draft?.props.points).toEqual([[160, 20], [10, 100]]);
+    expect(draft?.props.points).toEqual([
+      [160, 20],
+      [10, 100],
+    ]);
 
     onSelectPointerUp({ x: 160, y: 100 });
 
     const updated = useElementsStore.getState().elements.find((e) => e.id === el.id)!;
     expect(updated).toMatchObject({ x: 10, y: 20, width: 150, height: 80 });
-    expect(updated.props.points).toEqual([[160, 20], [10, 100]]);
+    expect(updated.props.points).toEqual([
+      [160, 20],
+      [10, 100],
+    ]);
   });
 
   it('can resize a horizontal line into a diagonal line', () => {
@@ -473,7 +488,10 @@ describe('P1A-03 — Resize via onSelectPointerMove', () => {
         strokeWidth: 2,
         strokeStyle: 'solid',
         opacity: 1,
-        points: [[10, 20], [110, 20]],
+        points: [
+          [10, 20],
+          [110, 20],
+        ],
       },
     });
     useElementsStore.getState().setElements([el]);
@@ -503,7 +521,10 @@ describe('P1A-03 — Resize via onSelectPointerMove', () => {
         strokeWidth: 2,
         strokeStyle: 'solid',
         opacity: 1,
-        points: [[10, 20], [110, 70]],
+        points: [
+          [10, 20],
+          [110, 70],
+        ],
       },
     });
     useElementsStore.getState().setElements([el]);
@@ -514,7 +535,10 @@ describe('P1A-03 — Resize via onSelectPointerMove', () => {
 
     const draft = useInteractionStore.getState().draftElement;
     expect(draft).toMatchObject({ x: -20, y: -30, width: 30, height: 50 });
-    expect(draft?.props.points).toEqual([[10, 20], [-20, -30]]);
+    expect(draft?.props.points).toEqual([
+      [10, 20],
+      [-20, -30],
+    ]);
     expect(useInteractionStore.getState().resizeHandle).toBe('nw');
   });
 
@@ -613,5 +637,149 @@ describe('P1A-03 — onSelectHandlePointerDown', () => {
     onSelectHandlePointerDown('se', { x: 110, y: 60 });
 
     expect(useInteractionStore.getState().draggingId).toBeNull();
+  });
+});
+
+// ─── Text resize — font size scaling ─────────────────────────────────────────
+// Element defaults: x=10, y=10, width=100, height=50, fontSize=16
+
+function makeTextEl(id: string, extra: Partial<Element> = {}): Element {
+  return makeElement({
+    id,
+    type: 'text',
+    props: {
+      strokeColor: '#1a1a1a',
+      fillColor: 'transparent',
+      strokeWidth: 1,
+      strokeStyle: 'solid',
+      opacity: 1,
+      text: 'Hello',
+      fontSize: 16,
+      fontFamily: 'sans-serif',
+      textAlign: 'left',
+    },
+    ...extra,
+  });
+}
+
+describe('text resize — fontSize fits within resized bbox', () => {
+  it('scales fontSize and fits bbox when a corner drag increases one dimension', () => {
+    const el = makeTextEl('txt-se');
+    useElementsStore.getState().setElements([el]);
+    useInteractionStore.getState().setSelectedIds([el.id]);
+    onSelectHandlePointerDown('se', { x: 110, y: 60 });
+
+    onSelectPointerMove({ x: 110, y: 110 }); // width 100, height 50 → 100
+
+    const draft = useInteractionStore.getState().draftElement;
+    expect(draft?.width).toBe(200);
+    expect(draft?.height).toBe(100);
+    expect(draft?.props.fontSize).toBe(32);
+  });
+
+  it('doubles fontSize when a corner drag doubles both width and height', () => {
+    const el = makeTextEl('txt-se-proportional');
+    useElementsStore.getState().setElements([el]);
+    useInteractionStore.getState().setSelectedIds([el.id]);
+    onSelectHandlePointerDown('se', { x: 110, y: 60 });
+
+    onSelectPointerMove({ x: 210, y: 110 }); // width 100 → 200, height 50 → 100
+
+    const draft = useInteractionStore.getState().draftElement;
+    expect(draft?.width).toBe(200);
+    expect(draft?.height).toBe(100);
+    expect(draft?.props.fontSize).toBe(32);
+  });
+
+  it('pointerUp commits fitted fontSize to element store', () => {
+    const el = makeTextEl('txt-se-commit');
+    useElementsStore.getState().setElements([el]);
+    useInteractionStore.getState().setSelectedIds([el.id]);
+    onSelectHandlePointerDown('se', { x: 110, y: 60 });
+    onSelectPointerMove({ x: 210, y: 110 });
+
+    onSelectPointerUp({ x: 210, y: 110 });
+
+    const committed = useElementsStore.getState().elements.find((e) => e.id === 'txt-se-commit')!;
+    expect(committed.width).toBe(200);
+    expect(committed.height).toBe(100);
+    expect(committed.props.fontSize).toBe(32);
+  });
+});
+
+describe('text resize — single-axis drags respect the other bbox dimension', () => {
+  it('scales fontSize and expands width when only height grows', () => {
+    const el = makeTextEl('txt-n');
+    useElementsStore.getState().setElements([el]);
+    useInteractionStore.getState().setSelectedIds([el.id]);
+    onSelectHandlePointerDown('n', { x: 60, y: 10 });
+
+    onSelectPointerMove({ x: 60, y: -40 }); // height 50 → 100
+
+    const draft = useInteractionStore.getState().draftElement;
+    expect(draft?.x).toBe(-40);
+    expect(draft?.width).toBe(200);
+    expect(draft?.height).toBe(100);
+    expect(draft?.props.fontSize).toBe(32);
+  });
+
+  it('shrinks fontSize and width when only height shrinks', () => {
+    const el = makeTextEl('txt-n-shrink');
+    useElementsStore.getState().setElements([el]);
+    useInteractionStore.getState().setSelectedIds([el.id]);
+    onSelectHandlePointerDown('n', { x: 60, y: 10 });
+
+    onSelectPointerMove({ x: 60, y: 35 }); // height 50 → 25
+
+    const draft = useInteractionStore.getState().draftElement;
+    expect(draft?.x).toBe(35);
+    expect(draft?.width).toBe(50);
+    expect(draft?.height).toBe(25);
+    expect(draft?.props.fontSize).toBe(8);
+  });
+
+  it('scales fontSize and expands height when only width grows', () => {
+    const el = makeTextEl('txt-e');
+    useElementsStore.getState().setElements([el]);
+    useInteractionStore.getState().setSelectedIds([el.id]);
+    onSelectHandlePointerDown('e', { x: 110, y: 35 });
+
+    onSelectPointerMove({ x: 160, y: 35 }); // width 100 → 150, height 50 unchanged
+
+    const draft = useInteractionStore.getState().draftElement;
+    expect(draft?.width).toBe(150);
+    expect(draft?.height).toBe(75);
+    expect(draft?.y).toBe(-2.5);
+    expect(draft?.props.fontSize).toBe(24);
+  });
+
+  it('shrinks fontSize and height when the bbox becomes too narrow', () => {
+    const el = makeTextEl('txt-e-narrow');
+    useElementsStore.getState().setElements([el]);
+    useInteractionStore.getState().setSelectedIds([el.id]);
+    onSelectHandlePointerDown('e', { x: 110, y: 35 });
+
+    onSelectPointerMove({ x: 60, y: 35 }); // width 100 → 50
+
+    const draft = useInteractionStore.getState().draftElement;
+    expect(draft?.width).toBe(50);
+    expect(draft?.height).toBe(25);
+    expect(draft?.y).toBe(22.5);
+    expect(draft?.props.fontSize).toBe(8);
+  });
+});
+
+describe('text resize — non-text element is unaffected', () => {
+  it('rectangle resize does not gain a fontSize prop', () => {
+    const el = makeElement({ id: 'rect-no-font', type: 'rectangle' });
+    useElementsStore.getState().setElements([el]);
+    useInteractionStore.getState().setSelectedIds([el.id]);
+    onSelectHandlePointerDown('se', { x: 110, y: 60 });
+
+    onSelectPointerMove({ x: 110, y: 110 });
+
+    const draft = useInteractionStore.getState().draftElement;
+    expect(draft?.height).toBe(100);
+    expect(draft?.props.fontSize).toBeUndefined();
   });
 });

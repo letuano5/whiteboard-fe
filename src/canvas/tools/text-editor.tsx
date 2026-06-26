@@ -46,9 +46,10 @@ export default function TextEditor({ element, camera }: TextEditorProps) {
   function commit() {
     if (committed.current || !divRef.current) return;
     committed.current = true;
-    const text = divRef.current.innerText;
-    const w = divRef.current.scrollWidth / zoom;
-    const h = divRef.current.scrollHeight / zoom;
+    const div = divRef.current;
+    const text = div.innerText;
+    const w = div.scrollWidth / zoom;
+    const h = div.scrollHeight / zoom;
     patchElement(element.id, {
       props: { ...element.props, text },
       width: Math.max(w, 1),
@@ -91,8 +92,6 @@ export default function TextEditor({ element, camera }: TextEditorProps) {
         position: 'absolute',
         left: `${screenLeft}px`,
         top: `${screenTop}px`,
-        minWidth: `${screenW}px`,
-        minHeight: `${screenH}px`,
         fontSize: `${fontSize}px`,
         fontFamily: element.props.fontFamily ?? 'sans-serif',
         color: element.props.strokeColor,
@@ -100,11 +99,10 @@ export default function TextEditor({ element, camera }: TextEditorProps) {
         textAlign: element.props.textAlign ?? 'left',
         transformOrigin: `${screenW / 2}px ${screenH / 2}px`,
         transform: `rotate(${angleDeg}deg)`,
-        whiteSpace: 'pre-wrap',
-        wordBreak: 'break-word',
+        whiteSpace: 'pre',
         outline: 'none',
         background: 'transparent',
-        border: '1px solid #3b82f6',
+        border: 'none',
         padding: '0',
         margin: '0',
         lineHeight: '1.2',

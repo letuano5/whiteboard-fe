@@ -22,7 +22,7 @@ const DEFAULT_PROPS: ElementProps = {
 const TEXT_EXTRA: Partial<ElementProps> = {
   strokeColor: '#1a1a1a',
   fillColor: 'transparent',
-  strokeWidth: 0,
+  strokeWidth: 1,
   text: 'Text',
   fontSize: 16,
   fontFamily: 'sans-serif',
@@ -116,7 +116,7 @@ export function onShapePointerUp(
   worldPt: Point,
   createdBy: string = '',
 ): void {
-  const { dragStart, setDragStart, setDraftElement, setTool } =
+  const { dragStart, setDragStart, setDraftElement, setTool, setEditingId, setSelectedIds } =
     useInteractionStore.getState();
 
   if (dragStart && isValidSize(type, dragStart, worldPt)) {
@@ -129,8 +129,12 @@ export function onShapePointerUp(
       locked: false,
       createdBy,
     };
-    createElement(draft);
+    const el = createElement(draft);
     setTool('select');
+    if (type === 'text') {
+      setSelectedIds([el.id]);
+      setEditingId(el.id);
+    }
   } else if (dragStart && type === 'text') {
     // Click-to-create text: use a default bounding box when no meaningful drag occurred
     const draft: ElementDraft = {
@@ -146,8 +150,10 @@ export function onShapePointerUp(
       locked: false,
       createdBy,
     };
-    createElement(draft);
+    const el = createElement(draft);
     setTool('select');
+    setSelectedIds([el.id]);
+    setEditingId(el.id);
   }
 
   setDragStart(null);

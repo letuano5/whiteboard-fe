@@ -148,7 +148,7 @@ describe('lineShapeUtil', () => {
 });
 
 describe('textShapeUtil', () => {
-  it('renders a <text> element', () => {
+  it('renders a <text> element with a tspan child containing the text', () => {
     const el = makeElement({
       type: 'text',
       props: {
@@ -162,15 +162,45 @@ describe('textShapeUtil', () => {
     });
     const jsx = textShapeUtil.render(el);
     const p = jsx.props as AnyProps;
+    const children = p['children'] as Array<{ type: string; props: AnyProps }>;
     expect(jsx.type).toBe('text');
-    expect(p['children']).toBe('Hello');
+    expect(Array.isArray(children)).toBe(true);
+    expect(children).toHaveLength(1);
+    expect(children[0].type).toBe('tspan');
+    expect(children[0].props['children']).toBe('Hello');
   });
 
-  it('renders empty string when text prop is missing', () => {
+  it('renders empty string when text prop is missing — single tspan with empty content', () => {
     const el = makeElement({ type: 'text' });
     const jsx = textShapeUtil.render(el);
     const p = jsx.props as AnyProps;
-    expect(p['children']).toBe('');
+    const children = p['children'] as Array<{ type: string; props: AnyProps }>;
+    expect(children).toHaveLength(1);
+    expect(children[0].type).toBe('tspan');
+    expect(children[0].props['children']).toBe('');
+  });
+
+  it('renders multi-line text as multiple tspan elements with dy offsets', () => {
+    const el = makeElement({
+      type: 'text',
+      props: {
+        strokeColor: '#333',
+        fillColor: 'none',
+        strokeWidth: 1,
+        strokeStyle: 'solid',
+        opacity: 1,
+        text: 'Hello\nWorld',
+        fontSize: 16,
+      },
+    });
+    const jsx = textShapeUtil.render(el);
+    const p = jsx.props as AnyProps;
+    const children = p['children'] as Array<{ type: string; props: AnyProps }>;
+    expect(children).toHaveLength(2);
+    expect(children[0].props['children']).toBe('Hello');
+    expect(children[0].props['dy']).toBe(0);
+    expect(children[1].props['children']).toBe('World');
+    expect(children[1].props['dy']).toBeCloseTo(16 * 1.2); // fontSize * lineHeight ratio
   });
 
   it('getBounds returns element bounds', () => {

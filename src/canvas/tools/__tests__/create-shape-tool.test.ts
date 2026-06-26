@@ -137,6 +137,70 @@ describe('onShapePointerUp — text click-to-create', () => {
   });
 });
 
+// @covers FR-011 — auto-enter edit mode when text is created
+describe('onShapePointerUp — text auto-enters edit mode', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    useInteractionStore.getState().reset();
+  });
+
+  it('sets editingId to the new element id after click-to-create', () => {
+    vi.spyOn(pipeline, 'createElement').mockReturnValue(
+      { id: 'new-text-1' } as ReturnType<typeof pipeline.createElement>,
+    );
+    useInteractionStore.getState().setDragStart({ x: 50, y: 50 });
+
+    onShapePointerUp('text', { x: 50, y: 50 }); // click, no drag
+
+    expect(useInteractionStore.getState().editingId).toBe('new-text-1');
+  });
+
+  it('sets selectedIds to [new element id] after click-to-create', () => {
+    vi.spyOn(pipeline, 'createElement').mockReturnValue(
+      { id: 'new-text-1' } as ReturnType<typeof pipeline.createElement>,
+    );
+    useInteractionStore.getState().setDragStart({ x: 50, y: 50 });
+
+    onShapePointerUp('text', { x: 50, y: 50 });
+
+    expect(useInteractionStore.getState().selectedIds).toEqual(['new-text-1']);
+  });
+
+  it('sets editingId to the new element id after drag-to-create', () => {
+    vi.spyOn(pipeline, 'createElement').mockReturnValue(
+      { id: 'new-text-2' } as ReturnType<typeof pipeline.createElement>,
+    );
+    useInteractionStore.getState().setDragStart({ x: 0, y: 0 });
+
+    onShapePointerUp('text', { x: 200, y: 60 }); // large drag
+
+    expect(useInteractionStore.getState().editingId).toBe('new-text-2');
+  });
+
+  it('does NOT set editingId for non-text shapes', () => {
+    vi.spyOn(pipeline, 'createElement').mockReturnValue(
+      { id: 'rect-1' } as ReturnType<typeof pipeline.createElement>,
+    );
+    useInteractionStore.getState().setDragStart({ x: 0, y: 0 });
+
+    onShapePointerUp('rectangle', { x: 100, y: 100 });
+
+    expect(useInteractionStore.getState().editingId).toBeNull();
+  });
+
+  it('switches tool to select after text creation', () => {
+    vi.spyOn(pipeline, 'createElement').mockReturnValue(
+      { id: 'new-text-3' } as ReturnType<typeof pipeline.createElement>,
+    );
+    useInteractionStore.getState().setDragStart({ x: 50, y: 50 });
+    useInteractionStore.getState().setTool('text');
+
+    onShapePointerUp('text', { x: 50, y: 50 });
+
+    expect(useInteractionStore.getState().tool).toBe('select');
+  });
+});
+
 describe('isValidSize', () => {
   it('returns true when rectangle is large enough', () => {
     expect(isValidSize('rectangle', pt(0, 0), pt(10, 10))).toBe(true);

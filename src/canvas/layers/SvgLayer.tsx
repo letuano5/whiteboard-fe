@@ -7,10 +7,7 @@ const ROTATE_HANDLE_OFFSET = 24;
 
 interface SelectionOverlayProps {
   element: Element;
-  onHandlePointerDown?: (
-    handle: HandleId,
-    e: React.PointerEvent<SVGCircleElement>,
-  ) => void;
+  onHandlePointerDown?: (handle: HandleId, e: React.PointerEvent<SVGCircleElement>) => void;
 }
 
 function SelectionOverlay({ element, onHandlePointerDown }: SelectionOverlayProps) {
@@ -53,22 +50,16 @@ function SelectionOverlay({ element, onHandlePointerDown }: SelectionOverlayProp
           strokeWidth={1.5}
           style={{ cursor: 'pointer' }}
           onPointerDown={(e) => {
+            e.preventDefault();
             e.stopPropagation();
             const svgEl = e.currentTarget.closest('svg') as SVGSVGElement | null;
-            svgEl?.setPointerCapture(e.pointerId);
+            svgEl?.setPointerCapture?.(e.pointerId);
             onHandlePointerDown?.(id, e);
           }}
         />
       ))}
       {/* Rotate handle */}
-      <line
-        x1={cx}
-        y1={y}
-        x2={cx}
-        y2={y - ROTATE_HANDLE_OFFSET}
-        stroke="#3b82f6"
-        strokeWidth={1}
-      />
+      <line x1={cx} y1={y} x2={cx} y2={y - ROTATE_HANDLE_OFFSET} stroke="#3b82f6" strokeWidth={1} />
       <circle
         data-handle="rotate"
         cx={cx}
@@ -79,9 +70,10 @@ function SelectionOverlay({ element, onHandlePointerDown }: SelectionOverlayProp
         strokeWidth={1.5}
         style={{ cursor: 'crosshair' }}
         onPointerDown={(e) => {
+          e.preventDefault();
           e.stopPropagation();
           const svgEl = e.currentTarget.closest('svg') as SVGSVGElement | null;
-          svgEl?.setPointerCapture(e.pointerId);
+          svgEl?.setPointerCapture?.(e.pointerId);
           onHandlePointerDown?.('rotate', e);
         }}
       />
@@ -99,10 +91,7 @@ interface SvgLayerProps {
   onPointerUp?: (e: React.PointerEvent<SVGSVGElement>) => void;
   onPointerLeave?: (e: React.PointerEvent<SVGSVGElement>) => void;
   onDoubleClick?: (e: React.MouseEvent<SVGSVGElement>) => void;
-  onHandlePointerDown?: (
-    handle: HandleId,
-    e: React.PointerEvent<SVGCircleElement>,
-  ) => void;
+  onHandlePointerDown?: (handle: HandleId, e: React.PointerEvent<SVGCircleElement>) => void;
 }
 
 export default function SvgLayer({
@@ -121,7 +110,9 @@ export default function SvgLayer({
   const laserTrail = useInteractionStore((s) => s.laserTrail);
   const laserFading = useInteractionStore((s) => s.laserFading);
   const selectedElement =
-    selectedIds.length > 0 ? elements.find((el) => el.id === selectedIds[0] && !el.isDeleted) : undefined;
+    selectedIds.length > 0
+      ? elements.find((el) => el.id === selectedIds[0] && !el.isDeleted)
+      : undefined;
   const overlayElement =
     selectedElement && draftElement?.id === selectedElement.id ? draftElement : selectedElement;
   const isEditingExistingElement = elements.some((el) => el.id === draftElement?.id);
@@ -131,7 +122,15 @@ export default function SvgLayer({
 
   return (
     <svg
-      style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', overflow: 'hidden' }}
+      style={{
+        position: 'absolute',
+        inset: 0,
+        width: '100%',
+        height: '100%',
+        overflow: 'hidden',
+        userSelect: 'none',
+        WebkitUserSelect: 'none',
+      }}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
@@ -148,12 +147,13 @@ export default function SvgLayer({
             </g>
           );
         })}
-        {draftElement && (() => {
-          const util = getShapeUtil(draftElement.type);
-          if (!util) return null;
-          return <g opacity={isEditingExistingElement ? 1 : 0.6}>{util.render(draftElement)}</g>;
-        })()}
-        {overlayElement && (
+        {draftElement &&
+          (() => {
+            const util = getShapeUtil(draftElement.type);
+            if (!util) return null;
+            return <g opacity={isEditingExistingElement ? 1 : 0.6}>{util.render(draftElement)}</g>;
+          })()}
+        {overlayElement && !editingId && (
           <SelectionOverlay element={overlayElement} onHandlePointerDown={onHandlePointerDown} />
         )}
         {laserTrail.length >= 2 && (

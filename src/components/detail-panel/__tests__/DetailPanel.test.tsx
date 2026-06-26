@@ -229,7 +229,9 @@ describe('AC-10: text controls hidden for non-text shapes', () => {
 
 // @covers AC-11
 describe('AC-11: fontSize change updates text element', () => {
-  it('calls patchElement with new fontSize as number', () => {
+  // makeElement defaults: width=100, height=50; TEXT_PROPS.fontSize=16
+  // scale = 32/16 = 2 → new width=200, new height=100
+  it('calls patchElement with new fontSize and proportionally scaled bbox', () => {
     const el = makeElement({ id: 'el-1', type: 'text', props: TEXT_PROPS });
     useElementsStore.setState({ elements: [el] });
     useInteractionStore.getState().setSelectedIds(['el-1']);
@@ -237,6 +239,8 @@ describe('AC-11: fontSize change updates text element', () => {
     fireEvent.change(screen.getByLabelText(/font size/i), { target: { value: '32' } });
     expect(patchSpy).toHaveBeenCalledWith('el-1', {
       props: { ...TEXT_PROPS, fontSize: 32 },
+      width: 200,   // 100 * (32/16)
+      height: 100,  // 50 * (32/16)
     });
   });
 });
@@ -324,5 +328,65 @@ describe('AC-7 (005): panel pointerDown does not deselect shape', () => {
     const panelRoot = container.firstChild as HTMLElement;
     fireEvent.pointerDown(panelRoot);
     expect(useInteractionStore.getState().selectedIds).toEqual(['el-1']);
+  });
+});
+
+// ─── Text — fontSize change scales bbox proportionally ───────────────────────
+
+describe('text: fontSize change scales bbox proportionally', () => {
+  function makeTextEl(overrides: Partial<Element> = {}): Element {
+    return makeElement({
+      type: 'text',
+      width: 200,
+      height: 40,
+      props: {
+        strokeColor: '#000000',
+        fillColor: 'transparent',
+        strokeWidth: 1,
+        strokeStyle: 'solid',
+        opacity: 1,
+        fontSize: 16,
+        fontFamily: 'sans-serif',
+        textAlign: 'left',
+        text: 'Hello',
+      },
+      ...overrides,
+    });
+  }
+
+  it('doubling fontSize calls patchElement with doubled width and height', () => {
+    const el = makeTextEl({ id: 'txt-1' });
+    useElementsStore.setState({ elements: [el] });
+    useInteractionStore.getState().setSelectedIds(['txt-1']);
+    render(<DetailPanel />);
+
+    fireEvent.change(screen.getByLabelText(/font size/i), { target: { value: '32' } });
+
+    expect(patchSpy).toHaveBeenCalledWith(
+      'txt-1',
+      expect.objectContaining({
+        props: expect.objectContaining({ fontSize: 32 }),
+        width: 400,   // 200 * (32/16)
+        height: 80,   // 40 * (32/16)
+      }),
+    );
+  });
+
+  it('halving fontSize calls patchElement with halved width and height', () => {
+    const el = makeTextEl({ id: 'txt-2' });
+    useElementsStore.setState({ elements: [el] });
+    useInteractionStore.getState().setSelectedIds(['txt-2']);
+    render(<DetailPanel />);
+
+    fireEvent.change(screen.getByLabelText(/font size/i), { target: { value: '8' } });
+
+    expect(patchSpy).toHaveBeenCalledWith(
+      'txt-2',
+      expect.objectContaining({
+        props: expect.objectContaining({ fontSize: 8 }),
+        width: 100,   // 200 * (8/16)
+        height: 20,   // 40 * (8/16)
+      }),
+    );
   });
 });

@@ -1,5 +1,5 @@
-import { render } from '@testing-library/react';
-import { describe, it, expect, beforeEach } from 'vitest';
+import { fireEvent, render } from '@testing-library/react';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import SvgLayer from '../SvgLayer';
 import { useInteractionStore } from '../../../store/interaction.store';
 import type { Camera, Element } from '../../../types/shared';
@@ -69,15 +69,40 @@ describe('SvgLayer — SelectionOverlay', () => {
     expect(circles.length).toBe(0);
   });
 
+  it('prevents native text selection while interacting with the SVG layer', () => {
+    const el = makeElement({ id: 'el-1' });
+
+    const { container } = render(<SvgLayer elements={[el]} camera={camera} />);
+
+    const svg = container.querySelector('svg');
+    expect(svg).toHaveStyle({ userSelect: 'none' });
+  });
+
+  it('prevents default browser selection when a resize handle is pressed', () => {
+    const el = makeElement({ id: 'el-1' });
+    const onHandlePointerDown = vi.fn((_, e: React.PointerEvent<SVGCircleElement>) => {
+      expect(e.isDefaultPrevented()).toBe(true);
+    });
+    useInteractionStore.getState().setSelectedIds([el.id]);
+
+    const { container } = render(
+      <SvgLayer elements={[el]} camera={camera} onHandlePointerDown={onHandlePointerDown} />,
+    );
+
+    const handle = container.querySelector('circle[data-handle="se"]');
+    expect(handle).not.toBeNull();
+    fireEvent.pointerDown(handle!);
+
+    expect(onHandlePointerDown).toHaveBeenCalledWith('se', expect.anything());
+  });
+
   // @covers AC-19 (002-move-resize-delete)
   it('keeps the selection overlay attached to draft bounds during resize', () => {
     const el = makeElement({ id: 'el-1' });
     const draft = { ...el, x: -20, y: -30, width: 30, height: 40 };
     useInteractionStore.getState().setSelectedIds([el.id]);
 
-    const { container } = render(
-      <SvgLayer elements={[el]} camera={camera} draftElement={draft} />,
-    );
+    const { container } = render(<SvgLayer elements={[el]} camera={camera} draftElement={draft} />);
 
     const overlay = container.querySelector('rect[stroke="#3b82f6"]');
     const activeCorner = container.querySelector('circle[data-handle="nw"]');
@@ -94,9 +119,7 @@ describe('SvgLayer — SelectionOverlay', () => {
     const draft = { ...el, x: 80, y: 60 };
     useInteractionStore.getState().setSelectedIds([el.id]);
 
-    const { container } = render(
-      <SvgLayer elements={[el]} camera={camera} draftElement={draft} />,
-    );
+    const { container } = render(<SvgLayer elements={[el]} camera={camera} draftElement={draft} />);
 
     const shapeRects = Array.from(container.querySelectorAll('rect')).filter(
       (rect) => rect.getAttribute('stroke') !== '#3b82f6',
@@ -111,18 +134,15 @@ describe('SvgLayer — SelectionOverlay', () => {
     const el = makeElement({ id: 'el-1' });
     const draft = makeElement({ id: '__draft__', x: 200, y: 150 });
 
-    const { container } = render(
-      <SvgLayer elements={[el]} camera={camera} draftElement={draft} />,
-    );
+    const { container } = render(<SvgLayer elements={[el]} camera={camera} draftElement={draft} />);
 
     const shapeRects = Array.from(container.querySelectorAll('rect')).filter(
       (rect) => rect.getAttribute('stroke') !== '#3b82f6',
     );
     expect(shapeRects).toHaveLength(2);
-    expect(shapeRects.find((rect) => rect.getAttribute('x') === '200')?.parentElement).toHaveAttribute(
-      'opacity',
-      '0.6',
-    );
+    expect(
+      shapeRects.find((rect) => rect.getAttribute('x') === '200')?.parentElement,
+    ).toHaveAttribute('opacity', '0.6');
   });
 });
 
@@ -141,7 +161,7 @@ describe('SvgLayer — P1A-10 Z-order render order', () => {
     // First <g> wraps the lower-zIndex shape (rectangle renders a <rect>)
     const firstShape = shapeGroups[0].querySelector('rect');
     const secondShape = shapeGroups[1].querySelector('ellipse');
-    expect(firstShape).not.toBeNull();  // rectangle (zIndex 1) is first
+    expect(firstShape).not.toBeNull(); // rectangle (zIndex 1) is first
     expect(secondShape).not.toBeNull(); // ellipse (zIndex 2) is second
   });
 
