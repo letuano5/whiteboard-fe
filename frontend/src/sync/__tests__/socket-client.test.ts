@@ -53,6 +53,8 @@ describe('socket-client — AC-4', () => {
 
 describe('socket-client — AC-5', () => {
   // @covers AC-5
+  // @covers 014/AC-1 — element-update event delivery is the mechanism that makes
+  //   remote element changes appear on the local canvas (AC-1 broadcast delivery).
   it('calls applyRemoteElements when element-update event arrives', async () => {
     const applyModule = await import('../apply-remote');
     const spy = vi.spyOn(applyModule, 'applyRemoteElements');
@@ -96,5 +98,38 @@ describe('socket-client — AC-6 (room isolation, client-side)', () => {
     // No event fired — handler should never be called
     expect(spy).not.toHaveBeenCalled();
     spy.mockRestore();
+  });
+});
+
+describe('socket-client — 014/AC-4 (room isolation via roomId in emit)', () => {
+  // @covers 014/AC-4
+  // The client includes roomId in every element-update emit so the server can call
+  // socket.to(roomId).emit(...) — which excludes all clients in other rooms.
+  // This is the client-side half of the room isolation guarantee.
+  it('element-update mutations are emitted with the joined roomId for server-side isolation', async () => {
+    const { initSocketClient } = await import('../socket-client');
+    const { dispatchMutationEvent } = await import('../../store/mutation-pipeline');
+
+    initSocketClient('room-xyz');
+
+    const fakeElement = {
+      id: 'el-iso',
+      type: 'rectangle' as const,
+      x: 0, y: 0, width: 50, height: 50, angle: 0, zIndex: 1,
+      props: {
+        strokeColor: '#000', fillColor: 'transparent',
+        strokeWidth: 1, strokeStyle: 'solid' as const, opacity: 1,
+      },
+      version: 1, versionNonce: 99, updatedAt: Date.now(),
+      isDeleted: false, groupId: null, frameId: null, locked: false, createdBy: 'test',
+    };
+
+    mockEmit.mockClear();
+    dispatchMutationEvent({ type: 'update', elements: [fakeElement], before: [] });
+
+    expect(mockEmit).toHaveBeenCalledWith(
+      WS_EVENTS.ELEMENT_UPDATE,
+      { roomId: 'room-xyz', elements: [fakeElement] },
+    );
   });
 });

@@ -263,3 +263,56 @@ describe('registerMutationHook', () => {
     expect(calls).toHaveLength(1);
   });
 });
+
+describe('optimistic update — 014/AC-5', () => {
+  // @covers 014/AC-5
+  // The store must be updated BEFORE hooks fire so the UI reflects the change
+  // immediately (no round-trip wait). This is the client-side "optimistic update"
+  // guarantee for P2-03.
+  it('createElement: store contains the new element when the mutation hook fires', () => {
+    let elementInStoreAtHookTime: boolean | undefined;
+
+    const unregister = registerMutationHook((event) => {
+      const { elements } = useElementsStore.getState();
+      elementInStoreAtHookTime = elements.some((e) => e.id === event.elements[0].id);
+    });
+
+    const created = createElement(makeDraft());
+    unregister();
+
+    expect(elementInStoreAtHookTime).toBe(true);
+    expect(created.id).toBeDefined();
+  });
+
+  it('patchElement: store reflects the patch when the mutation hook fires', () => {
+    const el = createElement(makeDraft({ x: 0 }));
+    let xInStoreAtHookTime: number | undefined;
+
+    const unregister = registerMutationHook((event) => {
+      const { elements } = useElementsStore.getState();
+      const found = elements.find((e) => e.id === event.elements[0]?.id);
+      xInStoreAtHookTime = found?.x;
+    });
+
+    patchElement(el.id, { x: 999 });
+    unregister();
+
+    expect(xInStoreAtHookTime).toBe(999);
+  });
+
+  it('deleteElements: store marks element isDeleted=true when the mutation hook fires', () => {
+    const el = createElement(makeDraft());
+    let isDeletedAtHookTime: boolean | undefined;
+
+    const unregister = registerMutationHook((event) => {
+      const { elements } = useElementsStore.getState();
+      const found = elements.find((e) => e.id === event.elements[0]?.id);
+      isDeletedAtHookTime = found?.isDeleted;
+    });
+
+    deleteElements([el.id]);
+    unregister();
+
+    expect(isDeletedAtHookTime).toBe(true);
+  });
+});

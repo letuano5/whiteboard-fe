@@ -64,6 +64,7 @@ describe('AC-1: new element is added to store', () => {
 });
 
 // @covers AC-2
+// @covers 014/AC-2
 describe('AC-2: element position/size update syncs', () => {
   it('applies a higher-version remote element with updated position', () => {
     const local = makeEl({ id: 'el-1', x: 0, y: 0, version: 1, versionNonce: 500 });
@@ -80,6 +81,7 @@ describe('AC-2: element position/size update syncs', () => {
 });
 
 // @covers AC-3
+// @covers 014/AC-3
 describe('AC-3: soft-delete propagates from remote', () => {
   it('sets isDeleted=true when remote has higher version and isDeleted=true', () => {
     const local = makeEl({ id: 'el-1', isDeleted: false, version: 1, versionNonce: 500 });
@@ -118,6 +120,7 @@ describe('AC-4: style property change syncs', () => {
 });
 
 // @covers AC-5
+// @covers 014/AC-6
 describe('AC-5: higher version wins LWW', () => {
   it('applies incoming element when version is strictly greater', () => {
     const local = makeEl({ id: 'el-1', x: 0, version: 5, versionNonce: 500 });
@@ -131,6 +134,7 @@ describe('AC-5: higher version wins LWW', () => {
 });
 
 // @covers AC-6
+// @covers 014/AC-7
 describe('AC-6: lower version is ignored', () => {
   it('ignores incoming element when version is strictly less', () => {
     const local = makeEl({ id: 'el-1', x: 50, version: 5, versionNonce: 500 });
@@ -144,6 +148,7 @@ describe('AC-6: lower version is ignored', () => {
 });
 
 // @covers AC-7
+// @covers 014/AC-8
 describe('AC-7: equal version, lower nonce wins', () => {
   it('applies incoming when versions are equal and incoming nonce is lower', () => {
     const local = makeEl({ id: 'el-1', x: 0, version: 5, versionNonce: 50 });
@@ -157,6 +162,7 @@ describe('AC-7: equal version, lower nonce wins', () => {
 });
 
 // @covers AC-8
+// @covers 014/AC-9
 describe('AC-8: equal version, higher nonce is ignored', () => {
   it('ignores incoming when versions are equal and incoming nonce is higher', () => {
     const local = makeEl({ id: 'el-1', x: 50, version: 5, versionNonce: 50 });
@@ -170,6 +176,7 @@ describe('AC-8: equal version, higher nonce is ignored', () => {
 });
 
 // @covers AC-8 (equal nonce edge case)
+// @covers 014/AC-9 (equal nonce: local wins)
 describe('AC-8 edge: equal version and equal nonce is NOT applied', () => {
   it('ignores incoming when versions and nonces are identical', () => {
     const local = makeEl({ id: 'el-1', x: 50, version: 5, versionNonce: 50 });
@@ -183,6 +190,7 @@ describe('AC-8 edge: equal version and equal nonce is NOT applied', () => {
 });
 
 // @covers AC-9
+// @covers 014/AC-11
 describe('AC-9: element being dragged is not overwritten', () => {
   it('skips remote update for element currently being dragged', () => {
     const local = makeEl({ id: 'el-1', x: 0, version: 1, versionNonce: 500 });
@@ -197,6 +205,7 @@ describe('AC-9: element being dragged is not overwritten', () => {
 });
 
 // @covers AC-10
+// @covers 014/AC-12
 describe('AC-10: element being resized/rotated is not overwritten', () => {
   it('skips remote update for element currently being resized', () => {
     const local = makeEl({ id: 'el-1', x: 0, version: 1, versionNonce: 500 });
@@ -229,6 +238,7 @@ describe('AC-10: element being resized/rotated is not overwritten', () => {
 });
 
 // @covers AC-11
+// @covers 014/AC-13
 describe('AC-11: element being text-edited is not overwritten', () => {
   it('skips remote update for element currently being text-edited', () => {
     const local = makeEl({ id: 'el-1', x: 0, version: 1, versionNonce: 500 });
@@ -275,5 +285,73 @@ describe('AC-14: applyRemoteElements accepts (incoming: Element[]) with no BC-sp
 
   it('isApplyingRemote flag is false when not inside applyRemoteElements', () => {
     expect(isApplyingRemote()).toBe(false);
+  });
+});
+
+// @covers 014/AC-10 — Convergence: two clients with different update orders end in same state
+describe('014/AC-10: deterministic convergence via LWW', () => {
+  it('two clients with same version but different nonces converge to the lower-nonce winner', () => {
+    // Simulate Client A: has element at x=0 (v=3, nonce=100)
+    const elA = makeEl({ id: 'el-shared', x: 0, version: 3, versionNonce: 100 });
+    // Client B: has element at x=99 (v=3, nonce=50) — lower nonce → should win
+    const elB = makeEl({ id: 'el-shared', x: 99, version: 3, versionNonce: 50 });
+
+    // Client A receives Client B's state
+    useElementsStore.setState({ elements: [elA] });
+    applyRemoteElements([elB]);
+    const xOnClientA = useElementsStore.getState().elements.find((e) => e.id === 'el-shared')!.x;
+
+    // Client B receives Client A's state (reset to B's starting point first)
+    useElementsStore.setState({ elements: [elB] });
+    applyRemoteElements([elA]);
+    const xOnClientB = useElementsStore.getState().elements.find((e) => e.id === 'el-shared')!.x;
+
+    // Both must converge to the same value (lower nonce=50 wins → x=99)
+    expect(xOnClientA).toBe(99);
+    expect(xOnClientB).toBe(99);
+    expect(xOnClientA).toBe(xOnClientB);
+  });
+
+  it('two clients with different versions converge to the higher-version winner', () => {
+    const elLow = makeEl({ id: 'el-shared', x: 0, version: 2, versionNonce: 500 });
+    const elHigh = makeEl({ id: 'el-shared', x: 77, version: 4, versionNonce: 500 });
+
+    useElementsStore.setState({ elements: [elLow] });
+    applyRemoteElements([elHigh]);
+    const xOnClientA = useElementsStore.getState().elements.find((e) => e.id === 'el-shared')!.x;
+
+    useElementsStore.setState({ elements: [elHigh] });
+    applyRemoteElements([elLow]);
+    const xOnClientB = useElementsStore.getState().elements.find((e) => e.id === 'el-shared')!.x;
+
+    expect(xOnClientA).toBe(77);
+    expect(xOnClientB).toBe(77);
+    expect(xOnClientA).toBe(xOnClientB);
+  });
+});
+
+// @covers 014/AC-14 — Post-drag convergence: LWW applies normally after drag ends
+describe('014/AC-14: post-drag convergence', () => {
+  it('remote update is skipped while dragging, then applied via LWW after drag ends', () => {
+    const local = makeEl({ id: 'el-1', x: 0, version: 3, versionNonce: 500 });
+    useElementsStore.setState({ elements: [local] });
+
+    // Simulate drag in progress
+    useInteractionStore.setState({ draggingId: 'el-1' });
+
+    const remote = makeEl({ id: 'el-1', x: 200, version: 5, versionNonce: 500 });
+    applyRemoteElements([remote]);
+
+    // While dragging: remote update must be ignored
+    expect(useElementsStore.getState().elements.find((e) => e.id === 'el-1')!.x).toBe(0);
+
+    // Simulate drag end: clear draggingId
+    useInteractionStore.setState({ draggingId: null });
+
+    // Re-apply the same remote update (server would re-send, or client re-processes after reconnect)
+    applyRemoteElements([remote]);
+
+    // After drag ends: LWW applies — remote v=5 > local v=3, so remote wins
+    expect(useElementsStore.getState().elements.find((e) => e.id === 'el-1')!.x).toBe(200);
   });
 });
