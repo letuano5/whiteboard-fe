@@ -129,5 +129,14 @@ pnpm --filter whiteboard-be dev
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan at
-`specs/012-cross-tab-sync/plan.md`.
+`specs/013-room-join-share-link/plan.md`.
 <!-- SPECKIT END -->
+
+## Established architectural decisions
+
+### URL routing (P2+)
+
+Room-based routing uses the **query-string pattern**: `/?room=<uuid>`.
+- Implemented with native `URLSearchParams` + `window.history.pushState`.
+- No router library (react-router-dom, etc.) is used or needed.
+- The room ID is a UUID v4 string.

@@ -201,8 +201,7 @@ applyRemoteElements(incoming: Element[])  // LWW theo version/versionNonce; bỏ
 ### [P0-01] Khung dự án & shared types
 
 - [ ] Khởi tạo frontend project (Vite + React + TypeScript + Zustand + Tailwind CSS).
-- [ ] `src/types/shared.ts` chứa type `Element`, `Camera`, hằng số WS event.
-- [BE] Khởi tạo backend project; `src/types/shared.ts` server-side (đồng bộ thủ công với frontend).
+- [ ] Sử dụng shared types.
 
 ### [P0-02] Store & camera utils
 

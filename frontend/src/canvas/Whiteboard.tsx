@@ -23,6 +23,7 @@ import SvgLayer from './layers/SvgLayer';
 import Toolbar from '../components/toolbar/Toolbar';
 import DetailPanel from '../components/detail-panel/DetailPanel';
 import BackToContent from '../components/back-to-content/BackToContent';
+import ShareLinkButton from '../components/ShareLinkButton';
 import type { HandleId } from '../types/interaction';
 
 function svgLocalPoint(e: React.PointerEvent) {
@@ -305,6 +306,9 @@ export default function Whiteboard() {
       <Toolbar />
       <DetailPanel />
       <BackToContent containerRef={containerRef} />
+      <div style={{ position: 'absolute', top: '12px', right: '12px', zIndex: 50 }}>
+        <ShareLinkButton />
+      </div>
       {tool === 'select' && (
         <div
           style={{
