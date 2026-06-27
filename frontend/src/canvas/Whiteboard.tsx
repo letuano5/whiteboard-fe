@@ -17,6 +17,7 @@ import {
   onSelectKeyDown,
   onRotateHandlePointerDown,
 } from './tools/select-tool';
+
 import TextEditor, { onCanvasDoubleClick } from './tools/text-editor';
 import { onLaserPointerMove, onLaserPointerLeave } from './tools/laser-tool';
 import SvgLayer from './layers/SvgLayer';
@@ -120,7 +121,11 @@ export default function Whiteboard() {
       ) {
         return;
       }
-      onSelectKeyDown(e.key);
+      const ctrlOrMeta = e.ctrlKey || e.metaKey;
+      if (ctrlOrMeta && (e.key === 'd' || e.key === 'c' || e.key === 'v')) {
+        e.preventDefault();
+      }
+      onSelectKeyDown(e.key, ctrlOrMeta);
     }
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
@@ -177,8 +182,9 @@ export default function Whiteboard() {
     if (!(e.target instanceof SVGElement)) return;
     if (tool === 'select') {
       const local = svgLocalPoint(e);
-      onSelectPointerDown(screenToWorld(local.x, local.y, camera));
-      if (useInteractionStore.getState().draggingId) {
+      onSelectPointerDown(screenToWorld(local.x, local.y, camera), e.shiftKey);
+      const state = useInteractionStore.getState();
+      if (state.draggingId || state.marquee !== null) {
         e.currentTarget.setPointerCapture(e.pointerId);
       }
       return;

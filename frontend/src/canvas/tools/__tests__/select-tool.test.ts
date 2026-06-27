@@ -202,14 +202,16 @@ describe('P1A-03 — Move', () => {
   });
 
   // @covers AC-3 (002-move-resize-delete)
-  it('pointerDown on empty canvas sets draggingId to null', () => {
+  it('pointerDown on empty canvas sets draggingId to null (starts marquee instead)', () => {
     useElementsStore.getState().setElements([]);
     useInteractionStore.getState().setSelectedIds([]);
 
     onSelectPointerDown({ x: 999, y: 999 });
 
+    // draggingId must be null — marquee drag, not element drag
     expect(useInteractionStore.getState().draggingId).toBeNull();
-    expect(useInteractionStore.getState().dragStart).toBeNull();
+    // dragStart is set for marquee tracking (non-null)
+    expect(useInteractionStore.getState().dragStart).not.toBeNull();
   });
 
   it('pointerUp without prior move (no draftElement) does not patch the store', () => {

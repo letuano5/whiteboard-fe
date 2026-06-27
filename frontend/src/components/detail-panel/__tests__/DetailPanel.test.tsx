@@ -82,13 +82,13 @@ describe('AC-2: panel hidden when nothing selected', () => {
     expect(container.firstChild).toBeNull();
   });
 
-  it('renders nothing when selectedIds has multiple items', () => {
+  it('renders multi-select panel when selectedIds has multiple items', () => {
     const el1 = makeElement({ id: 'el-1' });
     const el2 = makeElement({ id: 'el-2' });
     useElementsStore.setState({ elements: [el1, el2] });
     useInteractionStore.getState().setSelectedIds(['el-1', 'el-2']);
     const { container } = render(<DetailPanel />);
-    expect(container.firstChild).toBeNull();
+    expect(container.firstChild).not.toBeNull();
   });
 });
 

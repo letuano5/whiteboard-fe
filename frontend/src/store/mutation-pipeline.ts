@@ -37,6 +37,27 @@ export type ElementDraft = Omit<
   'id' | 'version' | 'versionNonce' | 'updatedAt' | 'zIndex' | 'isDeleted'
 >;
 
+export function createElements(drafts: ElementDraft[]): Element[] {
+  if (drafts.length === 0) return [];
+  const { elements } = useElementsStore.getState();
+  const baseZIndex = elements.length === 0 ? 0 : Math.max(...elements.map((e) => e.zIndex));
+  const now = Date.now();
+
+  const created: Element[] = drafts.map((draft, i) => ({
+    ...draft,
+    id: generateId(),
+    zIndex: baseZIndex + 1 + i,
+    version: 1,
+    versionNonce: nextNonce(),
+    updatedAt: now,
+    isDeleted: false,
+  }));
+
+  useElementsStore.getState().addElements(created);
+  fireHooks({ type: 'create', elements: created, before: [] });
+  return created;
+}
+
 export function createElement(draft: ElementDraft): Element {
   const { elements } = useElementsStore.getState();
   const maxZIndex = elements.length === 0 ? 0 : Math.max(...elements.map((e) => e.zIndex));

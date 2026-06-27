@@ -21,13 +21,15 @@ describe('shape registry', () => {
     expect(getShapeUtil('line')).toBeDefined();
     expect(getShapeUtil('line')?.type).toBe('line');
 
+    expect(getShapeUtil('arrow')).toBeDefined();
+    expect(getShapeUtil('arrow')?.type).toBe('arrow');
+
     expect(getShapeUtil('text')).toBeDefined();
     expect(getShapeUtil('text')?.type).toBe('text');
   });
 
   it('returns undefined for unregistered types', () => {
     expect(getShapeUtil('freehand')).toBeUndefined();
-    expect(getShapeUtil('arrow')).toBeUndefined();
     expect(getShapeUtil('image')).toBeUndefined();
   });
 

@@ -109,16 +109,39 @@ export default function SvgLayer({
   const selectedIds = useInteractionStore((s) => s.selectedIds);
   const laserTrail = useInteractionStore((s) => s.laserTrail);
   const laserFading = useInteractionStore((s) => s.laserFading);
+  const marquee = useInteractionStore((s) => s.marquee);
+  const draftElements = useInteractionStore((s) => s.draftElements);
+
   const selectedElement =
-    selectedIds.length > 0
+    selectedIds.length === 1
       ? elements.find((el) => el.id === selectedIds[0] && !el.isDeleted)
       : undefined;
   const overlayElement =
     selectedElement && draftElement?.id === selectedElement.id ? draftElement : selectedElement;
   const isEditingExistingElement = elements.some((el) => el.id === draftElement?.id);
+
+  // IDs currently shown as draftElements (hide their committed versions to avoid doubling)
+  const draftElementIds = new Set(draftElements.map((el) => el.id));
+
   const visible = elements
-    .filter((el) => !el.isDeleted && el.id !== draftElement?.id)
+    .filter((el) => !el.isDeleted && el.id !== draftElement?.id && !draftElementIds.has(el.id))
     .sort((a, b) => a.zIndex - b.zIndex);
+
+  // Multi-select union bounding box
+  let multiSelectRect: { x: number; y: number; w: number; h: number } | null = null;
+  if (selectedIds.length > 1) {
+    const selected = elements.filter((el) => selectedIds.includes(el.id) && !el.isDeleted);
+    if (selected.length > 1) {
+      const xs = selected.flatMap((el) => [el.x, el.x + el.width]);
+      const ys = selected.flatMap((el) => [el.y, el.y + el.height]);
+      multiSelectRect = {
+        x: Math.min(...xs),
+        y: Math.min(...ys),
+        w: Math.max(...xs) - Math.min(...xs),
+        h: Math.max(...ys) - Math.min(...ys),
+      };
+    }
+  }
 
   return (
     <svg
@@ -153,8 +176,47 @@ export default function SvgLayer({
             if (!util) return null;
             return <g opacity={isEditingExistingElement ? 1 : 0.6}>{util.render(draftElement)}</g>;
           })()}
-        {overlayElement && !editingId && (
+        {/* Multi-drag: render draft positions */}
+        {draftElements.map((draftEl) => {
+          const util = getShapeUtil(draftEl.type);
+          if (!util) return null;
+          return (
+            <g key={draftEl.id} opacity={0.6} style={{ pointerEvents: 'none' }}>
+              {util.render(draftEl)}
+            </g>
+          );
+        })}
+        {/* Single selection overlay with handles */}
+        {overlayElement && !editingId && draftElements.length === 0 && (
           <SelectionOverlay element={overlayElement} onHandlePointerDown={onHandlePointerDown} />
+        )}
+        {/* Multi-select bounding box (no handles) */}
+        {multiSelectRect && draftElements.length === 0 && (
+          <rect
+            x={multiSelectRect.x}
+            y={multiSelectRect.y}
+            width={multiSelectRect.w}
+            height={multiSelectRect.h}
+            fill="none"
+            stroke="#3b82f6"
+            strokeWidth={1.5}
+            strokeDasharray="4 2"
+            style={{ pointerEvents: 'none' }}
+          />
+        )}
+        {/* Marquee rubber-band rect */}
+        {marquee && (
+          <rect
+            x={marquee.x}
+            y={marquee.y}
+            width={marquee.width}
+            height={marquee.height}
+            fill="rgba(59, 130, 246, 0.08)"
+            stroke="#3b82f6"
+            strokeWidth={1}
+            strokeDasharray="4 2"
+            style={{ pointerEvents: 'none' }}
+          />
         )}
         {laserTrail.length >= 2 && (
           <polyline

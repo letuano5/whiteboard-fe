@@ -8,6 +8,7 @@ interface ElementsState {
 interface ElementsActions {
   setElements: (elements: Element[]) => void;
   addElement: (element: Element) => void;
+  addElements: (elements: Element[]) => void;
   updateElement: (updated: Element) => void;
   updateElements: (updated: Element[]) => void;
   removeElements: (ids: string[]) => void;
@@ -19,6 +20,8 @@ export const useElementsStore = create<ElementsState & ElementsActions>()((set) 
   setElements: (elements) => set({ elements }),
 
   addElement: (element) => set((state) => ({ elements: [...state.elements, element] })),
+
+  addElements: (elements) => set((state) => ({ elements: [...state.elements, ...elements] })),
 
   updateElement: (updated) =>
     set((state) => ({

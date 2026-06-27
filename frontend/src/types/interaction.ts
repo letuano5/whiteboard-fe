@@ -36,6 +36,7 @@ export interface InteractionState {
   draggingId: string | null;
   dragStart: Point | null;
   draftElement: Element | null;
+  draftElements: Element[];
   marquee: Rect | null;
   resizeHandle: ResizeHandleId | null;
   resizeSession: ResizeSession | null;
@@ -44,4 +45,6 @@ export interface InteractionState {
   laserTrail: Point[];
   laserFading: boolean;
   remoteCursors: Map<string, Presence>;
+  clipboard: Element[] | null;
+  pasteOffset: number;
 }

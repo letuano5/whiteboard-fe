@@ -14,6 +14,7 @@ const DEFAULT_STATE: InteractionState = {
   draggingId: null,
   dragStart: null,
   draftElement: null,
+  draftElements: [],
   marquee: null,
   resizeHandle: null,
   resizeSession: null,
@@ -22,6 +23,8 @@ const DEFAULT_STATE: InteractionState = {
   laserTrail: [],
   laserFading: false,
   remoteCursors: new Map(),
+  clipboard: null,
+  pasteOffset: 0,
 };
 
 interface InteractionActions {
@@ -30,6 +33,7 @@ interface InteractionActions {
   setDraggingId: (id: string | null) => void;
   setDragStart: (pt: Point | null) => void;
   setDraftElement: (el: Element | null) => void;
+  setDraftElements: (els: Element[]) => void;
   setMarquee: (rect: Rect | null) => void;
   setResizeHandle: (h: ResizeHandleId | null) => void;
   setResizeSession: (session: ResizeSession | null) => void;
@@ -38,6 +42,8 @@ interface InteractionActions {
   setLaserTrail: (trail: Point[]) => void;
   setLaserFading: (v: boolean) => void;
   setRemoteCursors: (cursors: Map<string, Presence>) => void;
+  setClipboard: (els: Element[] | null) => void;
+  setPasteOffset: (n: number) => void;
   reset: () => void;
 }
 
@@ -49,6 +55,7 @@ export const useInteractionStore = create<InteractionState & InteractionActions>
   setDraggingId: (draggingId) => set({ draggingId }),
   setDragStart: (dragStart) => set({ dragStart }),
   setDraftElement: (draftElement) => set({ draftElement }),
+  setDraftElements: (draftElements) => set({ draftElements }),
   setMarquee: (marquee) => set({ marquee }),
   setResizeHandle: (resizeHandle) => set({ resizeHandle }),
   setResizeSession: (resizeSession) => set({ resizeSession }),
@@ -57,5 +64,7 @@ export const useInteractionStore = create<InteractionState & InteractionActions>
   setLaserTrail: (laserTrail) => set({ laserTrail }),
   setLaserFading: (laserFading) => set({ laserFading }),
   setRemoteCursors: (remoteCursors) => set({ remoteCursors }),
+  setClipboard: (clipboard) => set({ clipboard }),
+  setPasteOffset: (pasteOffset) => set({ pasteOffset }),
   reset: () => set({ ...DEFAULT_STATE, remoteCursors: new Map() }),
 }));

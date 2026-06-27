@@ -4,6 +4,7 @@ import {
   Square,
   Circle,
   Minus,
+  ArrowRight,
   Type,
   Zap,
 } from 'lucide-react';
@@ -23,6 +24,7 @@ const TOOLS: ToolButton[] = [
   { id: 'rectangle', label: 'Rectangle', Icon: Square },
   { id: 'ellipse', label: 'Ellipse', Icon: Circle },
   { id: 'line', label: 'Line', Icon: Minus },
+  { id: 'arrow', label: 'Arrow', Icon: ArrowRight },
   { id: 'text', label: 'Text', Icon: Type },
   { id: 'laser', label: 'Laser', Icon: Zap },
 ];

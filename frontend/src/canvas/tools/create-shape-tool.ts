@@ -4,7 +4,7 @@ import type { ToolId } from '../../types/interaction';
 import { useInteractionStore } from '../../store/interaction.store';
 import { createElement, type ElementDraft } from '../../store/mutation-pipeline';
 
-export const SHAPE_TOOLS = ['rectangle', 'ellipse', 'line', 'text'] as const;
+export const SHAPE_TOOLS = ['rectangle', 'ellipse', 'line', 'arrow', 'text'] as const;
 export type ShapeToolType = (typeof SHAPE_TOOLS)[number];
 
 export function isShapeTool(tool: ToolId): tool is ShapeToolType {
@@ -41,7 +41,7 @@ export function buildDraftFromPoints(
 ): Omit<ElementDraft, 'createdBy' | 'groupId' | 'frameId' | 'locked' | 'angle'> {
   const props = getDefaultProps(type);
 
-  if (type === 'line') {
+  if (type === 'line' || type === 'arrow') {
     const x = Math.min(start.x, current.x);
     const y = Math.min(start.y, current.y);
     const width = Math.abs(current.x - start.x);
@@ -52,7 +52,13 @@ export function buildDraftFromPoints(
       y,
       width,
       height,
-      props: { ...props, points: [[start.x, start.y], [current.x, current.y]] },
+      props: {
+        ...props,
+        points: [
+          [start.x, start.y],
+          [current.x, current.y],
+        ],
+      },
     };
   }
 
@@ -63,11 +69,7 @@ export function buildDraftFromPoints(
   return { type, x, y, width, height, props };
 }
 
-function makeDraftElement(
-  type: ShapeToolType,
-  start: Point,
-  current: Point,
-): Element {
+function makeDraftElement(type: ShapeToolType, start: Point, current: Point): Element {
   const partial = buildDraftFromPoints(type, start, current);
   return {
     ...partial,
@@ -85,13 +87,9 @@ function makeDraftElement(
   };
 }
 
-export function isValidSize(
-  type: ShapeToolType,
-  start: Point,
-  current: Point,
-): boolean {
+export function isValidSize(type: ShapeToolType, start: Point, current: Point): boolean {
   const MIN = 5;
-  if (type === 'line') {
+  if (type === 'line' || type === 'arrow') {
     const dx = current.x - start.x;
     const dy = current.y - start.y;
     return Math.sqrt(dx * dx + dy * dy) >= MIN;

@@ -5,6 +5,7 @@ import { ellipseShapeUtil } from './ellipse';
 import { diamondShapeUtil } from './diamond';
 import { lineShapeUtil } from './line';
 import { textShapeUtil } from './text';
+import { arrowShapeUtil } from './arrow';
 
 const registry = new Map<ElementType, ShapeUtil>();
 
@@ -21,3 +22,4 @@ registerShapeUtil(ellipseShapeUtil);
 registerShapeUtil(diamondShapeUtil);
 registerShapeUtil(lineShapeUtil);
 registerShapeUtil(textShapeUtil);
+registerShapeUtil(arrowShapeUtil);

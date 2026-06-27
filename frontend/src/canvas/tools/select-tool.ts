@@ -1,11 +1,30 @@
 import { useElementsStore } from '../../store/elements.store';
 import { useInteractionStore } from '../../store/interaction.store';
-import { patchElement, deleteElements } from '../../store/mutation-pipeline';
+import {
+  patchElement,
+  deleteElements,
+  updateElements,
+  createElements,
+  type ElementDraft,
+} from '../../store/mutation-pipeline';
 import { getShapeUtil } from '../shapes';
 import { rotatePoint, unrotatePoint } from '../../utils/geometry';
 import type { Point, Rect } from '../../types/geometry';
 import type { ResizeHandleId, ResizeSession } from '../../types/interaction';
 import type { Element } from '../../types/shared';
+
+function normalizeRect(start: Point, end: Point): Rect {
+  return {
+    x: Math.min(start.x, end.x),
+    y: Math.min(start.y, end.y),
+    width: Math.abs(end.x - start.x),
+    height: Math.abs(end.y - start.y),
+  };
+}
+
+function rectsIntersect(a: Rect, b: Rect): boolean {
+  return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
+}
 
 const MIN_RESIZE_SIZE = 1;
 const HORIZONTAL_FLIP: Record<ResizeHandleId, ResizeHandleId> = {
@@ -238,31 +257,59 @@ function resizePointGeometry(
   };
 }
 
-export function onSelectPointerDown(worldPt: Point): void {
+export function onSelectPointerDown(worldPt: Point, shiftKey = false): void {
   const elements = useElementsStore.getState().elements;
   const visible = elements.filter((el) => !el.isDeleted).sort((a, b) => b.zIndex - a.zIndex);
-  const { setSelectedIds, setDraggingId, setDragStart, setResizeHandle, setResizeSession } =
-    useInteractionStore.getState();
+  const {
+    selectedIds,
+    setSelectedIds,
+    setDraggingId,
+    setDragStart,
+    setResizeHandle,
+    setResizeSession,
+    setMarquee,
+  } = useInteractionStore.getState();
 
   for (const el of visible) {
     const util = getShapeUtil(el.type);
-    // AC-5/AC-6: un-rotate the test point into the element's local frame before AABB hit-test
     const center = { x: el.x + el.width / 2, y: el.y + el.height / 2 };
     const localPt = el.angle !== 0 ? unrotatePoint(worldPt, center, el.angle) : worldPt;
     if (util && util.hitTest(el, localPt.x, localPt.y)) {
-      setSelectedIds([el.id]);
-      setDraggingId(el.id);
-      setDragStart(worldPt);
-      setResizeHandle(null);
-      setResizeSession(null);
+      setMarquee(null);
+      if (shiftKey) {
+        // @covers AC-4, AC-5, AC-6: shift-click toggles element in/out of selection
+        const alreadySelected = selectedIds.includes(el.id);
+        const newIds = alreadySelected
+          ? selectedIds.filter((id) => id !== el.id)
+          : [...selectedIds, el.id];
+        setSelectedIds(newIds);
+        setDraggingId(null);
+        setDragStart(null);
+      } else if (selectedIds.includes(el.id)) {
+        // Already selected: keep multi-selection, start drag
+        setDraggingId(el.id);
+        setDragStart(worldPt);
+        setResizeHandle(null);
+        setResizeSession(null);
+      } else {
+        // Replace selection with this element
+        setSelectedIds([el.id]);
+        setDraggingId(el.id);
+        setDragStart(worldPt);
+        setResizeHandle(null);
+        setResizeSession(null);
+      }
       return;
     }
   }
-  setSelectedIds([]);
+
+  // Miss: start marquee drag; @covers AC-3, AC-7
+  if (!shiftKey) setSelectedIds([]);
   setDraggingId(null);
-  setDragStart(null);
+  setDragStart(worldPt);
   setResizeHandle(null);
   setResizeSession(null);
+  setMarquee(normalizeRect(worldPt, worldPt));
 }
 
 export function onSelectHandlePointerDown(handle: ResizeHandleId, worldPt: Point): void {
@@ -305,9 +352,43 @@ export function computeResize(
 }
 
 export function onSelectPointerMove(worldPt: Point): void {
-  const { draggingId, dragStart, resizeSession, isRotating, setDraftElement, setResizeHandle } =
-    useInteractionStore.getState();
+  const {
+    draggingId,
+    dragStart,
+    resizeSession,
+    isRotating,
+    marquee,
+    selectedIds,
+    setDraftElement,
+    setDraftElements,
+    setMarquee,
+    setResizeHandle,
+  } = useInteractionStore.getState();
+
+  // @covers AC-1, AC-2: update marquee rect while dragging (only when NOT dragging an element)
+  if (marquee !== null && dragStart && !draggingId) {
+    setMarquee(normalizeRect(dragStart, worldPt));
+    return;
+  }
+
   if (!draggingId || !dragStart) return;
+
+  // @covers AC-8: multi-drag — move all selected elements together
+  if (selectedIds.length > 1) {
+    const dx = worldPt.x - dragStart.x;
+    const dy = worldPt.y - dragStart.y;
+    const allElements = useElementsStore.getState().elements;
+    const drafts = allElements
+      .filter((el) => selectedIds.includes(el.id) && !el.isDeleted)
+      .map((el) => ({
+        ...el,
+        x: el.x + dx,
+        y: el.y + dy,
+        props: translatePointGeometry(el, dx, dy),
+      }));
+    setDraftElements(drafts);
+    return;
+  }
 
   const elements = useElementsStore.getState().elements;
   const el = elements.find((e) => e.id === draggingId);
@@ -404,15 +485,50 @@ export function onSelectPointerUp(_worldPt: Point): void {
     draggingId,
     dragStart,
     draftElement,
+    draftElements,
+    marquee,
     resizeSession,
     isRotating,
+    setSelectedIds,
     setDraggingId,
     setDragStart,
     setResizeHandle,
     setResizeSession,
     setIsRotating,
     setDraftElement,
+    setDraftElements,
+    setMarquee,
   } = useInteractionStore.getState();
+
+  // @covers AC-1, AC-2, AC-3: commit marquee selection (only when not dragging an element)
+  if (marquee !== null && !draggingId && dragStart) {
+    const elements = useElementsStore.getState().elements;
+    const hits = elements
+      .filter(
+        (el) =>
+          !el.isDeleted &&
+          rectsIntersect(marquee, { x: el.x, y: el.y, width: el.width, height: el.height }),
+      )
+      .map((el) => el.id);
+    setSelectedIds(hits);
+    setMarquee(null);
+    setDragStart(null);
+    return;
+  }
+
+  // @covers AC-8: commit multi-drag
+  if (draftElements.length > 0) {
+    updateElements(
+      draftElements.map((el) => ({
+        id: el.id,
+        patch: { x: el.x, y: el.y, ...(el.props.points ? { props: el.props } : {}) },
+      })),
+    );
+    setDraftElements([]);
+    setDraggingId(null);
+    setDragStart(null);
+    return;
+  }
 
   if (draggingId && dragStart && draftElement) {
     // AC-2: commit rotate via patchElement
@@ -459,10 +575,78 @@ export function onRotateHandlePointerDown(worldPt: Point): void {
   setIsRotating(true);
 }
 
-export function onSelectKeyDown(key: string): void {
+function cloneAsNewDraft(el: Element, offsetX: number, offsetY: number): ElementDraft {
+  return {
+    type: el.type,
+    x: el.x + offsetX,
+    y: el.y + offsetY,
+    width: el.width,
+    height: el.height,
+    angle: el.angle,
+    props: el.props.points
+      ? { ...el.props, points: el.props.points.map(([px, py]) => [px + offsetX, py + offsetY]) }
+      : { ...el.props },
+    groupId: el.groupId,
+    frameId: el.frameId,
+    locked: el.locked,
+    createdBy: el.createdBy,
+  };
+}
+
+// @covers AC-11, AC-12, AC-13
+export function onDuplicateSelected(): void {
+  const { selectedIds, setSelectedIds } = useInteractionStore.getState();
+  if (selectedIds.length === 0) return;
+  const elements = useElementsStore.getState().elements;
+  const originals = elements.filter((el) => selectedIds.includes(el.id) && !el.isDeleted);
+  if (originals.length === 0) return;
+
+  const drafts = originals.map((el) => cloneAsNewDraft(el, 10, 10));
+  const created = createElements(drafts);
+  setSelectedIds(created.map((el) => el.id));
+}
+
+// @covers AC-14
+export function onCopySelected(): void {
+  const { selectedIds, setClipboard, setPasteOffset } = useInteractionStore.getState();
+  if (selectedIds.length === 0) return;
+  const elements = useElementsStore.getState().elements;
+  const originals = elements.filter((el) => selectedIds.includes(el.id) && !el.isDeleted);
+  if (originals.length === 0) return;
+
+  setClipboard(originals.map((el) => ({ ...el, props: { ...el.props } })));
+  setPasteOffset(0);
+}
+
+// @covers AC-15, AC-16, AC-17
+export function onPasteSelected(): void {
+  const { clipboard, pasteOffset, setSelectedIds, setClipboard, setPasteOffset } =
+    useInteractionStore.getState();
+  if (!clipboard || clipboard.length === 0) return;
+
+  const nextOffset = pasteOffset + 1;
+  const delta = nextOffset * 10;
+  const drafts = clipboard.map((el) => cloneAsNewDraft(el, delta, delta));
+  const created = createElements(drafts);
+  setSelectedIds(created.map((el) => el.id));
+  setClipboard(clipboard); // keep clipboard populated
+  setPasteOffset(nextOffset);
+}
+
+export function onSelectKeyDown(key: string, ctrlOrMeta = false): void {
   const { selectedIds, setSelectedIds } = useInteractionStore.getState();
   if ((key === 'Delete' || key === 'Backspace') && selectedIds.length > 0) {
     deleteElements(selectedIds);
     setSelectedIds([]);
+    return;
+  }
+  if (ctrlOrMeta) {
+    if (key === 'd') {
+      onDuplicateSelected();
+    } else if (key === 'c') {
+      onCopySelected();
+    } else if (key === 'v') {
+      onPasteSelected();
+    }
   }
 }
