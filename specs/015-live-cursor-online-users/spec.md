@@ -6,6 +6,14 @@
 
 **Status**: Draft
 
+> **[P2 Amendment — 2026-06-28]** Spec mở rộng thêm 3 hành vi:
+>
+> 1. **Session identity persistence** (`VDT_USER_IDENTITY` in localStorage): `sessionId`, `name`, `color` được đọc từ localStorage khi load; nếu không có thì random và ghi mới. Cùng browser = cùng identity dù bao nhiêu tab hay reload. File: `sync/presence.ts`.
+>
+> 2. **Viewport broadcast**: Mỗi `CURSOR_MOVE` emit kèm `viewport` (camera hiện tại). Khi camera thay đổi mà không di chuyển chuột (pan/zoom bàn phím/trackpad), camera subscription throttle 200ms emit `cursor: null` + `viewport`. Receiver xử lý `cursor: null` bằng cách giữ nguyên cursor position cũ của peer, chỉ update `viewport` trong `Presence`. File: `sync/socket-client.ts`.
+>
+> 3. **Camera persistence per room** (`VDT_CAMERA_{roomId}` in localStorage): Camera được lưu debounce 300ms sau mỗi thay đổi. Khi join room, camera được restore từ localStorage trước khi socket connect. Khi nhận viewport từ cùng sessionId (same user, tab khác), apply vào camera store và lưu localStorage ngay. File: `sync/camera-persistence.ts`.
+
 **Input**: User description: "[P2-06] Live cursor + tên/màu: Throttle cursor position (~33ms) → gửi lên server ở toạ độ world; ephemeral (không vào elements). Nhận cursor của người khác → render nhãn tên + màu. [BE] Server relay cursor event trong phòng (không lưu). [P2-07] Danh sách user online: Nhận danh sách user online từ server; render UI; cập nhật khi join/leave. [BE] Server broadcast join/leave event cho phòng."
 
 ## User Scenarios & Testing *(mandatory)*

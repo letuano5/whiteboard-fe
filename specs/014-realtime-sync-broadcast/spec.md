@@ -6,6 +6,13 @@
 
 **Status**: Draft
 
+> **[P2 Amendment — 2026-06-28]** Backend now stores elements in-memory per room (not just relays).
+> On `JOIN_ROOM`, server sends a `ROOM_SNAPSHOT` event with current room elements to the new joiner.
+> Client applies snapshot via `setElements` (full replace, not LWW merge) — this replaces localStorage hydration.
+> Element data persists in-memory until server restart; durable storage is P3A.
+> Viewport (`camera`) is broadcast to peers as part of the `CURSOR_MOVE` payload (`viewport` field in `Presence`).
+> `localStorage` persistence and `BroadcastChannel` are no longer active (see specs 006 and 012).
+
 **Input**: User description: "[P2-02] Realtime broadcast (reuse apply-remote): Sau mutation → gửi element (đã version++) lên server qua socket. Nhận event từ server → applyRemoteElements (cùng hàm P1B); render < ~200ms. [BE] Server nhận element từ client → broadcast cho toàn phòng (trừ sender). [P2-03] Optimistic local update: Thao tác áp ngay cục bộ, không chờ server (cảm giác tức thì). [P2-04] LWW conflict (version + nonce): applyRemoteElements áp LWW: version cao hơn thắng; hoà thì versionNonce nhỏ hơn thắng (deterministic). Mọi client hội tụ cùng một state. [P2-05] Từ chối remote khi đang sửa: Element đang kéo/resize/sửa cục bộ bỏ qua remote update giữa chừng; kết thúc thì hội tụ theo LWW."
 
 ## User Scenarios & Testing *(mandatory)*

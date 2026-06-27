@@ -2,7 +2,14 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { WS_EVENTS } from '../../types/shared';
 import { useElementsStore } from '../../store/elements.store';
 import { useInteractionStore } from '../../store/interaction.store';
+import { useCameraStore } from '../../store/camera.store';
 import type { Presence } from '../../types/shared';
+
+vi.mock('../camera-persistence', () => ({
+  saveCamera: vi.fn(),
+  loadCamera: vi.fn(),
+  startCameraPersistence: vi.fn(() => vi.fn()),
+}));
 
 // Stable session identity for tests
 vi.mock('../presence', () => ({
@@ -45,6 +52,7 @@ beforeEach(() => {
 
   useElementsStore.setState({ elements: [] });
   useInteractionStore.setState({ remoteCursors: new Map() });
+  useCameraStore.setState({ camera: { x: 0, y: 0, zoom: 1 } });
   vi.resetModules();
 });
 
@@ -205,6 +213,7 @@ describe('socket-client — AC-4 (cursor-move emit includes roomId for server sc
       roomId: 'room-abc',
       sessionId: 'local-session-id',
       cursor: { x: 50, y: 75 },
+      viewport: expect.objectContaining({ x: expect.any(Number), y: expect.any(Number), zoom: expect.any(Number) }),
     });
   });
 });
@@ -225,5 +234,75 @@ describe('socket-client — AC-5 (cursor removed when peer leaves)', () => {
     leaveHandler({ sessionId: 'peer-1' });
 
     expect(store.getState().remoteCursors.has('peer-1')).toBe(false);
+  });
+});
+
+describe('socket-client — ROOM_SNAPSHOT replaces elements on join', () => {
+  it('ROOM_SNAPSHOT event calls setElements with received elements', async () => {
+    const { initSocketClient } = await import('../socket-client');
+    const { useElementsStore: elStore } = await import('../../store/elements.store');
+    initSocketClient('room-abc');
+
+    const snapshotHandler = _handlers[WS_EVENTS.ROOM_SNAPSHOT];
+    expect(snapshotHandler).toBeDefined();
+
+    const el = {
+      id: 'snap-1', type: 'rectangle' as const,
+      x: 0, y: 0, width: 50, height: 50, angle: 0, zIndex: 1,
+      props: { strokeColor: '#000', fillColor: 'transparent', strokeWidth: 1, strokeStyle: 'solid' as const, opacity: 1 },
+      version: 1, versionNonce: 1, updatedAt: Date.now(),
+      isDeleted: false, groupId: null, frameId: null, locked: false, createdBy: 'test',
+    };
+
+    snapshotHandler({ elements: [el] });
+    expect(elStore.getState().elements).toEqual([el]);
+  });
+});
+
+describe('socket-client — same-user camera sync across tabs', () => {
+  it('CURSOR_MOVE with own sessionId applies viewport to local camera', async () => {
+    const { initSocketClient } = await import('../socket-client');
+    const { useCameraStore: camStore } = await import('../../store/camera.store');
+    initSocketClient('room-abc');
+
+    const moveHandler = _handlers[WS_EVENTS.CURSOR_MOVE];
+    moveHandler({
+      sessionId: 'local-session-id', // own session = same user, different tab
+      cursor: null,
+      viewport: { x: 500, y: 300, zoom: 1.5 },
+    });
+
+    expect(camStore.getState().camera).toEqual({ x: 500, y: 300, zoom: 1.5 });
+  });
+
+  it('CURSOR_MOVE with own sessionId does NOT add entry to remoteCursors', async () => {
+    const { initSocketClient } = await import('../socket-client');
+    const { useInteractionStore: store } = await import('../../store/interaction.store');
+    initSocketClient('room-abc');
+
+    const moveHandler = _handlers[WS_EVENTS.CURSOR_MOVE];
+    moveHandler({ sessionId: 'local-session-id', cursor: { x: 10, y: 20 }, viewport: { x: 0, y: 0, zoom: 1 } });
+
+    expect(store.getState().remoteCursors.has('local-session-id')).toBe(false);
+  });
+});
+
+describe('socket-client — viewport-only CURSOR_MOVE (null cursor)', () => {
+  it('null cursor update preserves existing cursor position of peer', async () => {
+    const { initSocketClient } = await import('../socket-client');
+    const { useInteractionStore: store } = await import('../../store/interaction.store');
+    initSocketClient('room-abc');
+
+    const joinHandler = _handlers[WS_EVENTS.USER_JOIN];
+    joinHandler({ presences: [makePeer('peer-1')] });
+
+    const moveHandler = _handlers[WS_EVENTS.CURSOR_MOVE];
+    moveHandler({ sessionId: 'peer-1', cursor: { x: 100, y: 200 } });
+    // viewport-only update with null cursor
+    moveHandler({ sessionId: 'peer-1', cursor: null, viewport: { x: 10, y: 20, zoom: 2 } });
+
+    const entry = store.getState().remoteCursors.get('peer-1');
+    expect(entry?.cursor).toEqual({ x: 100, y: 200 }); // cursor unchanged
+    expect(entry?.viewport).toEqual({ x: 10, y: 20, zoom: 2 }); // viewport updated
   });
 });

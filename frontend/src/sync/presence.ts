@@ -1,5 +1,7 @@
 import type { Presence } from '../types/shared';
 
+const IDENTITY_KEY = 'VDT_USER_IDENTITY';
+
 const NAMES = [
   'Blue Fox',
   'Red Bear',
@@ -32,16 +34,42 @@ export interface LocalPresence {
   color: string;
 }
 
-function pick(): LocalPresence {
+function loadOrCreate(): LocalPresence {
+  try {
+    const raw = localStorage.getItem(IDENTITY_KEY);
+    if (raw) {
+      const parsed: unknown = JSON.parse(raw);
+      if (
+        parsed !== null &&
+        typeof parsed === 'object' &&
+        typeof (parsed as Record<string, unknown>).sessionId === 'string' &&
+        typeof (parsed as Record<string, unknown>).name === 'string' &&
+        typeof (parsed as Record<string, unknown>).color === 'string'
+      ) {
+        return parsed as LocalPresence;
+      }
+    }
+  } catch {
+    // corrupted storage — fall through to generate new identity
+  }
+
   const idx = Math.floor(Math.random() * NAMES.length);
-  return {
+  const identity: LocalPresence = {
     sessionId: crypto.randomUUID(),
     name: NAMES[idx],
     color: COLORS[idx],
   };
+
+  try {
+    localStorage.setItem(IDENTITY_KEY, JSON.stringify(identity));
+  } catch {
+    // QuotaExceededError — identity lives in memory only
+  }
+
+  return identity;
 }
 
-export const LOCAL_PRESENCE: LocalPresence = pick();
+export const LOCAL_PRESENCE: LocalPresence = loadOrCreate();
 
 export function toPresence(local: LocalPresence): Presence {
   return {

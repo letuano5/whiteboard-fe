@@ -6,6 +6,11 @@
 
 **Status**: Draft
 
+> **[P2 SUPERSEDED]** BroadcastChannel cross-tab sync is no longer active as of P2.
+> Multiple tabs connecting to the same room are now synced via Socket.IO through the backend.
+> `initBroadcastChannel` / `stopBroadcastChannel` are `@deprecated` — kept for reference only.
+> The `applyRemoteElements` LWW function introduced here is still actively used by the Socket.IO path.
+
 **Input**: User description: "P1B-05: Cross-tab sync (BroadcastChannel) — changes in one tab appear in other same-browser tabs via applyRemoteElements with LWW reconciliation."
 
 ## User Scenarios & Testing *(mandatory)*

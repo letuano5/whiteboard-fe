@@ -14,6 +14,11 @@ const PORT = process.env.PORT ?? 3001;
 // socketId is the internal key for O(1) cleanup; sessionId is exposed to peers.
 const roomPresence = new Map<string, Map<string, Presence>>();
 
+// Element store: roomId → Map<elementId, Element> — in-memory authoritative-light (P2).
+// Intentionally NOT cleared when room empties; data persists until server restart.
+// Durable persistence added in P3A (PostgreSQL).
+const roomElements = new Map<string, Map<string, Element>>();
+
 declare module 'socket.io' {
   interface SocketData {
     sessionId: string;
@@ -49,6 +54,12 @@ io.on('connection', (socket: Socket) => {
 
       console.log(`socket ${socket.id} (${name}) joined room ${roomId}`);
 
+      // Send current room elements as a snapshot to the new joiner only
+      const elements = roomElements.has(roomId)
+        ? [...roomElements.get(roomId)!.values()]
+        : [];
+      socket.emit(WS_EVENTS.ROOM_SNAPSHOT, { elements });
+
       // Broadcast full presence list to the entire room (including the new joiner)
       const presences = [...roomMap.values()];
       io.to(roomId).emit(WS_EVENTS.USER_JOIN, { presences });
@@ -59,16 +70,31 @@ io.on('connection', (socket: Socket) => {
     WS_EVENTS.ELEMENT_UPDATE,
     (payload: { roomId: string; elements: Element[] }) => {
       const { roomId, elements } = payload;
+
+      // Upsert into in-memory store (last-write-wins by element id)
+      if (!roomElements.has(roomId)) {
+        roomElements.set(roomId, new Map());
+      }
+      const elMap = roomElements.get(roomId)!;
+      for (const el of elements) {
+        elMap.set(el.id, el);
+      }
+
       socket.to(roomId).emit(WS_EVENTS.ELEMENT_UPDATE, { elements });
     },
   );
 
-  // Relay cursor position to the rest of the room — do NOT store it
+  // Relay cursor + viewport to the rest of the room — do NOT store it
   socket.on(
     WS_EVENTS.CURSOR_MOVE,
-    (payload: { roomId: string; sessionId: string; cursor: { x: number; y: number } }) => {
-      const { roomId, sessionId, cursor } = payload;
-      socket.to(roomId).emit(WS_EVENTS.CURSOR_MOVE, { sessionId, cursor });
+    (payload: {
+      roomId: string;
+      sessionId: string;
+      cursor: { x: number; y: number };
+      viewport?: { x: number; y: number; zoom: number };
+    }) => {
+      const { roomId, sessionId, cursor, viewport } = payload;
+      socket.to(roomId).emit(WS_EVENTS.CURSOR_MOVE, { sessionId, cursor, viewport });
     },
   );
 

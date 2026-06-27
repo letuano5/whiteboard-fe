@@ -6,6 +6,15 @@
 
 **Status**: Draft
 
+> **[P2 SUPERSEDED — elements only]** localStorage persistence for `elements` is no longer active as of P2.
+> Backend in-memory state (sent via `ROOM_SNAPSHOT` on join) is now the source of truth for elements.
+> `initLocalStoragePersistence` / `startLocalStoragePersistence` are `@deprecated` — kept for reference only.
+> Z-Order foundation (P1A-10) remains active and unaffected.
+>
+> **Camera** is still persisted in localStorage, but per-room and separately from elements:
+> key `VDT_CAMERA_{roomId}` — managed by `sync/camera-persistence.ts`, not the deprecated `local-storage.ts`.
+> Camera is per-user preference, not shared state, so localStorage is the correct home for it.
+
 **Input**: User description: "P1A-09 localStorage (single tab) + P1A-10 z-order foundation. Hai tính năng từ Phase 1A của whiteboard app."
 
 ## User Scenarios & Testing *(mandatory)*
