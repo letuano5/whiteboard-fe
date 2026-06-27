@@ -111,7 +111,7 @@ pnpm build
 # Typecheck all packages
 pnpm typecheck
 
-# Lint all packages
+# Lint (packages that define the script)
 pnpm lint
 
 # Format (root covers all files)

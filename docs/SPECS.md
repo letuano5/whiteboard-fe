@@ -10,8 +10,6 @@
 >
 > **Các sub-phase (P1A, P1B, P2.5, P3A…) là thứ tự triển khai (thứ tự tấn công), KHÔNG phải các milestone chấm điểm riêng.**
 
-> **[Frontend view]** File này dùng cho repo `frontend/`. Task đánh dấu `[BE]` thuộc repo `backend/` — liệt kê để tham khảo phụ thuộc, không phải việc của repo này.
-
 ---
 
 ## 1. Tổng quan
@@ -26,7 +24,7 @@
 | Render (P1–P2.5)        | **SVG/DOM-first** — mỗi shape là một node trong layer transform theo camera. **Image cũng render bằng SVG `<image>`/DOM `<img>`, không cần Canvas.** |
 | Render (P3C+)           | Bổ sung **một lớp Canvas overlay** chỉ cho freehand/highlighter/eraser (point-heavy/ink)                                                             |
 | State client            | Zustand — tách rõ `elements` (committed) và `interaction` (transient)                                                                                |
-| Shared types            | Mỗi repo tự copy `src/types/shared.ts`; đồng bộ thủ công khi model đổi                                                                               |
+| Shared types            | `packages/shared/src/index.ts` — single source of truth, import qua `@vdt/shared` workspace link                                                     |
 | Transport realtime      | Socket.IO client                                                                                                                                     |
 | **[BE]** Server         | Node + TypeScript + Express + Socket.IO; state phòng in-memory (authoritative-light)                                                                 |
 | Lưu trữ (P1)            | `localStorage` + `BroadcastChannel` (đồng bộ giữa các tab)                                                                                           |

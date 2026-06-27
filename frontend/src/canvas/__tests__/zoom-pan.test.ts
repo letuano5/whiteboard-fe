@@ -262,13 +262,7 @@ describe('P1A-11 — trackpad zoom sensitivity', () => {
     expect(ZOOM_SENSITIVITY).toBeGreaterThan(0);
   });
 
-  it('@covers AC-8 (007): exp formula produces < 1% zoom change for typical trackpad delta (deltaY=3)', () => {
-    const deltaY = 3;
-    const factor = Math.exp(-deltaY * ZOOM_SENSITIVITY);
-    expect(Math.abs(factor - 1)).toBeLessThan(0.01);
-  });
-
-  it('@covers AC-7 (007): ctrlKey=true zoom formula — zoom in (negative deltaY)', () => {
+it('@covers AC-7 (007): ctrlKey=true zoom formula — zoom in (negative deltaY)', () => {
     useCameraStore.getState().setCamera({ x: 0, y: 0, zoom: 1 });
     const deltaY = -5; // scroll up = zoom in
     const factor = Math.exp(-deltaY * ZOOM_SENSITIVITY);

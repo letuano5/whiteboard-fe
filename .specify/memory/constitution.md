@@ -124,8 +124,8 @@ spurious diffs during sync.
   and describe intent, not mechanics.
 - **Language split**: all code, comments, identifiers, and commit messages MUST be in English.
   Communication with the user is in Vietnamese.
-- **Shared types discipline**: `src/types/shared.ts` exists in both frontend and backend repos.
-  When the data model changes, both files MUST be updated manually and in the same commit group.
+- **Shared types discipline**: `packages/shared/src/index.ts` is the single source of truth.
+  Both frontend and backend import via `@vdt/shared` workspace link. Never duplicate or copy types manually.
 
 ## Governance
 

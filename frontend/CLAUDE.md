@@ -53,8 +53,8 @@ frontend/
 ├── index.html
 ├── vite.config.ts
 ├── tsconfig.json              ← references tsconfig.app.json + tsconfig.node.json
-├── tsconfig.app.json          ← extends ../../tsconfig.base.json
-├── tsconfig.node.json         ← extends ../../tsconfig.base.json
+├── tsconfig.app.json          ← extends ../tsconfig.base.json
+├── tsconfig.node.json         ← extends ../tsconfig.base.json
 ├── eslint.config.ts
 └── package.json
 ```
