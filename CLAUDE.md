@@ -129,7 +129,7 @@ pnpm --filter whiteboard-be dev
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan at
-`specs/014-realtime-sync-broadcast/plan.md`.
+`specs/015-live-cursor-online-users/plan.md`.
 <!-- SPECKIT END -->
 
 ## Established architectural decisions

@@ -20,10 +20,13 @@ import {
 import TextEditor, { onCanvasDoubleClick } from './tools/text-editor';
 import { onLaserPointerMove, onLaserPointerLeave } from './tools/laser-tool';
 import SvgLayer from './layers/SvgLayer';
+import CursorOverlay from './layers/CursorOverlay';
 import Toolbar from '../components/toolbar/Toolbar';
 import DetailPanel from '../components/detail-panel/DetailPanel';
 import BackToContent from '../components/back-to-content/BackToContent';
 import ShareLinkButton from '../components/ShareLinkButton';
+import OnlineUsersPanel from '../components/ui/OnlineUsersPanel';
+import { emitCursorMove } from '../sync/socket-client';
 import type { HandleId } from '../types/interaction';
 
 function svgLocalPoint(e: React.PointerEvent) {
@@ -44,6 +47,8 @@ export default function Whiteboard() {
   // T001: refs and state for pan/zoom
   const containerRef = useRef<HTMLDivElement>(null);
   const panStart = useRef<{ x: number; y: number } | null>(null);
+  // T014: cursor broadcast throttle (~33ms)
+  const lastCursorSent = useRef<number>(0);
   const [spaceDown, setSpaceDown] = useState(false);
   const [isPanning, setIsPanning] = useState(false);
 
@@ -185,6 +190,15 @@ export default function Whiteboard() {
   }
 
   function handlePointerMove(e: React.PointerEvent<SVGSVGElement>) {
+    // T014: throttled cursor broadcast to peers (~33ms)
+    const now = Date.now();
+    if (now - lastCursorSent.current >= 33) {
+      const rect = (e.currentTarget as SVGSVGElement).getBoundingClientRect();
+      const local = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+      emitCursorMove(screenToWorld(local.x, local.y, camera));
+      lastCursorSent.current = now;
+    }
+
     // T013: pan move (covers AC-5, AC-8, AC-10)
     if (panStart.current) {
       const dx = e.clientX - panStart.current.x;
@@ -300,14 +314,18 @@ export default function Whiteboard() {
         onDoubleClick={handleDoubleClick}
         onHandlePointerDown={handleHandlePointerDown}
       />
+      {/* T015: CursorOverlay — sibling div after SvgLayer, pointer-events: none, zIndex: 10 */}
+      <CursorOverlay />
       {editingElement && (
         <TextEditor element={editingElement} camera={camera} />
       )}
       <Toolbar />
       <DetailPanel />
       <BackToContent containerRef={containerRef} />
-      <div style={{ position: 'absolute', top: '12px', right: '12px', zIndex: 50 }}>
+      {/* T021: Online users panel + share button stacked in top-right */}
+      <div style={{ position: 'absolute', top: '12px', right: '12px', zIndex: 50, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
         <ShareLinkButton />
+        <OnlineUsersPanel />
       </div>
       {tool === 'select' && (
         <div
