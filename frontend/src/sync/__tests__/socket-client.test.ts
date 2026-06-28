@@ -306,3 +306,222 @@ describe('socket-client — viewport-only CURSOR_MOVE (null cursor)', () => {
     expect(entry?.viewport).toEqual({ x: 10, y: 20, zoom: 2 }); // viewport updated
   });
 });
+
+// ─── 018 US1 — Remote Selection Highlight ────────────────────────────────────
+
+describe('socket-client — 018/AC-1 (T007) emit selectedIds in cursor-move on selection change', () => {
+  // @covers AC-1
+  it('when selectedIds in interaction.store changes, cursor-move is emitted with those selectedIds', async () => {
+    const { initSocketClient } = await import('../socket-client');
+    const { useInteractionStore: store } = await import('../../store/interaction.store');
+    initSocketClient('room-abc');
+    mockEmit.mockClear();
+
+    // Simulate selection change
+    store.getState().setSelectedIds(['el-1', 'el-2']);
+
+    // Allow the throttled emit to fire (50 ms window)
+    await new Promise((r) => setTimeout(r, 60));
+
+    expect(mockEmit).toHaveBeenCalledWith(
+      WS_EVENTS.CURSOR_MOVE,
+      expect.objectContaining({ selectedIds: ['el-1', 'el-2'] }),
+    );
+  });
+});
+
+describe('socket-client — 018/AC-1 (T008) incoming cursor-move with selectedIds updates remoteCursors', () => {
+  // @covers AC-1
+  it('CURSOR_MOVE payload with selectedIds merges into remoteCursors[sessionId].selectedIds', async () => {
+    const { initSocketClient } = await import('../socket-client');
+    const { useInteractionStore: store } = await import('../../store/interaction.store');
+    initSocketClient('room-abc');
+
+    const joinHandler = _handlers[WS_EVENTS.USER_JOIN];
+    joinHandler({ presences: [makePeer('peer-2')] });
+
+    const moveHandler = _handlers[WS_EVENTS.CURSOR_MOVE];
+    moveHandler({ sessionId: 'peer-2', cursor: { x: 50, y: 50 }, selectedIds: ['el-abc'] });
+
+    const entry = store.getState().remoteCursors.get('peer-2');
+    expect(entry?.selectedIds).toEqual(['el-abc']);
+  });
+});
+
+describe('socket-client — 018/AC-5 (T013) USER_LEAVE removes selection from remoteCursors', () => {
+  // @covers AC-5
+  it('USER_LEAVE for a sessionId removes that session from remoteCursors, clearing highlights', async () => {
+    const { initSocketClient } = await import('../socket-client');
+    const { useInteractionStore: store } = await import('../../store/interaction.store');
+    initSocketClient('room-abc');
+
+    const joinHandler = _handlers[WS_EVENTS.USER_JOIN];
+    joinHandler({ presences: [makePeer('peer-3')] });
+
+    const moveHandler = _handlers[WS_EVENTS.CURSOR_MOVE];
+    moveHandler({ sessionId: 'peer-3', cursor: { x: 10, y: 10 }, selectedIds: ['el-xyz'] });
+    expect(store.getState().remoteCursors.get('peer-3')?.selectedIds).toEqual(['el-xyz']);
+
+    const leaveHandler = _handlers[WS_EVENTS.USER_LEAVE];
+    leaveHandler({ sessionId: 'peer-3' });
+
+    expect(store.getState().remoteCursors.has('peer-3')).toBe(false);
+  });
+});
+
+// ─── 018 US2 — Remote Draft Preview ──────────────────────────────────────────
+
+describe('socket-client — 018/AC-6 (T017) emit element-draft when draftElements becomes non-empty', () => {
+  // @covers AC-6
+  it('when draftElements in interaction.store changes to non-empty, element-draft is emitted', async () => {
+    const { initSocketClient } = await import('../socket-client');
+    const { useInteractionStore: store } = await import('../../store/interaction.store');
+    initSocketClient('room-abc');
+    mockEmit.mockClear();
+
+    const draftEl = {
+      id: 'draft-1', type: 'rectangle' as const,
+      x: 5, y: 5, width: 80, height: 40, angle: 0, zIndex: 1,
+      props: { strokeColor: '#000', fillColor: '#fff', strokeWidth: 1, strokeStyle: 'solid' as const, opacity: 1 },
+      version: 1, versionNonce: 1, updatedAt: Date.now(),
+      isDeleted: false, groupId: null, frameId: null, locked: false, createdBy: 'test',
+    };
+
+    store.getState().setDraftElements([draftEl]);
+    await new Promise((r) => setTimeout(r, 60));
+
+    expect(mockEmit).toHaveBeenCalledWith(
+      WS_EVENTS.ELEMENT_DRAFT,
+      expect.objectContaining({ elements: [draftEl] }),
+    );
+  });
+});
+
+describe('socket-client — 018/AC-9 (T018) emit element-draft with elements:[] when draftElements clears', () => {
+  // @covers AC-9
+  it('when draftElements returns to [], element-draft is emitted with elements:[]', async () => {
+    const { initSocketClient } = await import('../socket-client');
+    const { useInteractionStore: store } = await import('../../store/interaction.store');
+    initSocketClient('room-abc');
+
+    const draftEl = {
+      id: 'draft-2', type: 'rectangle' as const,
+      x: 0, y: 0, width: 50, height: 50, angle: 0, zIndex: 1,
+      props: { strokeColor: '#000', fillColor: '#fff', strokeWidth: 1, strokeStyle: 'solid' as const, opacity: 1 },
+      version: 1, versionNonce: 1, updatedAt: Date.now(),
+      isDeleted: false, groupId: null, frameId: null, locked: false, createdBy: 'test',
+    };
+
+    store.getState().setDraftElements([draftEl]);
+    await new Promise((r) => setTimeout(r, 60));
+    mockEmit.mockClear();
+
+    store.getState().setDraftElements([]);
+    await new Promise((r) => setTimeout(r, 60));
+
+    expect(mockEmit).toHaveBeenCalledWith(
+      WS_EVENTS.ELEMENT_DRAFT,
+      expect.objectContaining({ elements: [] }),
+    );
+  });
+});
+
+describe('socket-client — 018/AC-6 (T019) incoming element-draft sets remoteDrafts[sessionId]', () => {
+  // @covers AC-6
+  it('incoming element-draft with non-empty elements updates remoteDrafts in interaction.store', async () => {
+    const { initSocketClient } = await import('../socket-client');
+    const { useInteractionStore: store } = await import('../../store/interaction.store');
+    initSocketClient('room-abc');
+
+    const draftEl = {
+      id: 'peer-draft-1', type: 'rectangle' as const,
+      x: 20, y: 20, width: 60, height: 30, angle: 0, zIndex: 1,
+      props: { strokeColor: '#000', fillColor: '#fff', strokeWidth: 1, strokeStyle: 'solid' as const, opacity: 1 },
+      version: 1, versionNonce: 1, updatedAt: Date.now(),
+      isDeleted: false, groupId: null, frameId: null, locked: false, createdBy: 'peer-4',
+    };
+
+    const draftHandler = _handlers[WS_EVENTS.ELEMENT_DRAFT];
+    expect(draftHandler).toBeDefined();
+    draftHandler({ sessionId: 'peer-4', elements: [draftEl] });
+
+    expect(store.getState().remoteDrafts.get('peer-4')).toEqual([draftEl]);
+  });
+});
+
+describe('socket-client — 018/AC-9 (T020) incoming element-draft with elements:[] clears remoteDrafts', () => {
+  // @covers AC-9
+  it('incoming element-draft with elements:[] removes remoteDrafts[sessionId]', async () => {
+    const { initSocketClient } = await import('../socket-client');
+    const { useInteractionStore: store } = await import('../../store/interaction.store');
+    initSocketClient('room-abc');
+
+    const draftEl = {
+      id: 'peer-draft-2', type: 'rectangle' as const,
+      x: 0, y: 0, width: 50, height: 50, angle: 0, zIndex: 1,
+      props: { strokeColor: '#000', fillColor: '#fff', strokeWidth: 1, strokeStyle: 'solid' as const, opacity: 1 },
+      version: 1, versionNonce: 1, updatedAt: Date.now(),
+      isDeleted: false, groupId: null, frameId: null, locked: false, createdBy: 'peer-5',
+    };
+
+    const draftHandler = _handlers[WS_EVENTS.ELEMENT_DRAFT];
+    draftHandler({ sessionId: 'peer-5', elements: [draftEl] });
+    expect(store.getState().remoteDrafts.has('peer-5')).toBe(true);
+
+    draftHandler({ sessionId: 'peer-5', elements: [] });
+    expect(store.getState().remoteDrafts.has('peer-5')).toBe(false);
+  });
+});
+
+describe('socket-client — 018/AC-10 (T021) incoming element-update with sessionId clears remoteDrafts', () => {
+  // @covers AC-10
+  it('element-update with sessionId field clears remoteDrafts[sessionId]', async () => {
+    const { initSocketClient } = await import('../socket-client');
+    const { useInteractionStore: store } = await import('../../store/interaction.store');
+    initSocketClient('room-abc');
+
+    const draftEl = {
+      id: 'peer-commit-1', type: 'rectangle' as const,
+      x: 0, y: 0, width: 50, height: 50, angle: 0, zIndex: 1,
+      props: { strokeColor: '#000', fillColor: '#fff', strokeWidth: 1, strokeStyle: 'solid' as const, opacity: 1 },
+      version: 1, versionNonce: 1, updatedAt: Date.now(),
+      isDeleted: false, groupId: null, frameId: null, locked: false, createdBy: 'peer-6',
+    };
+
+    const draftHandler = _handlers[WS_EVENTS.ELEMENT_DRAFT];
+    draftHandler({ sessionId: 'peer-6', elements: [draftEl] });
+    expect(store.getState().remoteDrafts.has('peer-6')).toBe(true);
+
+    // Commit arrives
+    const updateHandler = _handlers[WS_EVENTS.ELEMENT_UPDATE];
+    updateHandler({ elements: [{ ...draftEl, x: 100 }], sessionId: 'peer-6' });
+
+    expect(store.getState().remoteDrafts.has('peer-6')).toBe(false);
+  });
+});
+
+describe('socket-client — 018/AC-5 (T022) USER_LEAVE also clears remoteDrafts', () => {
+  // @covers AC-5
+  it('USER_LEAVE for a sessionId deletes that session from remoteDrafts', async () => {
+    const { initSocketClient } = await import('../socket-client');
+    const { useInteractionStore: store } = await import('../../store/interaction.store');
+    initSocketClient('room-abc');
+
+    const draftEl = {
+      id: 'peer-leave-draft', type: 'rectangle' as const,
+      x: 0, y: 0, width: 50, height: 50, angle: 0, zIndex: 1,
+      props: { strokeColor: '#000', fillColor: '#fff', strokeWidth: 1, strokeStyle: 'solid' as const, opacity: 1 },
+      version: 1, versionNonce: 1, updatedAt: Date.now(),
+      isDeleted: false, groupId: null, frameId: null, locked: false, createdBy: 'peer-7',
+    };
+
+    const draftHandler = _handlers[WS_EVENTS.ELEMENT_DRAFT];
+    draftHandler({ sessionId: 'peer-7', elements: [draftEl] });
+    expect(store.getState().remoteDrafts.has('peer-7')).toBe(true);
+
+    const leaveHandler = _handlers[WS_EVENTS.USER_LEAVE];
+    leaveHandler({ sessionId: 'peer-7' });
+
+    expect(store.getState().remoteDrafts.has('peer-7')).toBe(false);
+  });
+});

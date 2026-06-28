@@ -111,6 +111,8 @@ export default function SvgLayer({
   const laserFading = useInteractionStore((s) => s.laserFading);
   const marquee = useInteractionStore((s) => s.marquee);
   const draftElements = useInteractionStore((s) => s.draftElements);
+  const remoteCursors = useInteractionStore((s) => s.remoteCursors);
+  const remoteDrafts = useInteractionStore((s) => s.remoteDrafts);
 
   const selectedElement =
     selectedIds.length === 1
@@ -170,6 +172,30 @@ export default function SvgLayer({
             </g>
           );
         })}
+        {/* Remote draft ghosts — 50% opacity, colored 1 px border; rendered below local drafts */}
+        {Array.from(remoteDrafts.entries()).flatMap(([sessionId, draftEls]) => {
+          const peer = remoteCursors.get(sessionId);
+          const peerColor = peer?.color ?? '#888888';
+          return draftEls.map((draftEl) => {
+            const util = getShapeUtil(draftEl.type);
+            if (!util) return null;
+            return (
+              <g key={`remote-draft-${sessionId}-${draftEl.id}`} opacity={0.5} style={{ pointerEvents: 'none' }}>
+                {util.render(draftEl)}
+                <rect
+                  x={draftEl.x}
+                  y={draftEl.y}
+                  width={draftEl.width}
+                  height={draftEl.height}
+                  fill="none"
+                  stroke={peerColor}
+                  strokeWidth={1}
+                  style={{ pointerEvents: 'none' }}
+                />
+              </g>
+            );
+          });
+        })}
         {draftElement &&
           (() => {
             const util = getShapeUtil(draftElement.type);
@@ -186,6 +212,28 @@ export default function SvgLayer({
             </g>
           );
         })}
+        {/* Remote selection highlights — solid colored border, no handles; rendered above local drafts */}
+        {Array.from(remoteCursors.values()).flatMap((peer) =>
+          peer.selectedIds
+            .map((elId) => {
+              const el = elements.find((e) => e.id === elId && !e.isDeleted);
+              if (!el) return null;
+              return (
+                <rect
+                  key={`remote-sel-${peer.sessionId}-${elId}`}
+                  x={el.x}
+                  y={el.y}
+                  width={el.width}
+                  height={el.height}
+                  fill="none"
+                  stroke={peer.color}
+                  strokeWidth={1.5}
+                  style={{ pointerEvents: 'none' }}
+                />
+              );
+            })
+            .filter((node): node is React.ReactElement => node !== null),
+        )}
         {/* Single selection overlay with handles */}
         {overlayElement && !editingId && draftElements.length === 0 && (
           <SelectionOverlay element={overlayElement} onHandlePointerDown={onHandlePointerDown} />

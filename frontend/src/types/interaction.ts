@@ -45,6 +45,7 @@ export interface InteractionState {
   laserTrail: Point[];
   laserFading: boolean;
   remoteCursors: Map<string, Presence>;
+  remoteDrafts: Map<string, Element[]>;
   clipboard: Element[] | null;
   pasteOffset: number;
 }

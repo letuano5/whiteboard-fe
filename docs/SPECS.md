@@ -403,6 +403,7 @@ applyRemoteElements(incoming: Element[])  // LWW theo version/versionNonce; bỏ
 ### [P2.5-04] Thấy selection của người khác
 
 - [ ] `selectedIds` trong presence; shape người khác đang chọn hiện viền màu của họ.
+- [ ] Khi user khác thay đổi element trên canvas/document, client hiện tại phải thấy được thay đổi realtime đó. Thay đổi realtime có thể là draft/pending change, chưa cần coi là thay đổi đã commit vào document. Chưa cần xử lý conflict phức tạp; mục tiêu chính là hiển thị được selection và preview thay đổi của người khác.
 
 ---
 

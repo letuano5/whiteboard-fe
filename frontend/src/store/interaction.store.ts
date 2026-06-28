@@ -23,6 +23,7 @@ const DEFAULT_STATE: InteractionState = {
   laserTrail: [],
   laserFading: false,
   remoteCursors: new Map(),
+  remoteDrafts: new Map(),
   clipboard: null,
   pasteOffset: 0,
 };
@@ -42,6 +43,7 @@ interface InteractionActions {
   setLaserTrail: (trail: Point[]) => void;
   setLaserFading: (v: boolean) => void;
   setRemoteCursors: (cursors: Map<string, Presence>) => void;
+  setRemoteDrafts: (drafts: Map<string, Element[]>) => void;
   setClipboard: (els: Element[] | null) => void;
   setPasteOffset: (n: number) => void;
   reset: () => void;
@@ -64,7 +66,8 @@ export const useInteractionStore = create<InteractionState & InteractionActions>
   setLaserTrail: (laserTrail) => set({ laserTrail }),
   setLaserFading: (laserFading) => set({ laserFading }),
   setRemoteCursors: (remoteCursors) => set({ remoteCursors }),
+  setRemoteDrafts: (remoteDrafts) => set({ remoteDrafts }),
   setClipboard: (clipboard) => set({ clipboard }),
   setPasteOffset: (pasteOffset) => set({ pasteOffset }),
-  reset: () => set({ ...DEFAULT_STATE, remoteCursors: new Map() }),
+  reset: () => set({ ...DEFAULT_STATE, remoteCursors: new Map(), remoteDrafts: new Map() }),
 }));

@@ -30,9 +30,9 @@ describe('WS_EVENTS', () => {
     expect(WS_EVENTS.ROOM_RESYNC).toBe('room-resync');
   });
 
-  it('has 10 distinct event values', () => {
+  it('has 11 distinct event values', () => {
     const values = Object.values(WS_EVENTS);
-    expect(values).toHaveLength(10);
-    expect(new Set(values).size).toBe(10);
+    expect(values).toHaveLength(11);
+    expect(new Set(values).size).toBe(11);
   });
 });

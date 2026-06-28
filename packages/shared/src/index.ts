@@ -85,6 +85,7 @@ export const WS_EVENTS = {
   ELEMENT_CREATE: 'element-create',
   ELEMENT_UPDATE: 'element-update',
   ELEMENT_DELETE: 'element-delete',
+  ELEMENT_DRAFT: 'element-draft',
   CURSOR_MOVE: 'cursor-move',
   USER_JOIN: 'user-join',
   USER_LEAVE: 'user-leave',

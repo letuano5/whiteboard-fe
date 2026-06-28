@@ -231,6 +231,185 @@ describe('SvgLayer — Laser trail rendering (011-laser-pointer)', () => {
   });
 });
 
+describe('SvgLayer — 018/US1 Remote Selection Highlight', () => {
+  function makePeerPresence(sessionId: string, color: string, selectedIds: string[]) {
+    return {
+      sessionId,
+      name: 'Peer',
+      color,
+      cursor: null as null,
+      selectedIds,
+      status: 'active' as const,
+    };
+  }
+
+  // @covers AC-1
+  it('T009: renders a solid colored rect border for a single remote selection (AC-1)', () => {
+    const el = makeElement({ id: 'el-1' });
+    const peers = new Map([
+      ['peer-a', makePeerPresence('peer-a', '#ef4444', ['el-1'])],
+    ]);
+    useInteractionStore.setState({ remoteCursors: peers, remoteDrafts: new Map() });
+
+    const { container } = render(<SvgLayer elements={[el]} camera={camera} />);
+
+    // Expect a rect with stroke matching peer color (no fill, no dashes)
+    const remoteHighlights = Array.from(container.querySelectorAll('rect')).filter(
+      (r) => r.getAttribute('stroke') === '#ef4444',
+    );
+    expect(remoteHighlights.length).toBeGreaterThanOrEqual(1);
+    expect(remoteHighlights[0].getAttribute('fill')).toBe('none');
+    expect(remoteHighlights[0].getAttribute('stroke-dasharray')).toBeFalsy();
+  });
+
+  // @covers AC-2
+  it('T010: renders colored borders for each of a peer\'s multiple selected elements (AC-2)', () => {
+    const el1 = makeElement({ id: 'el-A', x: 0, y: 0 });
+    const el2 = makeElement({ id: 'el-B', x: 200, y: 200 });
+    const peers = new Map([
+      ['peer-b', makePeerPresence('peer-b', '#10b981', ['el-A', 'el-B'])],
+    ]);
+    useInteractionStore.setState({ remoteCursors: peers, remoteDrafts: new Map() });
+
+    const { container } = render(<SvgLayer elements={[el1, el2]} camera={camera} />);
+
+    const remoteHighlights = Array.from(container.querySelectorAll('rect')).filter(
+      (r) => r.getAttribute('stroke') === '#10b981',
+    );
+    expect(remoteHighlights.length).toBe(2);
+  });
+
+  // @covers AC-3
+  it('T011: renders simultaneous selections from two peers in their respective colors (AC-3)', () => {
+    const el1 = makeElement({ id: 'el-X', x: 0, y: 0 });
+    const el2 = makeElement({ id: 'el-Y', x: 200, y: 200 });
+    const peers = new Map([
+      ['peer-c', makePeerPresence('peer-c', '#f59e0b', ['el-X'])],
+      ['peer-d', makePeerPresence('peer-d', '#6366f1', ['el-Y'])],
+    ]);
+    useInteractionStore.setState({ remoteCursors: peers, remoteDrafts: new Map() });
+
+    const { container } = render(<SvgLayer elements={[el1, el2]} camera={camera} />);
+
+    const amberHighlights = Array.from(container.querySelectorAll('rect')).filter(
+      (r) => r.getAttribute('stroke') === '#f59e0b',
+    );
+    const indigoHighlights = Array.from(container.querySelectorAll('rect')).filter(
+      (r) => r.getAttribute('stroke') === '#6366f1',
+    );
+    expect(amberHighlights.length).toBeGreaterThanOrEqual(1);
+    expect(indigoHighlights.length).toBeGreaterThanOrEqual(1);
+  });
+
+  // @covers AC-4
+  it('T012: no remote highlight rect when peer selectedIds is empty (AC-4)', () => {
+    const el = makeElement({ id: 'el-Z' });
+    const peers = new Map([
+      ['peer-e', makePeerPresence('peer-e', '#ef4444', [])],
+    ]);
+    useInteractionStore.setState({ remoteCursors: peers, remoteDrafts: new Map() });
+
+    const { container } = render(<SvgLayer elements={[el]} camera={camera} />);
+
+    const remoteHighlights = Array.from(container.querySelectorAll('rect')).filter(
+      (r) => r.getAttribute('stroke') === '#ef4444',
+    );
+    expect(remoteHighlights.length).toBe(0);
+  });
+
+  it('no remote highlight when remoteCursors is empty', () => {
+    const el = makeElement({ id: 'el-1' });
+    useInteractionStore.setState({ remoteCursors: new Map(), remoteDrafts: new Map() });
+
+    const { container } = render(<SvgLayer elements={[el]} camera={camera} />);
+
+    // Remote highlights are fill="none" rects with a stroke that isn't the local selection blue (#3b82f6).
+    // When remoteCursors is empty, no such rect should exist.
+    const remoteHighlights = Array.from(container.querySelectorAll('rect')).filter(
+      (r) =>
+        r.getAttribute('fill') === 'none' &&
+        r.getAttribute('stroke') !== null &&
+        r.getAttribute('stroke') !== '#3b82f6',
+    );
+    expect(remoteHighlights.length).toBe(0);
+  });
+
+  it('T016 edge: skips highlight for remote selectedId that no longer exists in elements', () => {
+    const el = makeElement({ id: 'el-exists' });
+    const peers = new Map([
+      ['peer-f', makePeerPresence('peer-f', '#ef4444', ['el-deleted'])],
+    ]);
+    useInteractionStore.setState({ remoteCursors: peers, remoteDrafts: new Map() });
+
+    const { container } = render(<SvgLayer elements={[el]} camera={camera} />);
+
+    const remoteHighlights = Array.from(container.querySelectorAll('rect')).filter(
+      (r) => r.getAttribute('stroke') === '#ef4444',
+    );
+    expect(remoteHighlights.length).toBe(0);
+  });
+});
+
+describe('SvgLayer — 018/US2 Remote Draft Ghost', () => {
+  function makeDraftEl(id: string): Element {
+    return {
+      id,
+      type: 'rectangle',
+      x: 50, y: 50, width: 120, height: 60,
+      angle: 0, zIndex: 2,
+      props: { strokeColor: '#000', fillColor: '#aaa', strokeWidth: 1, strokeStyle: 'solid', opacity: 1 },
+      version: 2, versionNonce: 99, updatedAt: Date.now(),
+      isDeleted: false, groupId: null, frameId: null, locked: false, createdBy: 'peer-g',
+    };
+  }
+
+  // @covers AC-6
+  it('T023: renders remote draft ghost at reduced opacity (AC-6)', () => {
+    const draftEl = makeDraftEl('peer-draft-el');
+    const remoteDrafts = new Map([['peer-g', [draftEl]]]);
+    const peers = new Map([
+      ['peer-g', { sessionId: 'peer-g', name: 'G', color: '#22c55e', cursor: null, selectedIds: [], status: 'active' as const }],
+    ]);
+    useInteractionStore.setState({ remoteCursors: peers, remoteDrafts });
+
+    const { container } = render(<SvgLayer elements={[]} camera={camera} />);
+
+    // The ghost <g> must have opacity 0.5
+    const ghostGroups = Array.from(container.querySelectorAll('g[opacity="0.5"]'));
+    expect(ghostGroups.length).toBeGreaterThanOrEqual(1);
+  });
+
+  // @covers AC-7, AC-10
+  it('T024: when remoteDrafts[sessionId] is removed, ghost elements disappear (AC-7/AC-10)', () => {
+    const draftEl = makeDraftEl('peer-draft-el-2');
+    const peers = new Map([
+      ['peer-h', { sessionId: 'peer-h', name: 'H', color: '#f97316', cursor: null, selectedIds: [], status: 'active' as const }],
+    ]);
+
+    // First render with a draft
+    useInteractionStore.setState({ remoteCursors: peers, remoteDrafts: new Map([['peer-h', [draftEl]]]) });
+    const { container, rerender } = render(<SvgLayer elements={[]} camera={camera} />);
+    const ghostGroupsBefore = Array.from(container.querySelectorAll('g[opacity="0.5"]'));
+    expect(ghostGroupsBefore.length).toBeGreaterThanOrEqual(1);
+
+    // Remove draft (commit or cancel)
+    useInteractionStore.setState({ remoteDrafts: new Map() });
+    rerender(<SvgLayer elements={[]} camera={camera} />);
+
+    const ghostGroupsAfter = Array.from(container.querySelectorAll('g[opacity="0.5"]'));
+    expect(ghostGroupsAfter.length).toBe(0);
+  });
+
+  it('renders no ghost when remoteDrafts is empty', () => {
+    useInteractionStore.setState({ remoteDrafts: new Map(), remoteCursors: new Map() });
+
+    const { container } = render(<SvgLayer elements={[]} camera={camera} />);
+
+    const ghostGroups = Array.from(container.querySelectorAll('g[opacity="0.5"]'));
+    expect(ghostGroups.length).toBe(0);
+  });
+});
+
 describe('SvgLayer — P1A-03 Delete rendering', () => {
   // @covers AC-10 (002-move-resize-delete)
   it('does not render a soft-deleted element even when it is selected', () => {

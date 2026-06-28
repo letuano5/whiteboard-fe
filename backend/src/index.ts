@@ -68,8 +68,8 @@ io.on('connection', (socket: Socket) => {
 
   socket.on(
     WS_EVENTS.ELEMENT_UPDATE,
-    (payload: { roomId: string; elements: Element[] }) => {
-      const { roomId, elements } = payload;
+    (payload: { roomId: string; elements: Element[]; sessionId?: string }) => {
+      const { roomId, elements, sessionId } = payload;
 
       // Upsert into in-memory store (last-write-wins by element id)
       if (!roomElements.has(roomId)) {
@@ -80,21 +80,32 @@ io.on('connection', (socket: Socket) => {
         elMap.set(el.id, el);
       }
 
-      socket.to(roomId).emit(WS_EVENTS.ELEMENT_UPDATE, { elements });
+      // Forward sessionId so peers can clear that peer's remoteDraft on commit
+      socket.to(roomId).emit(WS_EVENTS.ELEMENT_UPDATE, { elements, sessionId });
     },
   );
 
-  // Relay cursor + viewport to the rest of the room — do NOT store it
+  // Relay in-progress draft element state to peers without persisting it
+  socket.on(
+    WS_EVENTS.ELEMENT_DRAFT,
+    (payload: { roomId: string; sessionId: string; elements: Element[] }) => {
+      const { roomId, sessionId, elements } = payload;
+      socket.to(roomId).emit(WS_EVENTS.ELEMENT_DRAFT, { sessionId, elements });
+    },
+  );
+
+  // Relay cursor + viewport + selectedIds to the rest of the room — do NOT store it
   socket.on(
     WS_EVENTS.CURSOR_MOVE,
     (payload: {
       roomId: string;
       sessionId: string;
-      cursor: { x: number; y: number };
+      cursor: { x: number; y: number } | null;
       viewport?: { x: number; y: number; zoom: number };
+      selectedIds?: string[];
     }) => {
-      const { roomId, sessionId, cursor, viewport } = payload;
-      socket.to(roomId).emit(WS_EVENTS.CURSOR_MOVE, { sessionId, cursor, viewport });
+      const { roomId, sessionId, cursor, viewport, selectedIds } = payload;
+      socket.to(roomId).emit(WS_EVENTS.CURSOR_MOVE, { sessionId, cursor, viewport, selectedIds });
     },
   );
 
