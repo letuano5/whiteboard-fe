@@ -7,6 +7,7 @@ import {
   createElements,
   type ElementDraft,
 } from '../../store/mutation-pipeline';
+import { findNearestSnap, parseBinding } from '../shapes/arrow-binding';
 import { getShapeUtil } from '../shapes';
 import { rotatePoint, unrotatePoint } from '../../utils/geometry';
 import type { Point, Rect } from '../../types/geometry';
@@ -535,15 +536,75 @@ export function onSelectPointerUp(_worldPt: Point): void {
     if (isRotating) {
       patchElement(draggingId, { angle: draftElement.angle });
     } else if (resizeSession) {
-      patchElement(draggingId, {
-        x: draftElement.x,
-        y: draftElement.y,
-        width: draftElement.width,
-        height: draftElement.height,
-        ...(draftElement.props.points || draftElement.type === 'text'
-          ? { props: draftElement.props }
-          : {}),
-      });
+      // T022: Arrow endpoint binding snap — check if resizing an arrow endpoint
+      if (draftElement.type === 'arrow' && draftElement.props.points) {
+        const elements = useElementsStore.getState().elements;
+        const points = draftElement.props.points;
+        const existingEl = elements.find((e) => e.id === draggingId);
+        const originalPoints = existingEl?.props.points;
+
+        // Detect which endpoint moved (compare draft points vs original)
+        let movedIdx: 0 | (typeof points.length extends 0 ? never : number) = -1;
+        if (originalPoints && points.length > 0) {
+          if (
+            Math.abs(points[0][0] - (originalPoints[0]?.[0] ?? 0)) > 0.5 ||
+            Math.abs(points[0][1] - (originalPoints[0]?.[1] ?? 0)) > 0.5
+          ) {
+            movedIdx = 0;
+          } else {
+            movedIdx = points.length - 1;
+          }
+        }
+
+        let resolvedProps = { ...draftElement.props };
+
+        if (movedIdx >= 0) {
+          const movedPt = { x: points[movedIdx][0], y: points[movedIdx][1] };
+          const snap = findNearestSnap(movedPt, elements, draggingId);
+          const newPoints: [number, number][] = points.map((p) => [p[0], p[1]]);
+
+          if (snap) {
+            newPoints[movedIdx] = [snap.x, snap.y];
+            const bindingStr = `${snap.elementId}:${snap.pointKey}`;
+            if (movedIdx === 0) {
+              resolvedProps = { ...resolvedProps, points: newPoints, startBinding: bindingStr };
+            } else {
+              resolvedProps = { ...resolvedProps, points: newPoints, endBinding: bindingStr };
+            }
+          } else {
+            // No snap — release binding for the moved endpoint
+            if (movedIdx === 0) {
+              const parsed = parseBinding(resolvedProps.startBinding);
+              if (parsed) {
+                resolvedProps = { ...resolvedProps, startBinding: undefined };
+              }
+            } else {
+              const parsed = parseBinding(resolvedProps.endBinding);
+              if (parsed) {
+                resolvedProps = { ...resolvedProps, endBinding: undefined };
+              }
+            }
+          }
+        }
+
+        patchElement(draggingId, {
+          x: draftElement.x,
+          y: draftElement.y,
+          width: draftElement.width,
+          height: draftElement.height,
+          props: resolvedProps,
+        });
+      } else {
+        patchElement(draggingId, {
+          x: draftElement.x,
+          y: draftElement.y,
+          width: draftElement.width,
+          height: draftElement.height,
+          ...(draftElement.props.points || draftElement.type === 'text'
+            ? { props: draftElement.props }
+            : {}),
+        });
+      }
     } else {
       patchElement(draggingId, {
         x: draftElement.x,

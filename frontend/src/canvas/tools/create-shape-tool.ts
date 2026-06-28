@@ -3,6 +3,8 @@ import type { Point } from '../../types/geometry';
 import type { ToolId } from '../../types/interaction';
 import { useInteractionStore } from '../../store/interaction.store';
 import { createElement, type ElementDraft } from '../../store/mutation-pipeline';
+import { useElementsStore } from '../../store/elements.store';
+import { findNearestSnap } from '../shapes/arrow-binding';
 
 export const SHAPE_TOOLS = ['rectangle', 'ellipse', 'line', 'arrow', 'text'] as const;
 export type ShapeToolType = (typeof SHAPE_TOOLS)[number];
@@ -119,8 +121,35 @@ export function onShapePointerUp(
 
   if (dragStart && isValidSize(type, dragStart, worldPt)) {
     const partial = buildDraftFromPoints(type, dragStart, worldPt);
+
+    // T021: Arrow binding snap — check both endpoints against nearby shapes
+    let startBinding: string | undefined;
+    let endBinding: string | undefined;
+    let resolvedProps = partial.props;
+
+    if (type === 'arrow' && partial.props.points) {
+      const elements = useElementsStore.getState().elements;
+      const startPt = { x: partial.props.points[0][0], y: partial.props.points[0][1] };
+      const endPt = { x: partial.props.points[1][0], y: partial.props.points[1][1] };
+
+      const snapStart = findNearestSnap(startPt, elements, '__draft__');
+      const snapEnd = findNearestSnap(endPt, elements, '__draft__');
+
+      const newPoints: [number, number][] = [...partial.props.points.map((p) => [p[0], p[1]] as [number, number])];
+      if (snapStart) {
+        startBinding = `${snapStart.elementId}:${snapStart.pointKey}`;
+        newPoints[0] = [snapStart.x, snapStart.y];
+      }
+      if (snapEnd) {
+        endBinding = `${snapEnd.elementId}:${snapEnd.pointKey}`;
+        newPoints[1] = [snapEnd.x, snapEnd.y];
+      }
+      resolvedProps = { ...partial.props, points: newPoints, startBinding, endBinding };
+    }
+
     const draft: ElementDraft = {
       ...partial,
+      props: resolvedProps,
       angle: 0,
       groupId: null,
       frameId: null,

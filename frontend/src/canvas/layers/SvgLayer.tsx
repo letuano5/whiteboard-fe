@@ -2,6 +2,7 @@ import type { Camera, Element } from '../../types/shared';
 import type { HandleId, ResizeHandleId } from '../../types/interaction';
 import { getShapeUtil } from '../shapes';
 import { useInteractionStore } from '../../store/interaction.store';
+import { findNearestSnap, ARROW_SNAP_THRESHOLD } from '../shapes/arrow-binding';
 
 const ROTATE_HANDLE_OFFSET = 24;
 
@@ -91,6 +92,7 @@ interface SvgLayerProps {
   onPointerUp?: (e: React.PointerEvent<SVGSVGElement>) => void;
   onPointerLeave?: (e: React.PointerEvent<SVGSVGElement>) => void;
   onDoubleClick?: (e: React.MouseEvent<SVGSVGElement>) => void;
+  onContextMenu?: (e: React.MouseEvent<SVGSVGElement>) => void;
   onHandlePointerDown?: (handle: HandleId, e: React.PointerEvent<SVGCircleElement>) => void;
 }
 
@@ -104,6 +106,7 @@ export default function SvgLayer({
   onPointerUp,
   onPointerLeave,
   onDoubleClick,
+  onContextMenu,
   onHandlePointerDown,
 }: SvgLayerProps) {
   const selectedIds = useInteractionStore((s) => s.selectedIds);
@@ -128,6 +131,25 @@ export default function SvgLayer({
   const visible = elements
     .filter((el) => !el.isDeleted && el.id !== draftElement?.id && !draftElementIds.has(el.id))
     .sort((a, b) => a.zIndex - b.zIndex);
+
+  // T023: Arrow snap indicators — computed purely from draftElement and elements list (no state)
+  const tool = useInteractionStore((s) => s.tool);
+  const snapIndicators: { x: number; y: number }[] = [];
+  if (tool === 'arrow' && draftElement?.props.points) {
+    const pts = draftElement.props.points;
+    const endpoints = [
+      { x: pts[0][0], y: pts[0][1] },
+      { x: pts[pts.length - 1][0], y: pts[pts.length - 1][1] },
+    ];
+    for (const ep of endpoints) {
+      const snap = findNearestSnap(ep, elements, draftElement.id);
+      if (snap) {
+        snapIndicators.push({ x: snap.x, y: snap.y });
+      }
+    }
+    // Suppress unused warning for ARROW_SNAP_THRESHOLD (used implicitly via findNearestSnap)
+    void ARROW_SNAP_THRESHOLD;
+  }
 
   // Multi-select union bounding box
   let multiSelectRect: { x: number; y: number; w: number; h: number } | null = null;
@@ -161,6 +183,7 @@ export default function SvgLayer({
       onPointerUp={onPointerUp}
       onPointerLeave={onPointerLeave}
       onDoubleClick={onDoubleClick}
+      onContextMenu={onContextMenu}
     >
       <g transform={`scale(${camera.zoom}) translate(${-camera.x} ${-camera.y})`}>
         {visible.map((el) => {
@@ -281,6 +304,20 @@ export default function SvgLayer({
             }}
           />
         )}
+        {/* T023: Snap indicator rings for arrow endpoint binding */}
+        {snapIndicators.map((pt, i) => (
+          <circle
+            key={`snap-indicator-${i}`}
+            cx={pt.x}
+            cy={pt.y}
+            r={6}
+            fill="none"
+            stroke="#3b82f6"
+            strokeWidth={2}
+            opacity={0.7}
+            style={{ pointerEvents: 'none' }}
+          />
+        ))}
       </g>
     </svg>
   );

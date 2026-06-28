@@ -1,6 +1,7 @@
 import type React from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { useElementsStore, useInteractionStore, useCameraStore, useHistoryStore } from '../store';
+import ContextMenu from '../components/context-menu/ContextMenu';
 import { screenToWorld, ZOOM_SENSITIVITY } from '../utils/camera';
 import {
   isShapeTool,
@@ -29,6 +30,7 @@ import ShareLinkButton from '../components/ShareLinkButton';
 import OnlineUsersPanel from '../components/ui/OnlineUsersPanel';
 import { emitCursorMove } from '../sync/socket-client';
 import type { HandleId } from '../types/interaction';
+import { getShapeUtil } from './shapes';
 
 function svgLocalPoint(e: React.PointerEvent) {
   const rect = (e.currentTarget as SVGSVGElement).getBoundingClientRect();
@@ -41,6 +43,7 @@ export default function Whiteboard() {
   const tool = useInteractionStore((s) => s.tool);
   const draftElement = useInteractionStore((s) => s.draftElement);
   const editingId = useInteractionStore((s) => s.editingId);
+  const selectedIds = useInteractionStore((s) => s.selectedIds);
   const editingElement = editingId
     ? elements.find((el) => el.id === editingId && !el.isDeleted) ?? null
     : null;
@@ -52,6 +55,9 @@ export default function Whiteboard() {
   const lastCursorSent = useRef<number>(0);
   const [spaceDown, setSpaceDown] = useState(false);
   const [isPanning, setIsPanning] = useState(false);
+
+  // T011: context menu state
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; id: string } | null>(null);
 
   // T008/T013: non-passive wheel listener — pan or zoom based on ctrlKey (AC-6, AC-7, AC-8, AC-12)
   useEffect(() => {
@@ -268,6 +274,25 @@ export default function Whiteboard() {
     cancelShapeDraw();
   }
 
+  // T011: right-click context menu — hit-test elements top-to-bottom by zIndex descending
+  function handleContextMenu(e: React.MouseEvent<SVGSVGElement>) {
+    e.preventDefault();
+    const rect = (e.currentTarget as SVGSVGElement).getBoundingClientRect();
+    const worldPt = screenToWorld(e.clientX - rect.left, e.clientY - rect.top, camera);
+    const visible = elements.filter((el) => !el.isDeleted).sort((a, b) => b.zIndex - a.zIndex);
+
+    for (const el of visible) {
+      const util = getShapeUtil(el.type);
+      if (!util) continue;
+      if (util.hitTest(el, worldPt.x, worldPt.y)) {
+        setContextMenu({ x: e.clientX, y: e.clientY, id: el.id });
+        return;
+      }
+    }
+    // Click on empty canvas — close any open menu
+    setContextMenu(null);
+  }
+
   function handleDoubleClick(e: React.MouseEvent<SVGSVGElement>) {
     if (tool !== 'select') return;
     if (editingId) return;
@@ -318,10 +343,23 @@ export default function Whiteboard() {
         onPointerUp={handlePointerUp}
         onPointerLeave={handlePointerLeave}
         onDoubleClick={handleDoubleClick}
+        onContextMenu={handleContextMenu}
         onHandlePointerDown={handleHandlePointerDown}
       />
       {/* T015: CursorOverlay — sibling div after SvgLayer, pointer-events: none, zIndex: 10 */}
       <CursorOverlay />
+      {/* T012: Context menu — rendered above all canvas elements */}
+      {contextMenu && (
+        <ContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          selectedId={contextMenu.id}
+          selectedCount={
+            selectedIds.includes(contextMenu.id) ? selectedIds.length : 1
+          }
+          onClose={() => setContextMenu(null)}
+        />
+      )}
       {editingElement && (
         <TextEditor element={editingElement} camera={camera} />
       )}

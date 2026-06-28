@@ -355,3 +355,143 @@ describe('014/AC-14: post-drag convergence', () => {
     expect(useElementsStore.getState().elements.find((e) => e.id === 'el-1')!.x).toBe(200);
   });
 });
+
+// ── 019 feature: Z-order & Arrow Binding sync tests ─────────────────────────
+
+// @covers AC-14
+describe('AC-14 (019): remote z-order change updates element zIndex in store', () => {
+  it('AC-14: applyRemoteElements with updated zIndex reflects new stacking order', () => {
+    const local = makeEl({ id: 'shape-z', zIndex: 1, version: 1, versionNonce: 500 });
+    useElementsStore.setState({ elements: [local] });
+
+    // Remote has new zIndex = 5 (result of bringToFront on another client)
+    const remote = makeEl({ id: 'shape-z', zIndex: 5, version: 2, versionNonce: 500 });
+    applyRemoteElements([remote]);
+
+    const updated = useElementsStore.getState().elements.find((e) => e.id === 'shape-z')!;
+    expect(updated.zIndex).toBe(5);
+  });
+
+  it('AC-14: dispatchMutationEvent is fired after remote zIndex update', () => {
+    const spy = vi.spyOn(pipeline, 'dispatchMutationEvent');
+    const local = makeEl({ id: 'shape-z2', zIndex: 1, version: 1, versionNonce: 500 });
+    useElementsStore.setState({ elements: [local] });
+
+    const remote = makeEl({ id: 'shape-z2', zIndex: 10, version: 2, versionNonce: 500 });
+    applyRemoteElements([remote]);
+
+    expect(spy).toHaveBeenCalledWith(expect.objectContaining({ type: 'update' }));
+    spy.mockRestore();
+  });
+});
+
+// @covers AC-15
+describe('AC-15 (019): remote arrow binding change updates binding state in store', () => {
+  it('AC-15: applyRemoteElements with new endBinding reflects updated binding string', () => {
+    const local: Element = {
+      id: 'arrow-el',
+      type: 'arrow',
+      x: 0, y: 0, width: 100, height: 100, angle: 0, zIndex: 2,
+      version: 1, versionNonce: 500, updatedAt: 0, isDeleted: false,
+      groupId: null, frameId: null, locked: false, createdBy: 'test',
+      props: {
+        strokeColor: '#000', fillColor: 'transparent', strokeWidth: 2,
+        strokeStyle: 'solid', opacity: 1,
+        points: [[0, 0], [100, 100]],
+      },
+    };
+    useElementsStore.setState({ elements: [local] });
+
+    const remote: Element = {
+      ...local,
+      version: 2,
+      versionNonce: 500,
+      props: {
+        ...local.props,
+        endBinding: 'target-shape:center',
+        points: [[0, 0], [50, 50]],
+      },
+    };
+    applyRemoteElements([remote]);
+
+    const updated = useElementsStore.getState().elements.find((e) => e.id === 'arrow-el')!;
+    expect(updated.props.endBinding).toBe('target-shape:center');
+    expect(updated.props.points![1][0]).toBe(50);
+    expect(updated.props.points![1][1]).toBe(50);
+  });
+
+  it('AC-15: applyRemoteElements with endBinding set to null releases the binding', () => {
+    const local: Element = {
+      id: 'arrow-unbound',
+      type: 'arrow',
+      x: 0, y: 0, width: 100, height: 100, angle: 0, zIndex: 2,
+      version: 1, versionNonce: 500, updatedAt: 0, isDeleted: false,
+      groupId: null, frameId: null, locked: false, createdBy: 'test',
+      props: {
+        strokeColor: '#000', fillColor: 'transparent', strokeWidth: 2,
+        strokeStyle: 'solid', opacity: 1,
+        points: [[0, 0], [50, 50]],
+        endBinding: 'target-shape:center',
+      },
+    };
+    useElementsStore.setState({ elements: [local] });
+
+    const remote: Element = {
+      ...local,
+      version: 2,
+      versionNonce: 500,
+      props: { ...local.props, endBinding: undefined },
+    };
+    applyRemoteElements([remote]);
+
+    const updated = useElementsStore.getState().elements.find((e) => e.id === 'arrow-unbound')!;
+    expect(updated.props.endBinding ?? null).toBeNull();
+  });
+});
+
+// @covers AC-16
+describe('AC-16 (019): remote shape move fires mutation hooks so bound arrow endpoints update', () => {
+  it('AC-16: applyRemoteElements fires dispatchMutationEvent which triggers arrow-binding-hook', async () => {
+    const { registerMutationHook } = await import('../../store/mutation-pipeline');
+    const { createArrowBindingHook } = await import('../arrow-binding-hook');
+
+    const shape: Element = makeEl({
+      id: 'bound-shape',
+      type: 'rectangle',
+      x: 100, y: 100, width: 100, height: 60, zIndex: 1,
+      version: 1, versionNonce: 100,
+    });
+    const arrow: Element = {
+      id: 'bound-arrow',
+      type: 'arrow',
+      x: 0, y: 0, width: 200, height: 200, angle: 0, zIndex: 2,
+      version: 1, versionNonce: 100, updatedAt: 0, isDeleted: false,
+      groupId: null, frameId: null, locked: false, createdBy: 'test',
+      props: {
+        strokeColor: '#000', fillColor: 'transparent', strokeWidth: 2,
+        strokeStyle: 'solid', opacity: 1,
+        points: [[0, 0], [150, 130]], // current centre of shape (100+50, 100+30)
+        endBinding: 'bound-shape:center',
+      },
+    };
+    useElementsStore.setState({ elements: [shape, arrow] });
+
+    const unregister = registerMutationHook(createArrowBindingHook());
+
+    // Remote client moved shape to x=200, y=200 → new centre=(250,230)
+    const movedShape: Element = {
+      ...shape,
+      x: 200, y: 200,
+      version: 2, versionNonce: 50,
+    };
+    applyRemoteElements([movedShape]);
+
+    // Arrow should have followed via the hook
+    const updatedArrow = useElementsStore.getState().elements.find((e) => e.id === 'bound-arrow')!;
+    const pts = updatedArrow.props.points!;
+    expect(pts[1][0]).toBeCloseTo(250);
+    expect(pts[1][1]).toBeCloseTo(230);
+
+    unregister();
+  });
+});
