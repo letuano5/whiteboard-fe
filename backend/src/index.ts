@@ -9,6 +9,7 @@ import {
   saveRoomElements,
   loadRoomElements,
   getRoomClock,
+  getRoomDiff,
 } from './persistence/room-repository.js';
 import { createAutosaveManager } from './persistence/autosave.js';
 
@@ -69,8 +70,14 @@ export function createWhiteboardServer(
 
     socket.on(
       WS_EVENTS.JOIN_ROOM,
-      async (payload: { roomId: string; sessionId: string; name: string; color: string }) => {
-        const { roomId, sessionId, name, color } = payload;
+      async (payload: {
+        roomId: string;
+        sessionId: string;
+        name: string;
+        color: string;
+        lastServerClock?: number; // P3A-03: reconnect diff protocol (FR-001, FR-002)
+      }) => {
+        const { roomId, sessionId, name, color, lastServerClock } = payload;
 
         socket.join(roomId);
         socket.data.sessionId = sessionId;
@@ -95,8 +102,8 @@ export function createWhiteboardServer(
         // Load room elements from DB (cold path) or use in-memory state (warm path)
         let documentClock = 0;
         try {
-          const roomMap = elements.get(roomId);
-          if (!roomMap || roomMap.size === 0) {
+          const elMap = elements.get(roomId);
+          if (!elMap || elMap.size === 0) {
             // Cold path: room absent or empty in memory — load from DB
             const loaded = await loadRoomElements(db, roomId);
             if (!elements.has(roomId)) elements.set(roomId, new Map());
@@ -111,9 +118,37 @@ export function createWhiteboardServer(
           documentClock = 0;
         }
 
-        // Send current room elements as a snapshot to the new joiner only
-        const snapshot = elements.has(roomId) ? [...elements.get(roomId)!.values()] : [];
-        socket.emit(WS_EVENTS.ROOM_SNAPSHOT, { elements: snapshot, documentClock });
+        // P3A-03: Reconnect-diff path when client sends a valid lastServerClock (FR-002, AC-1, AC-4)
+        if (lastServerClock !== undefined && lastServerClock > 0) {
+          // Reconnect path: compute diff since client's last known clock (AC-1, AC-8)
+          try {
+            const inMemory = elements.has(roomId) ? [...elements.get(roomId)!.values()] : [];
+            const diffResult = await getRoomDiff(db, roomId, lastServerClock, inMemory);
+
+            if (diffResult.mode === 'diff') {
+              // AC-1, AC-12: send incremental diff event (not full snapshot)
+              socket.emit(WS_EVENTS.ROOM_DIFF, {
+                changed: diffResult.changed,
+                deleted: diffResult.deleted,
+                documentClock: diffResult.documentClock,
+              });
+            } else {
+              // AC-8: tombstone history too short — wipe-all fallback (same event as initial join)
+              socket.emit(WS_EVENTS.ROOM_SNAPSHOT, {
+                elements: diffResult.elements,
+                documentClock: diffResult.documentClock,
+              });
+            }
+          } catch (err) {
+            console.error('[reconnect-diff] DB error, falling back to full snapshot:', err);
+            const snapshot = elements.has(roomId) ? [...elements.get(roomId)!.values()] : [];
+            socket.emit(WS_EVENTS.ROOM_SNAPSHOT, { elements: snapshot, documentClock });
+          }
+        } else {
+          // AC-4: initial join (lastServerClock = 0 or absent) — send full snapshot
+          const snapshot = elements.has(roomId) ? [...elements.get(roomId)!.values()] : [];
+          socket.emit(WS_EVENTS.ROOM_SNAPSHOT, { elements: snapshot, documentClock });
+        }
 
         // Broadcast full presence list to the entire room (including the new joiner)
         const presences = [...roomMap.values()];

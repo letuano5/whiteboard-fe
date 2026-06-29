@@ -27,10 +27,13 @@ const mockEmit = vi.fn();
 const mockOn = vi.fn();
 const mockDisconnect = vi.fn();
 
+// P3A-03: socket must have connected=true so the mutation hook emits (not queues)
+// and join-room fires via connect handler.
 const mockSocket = {
   emit: mockEmit,
   on: mockOn,
   disconnect: mockDisconnect,
+  connected: true,
 };
 
 vi.mock('socket.io-client', () => ({
@@ -47,6 +50,11 @@ beforeEach(() => {
 
   mockOn.mockImplementation((event: string, handler: (data: unknown) => void) => {
     _handlers[event] = handler;
+    // P3A-03: auto-fire 'connect' when registered so JOIN_ROOM is emitted synchronously in tests.
+    // This simulates Socket.IO firing 'connect' immediately on a successful connection.
+    if (event === 'connect') {
+      handler(undefined as unknown);
+    }
     return mockSocket;
   });
 
@@ -584,5 +592,216 @@ describe('socket-client — 018/AC-5 (T022) USER_LEAVE also clears remoteDrafts'
     leaveHandler({ sessionId: 'peer-7' });
 
     expect(store.getState().remoteDrafts.has('peer-7')).toBe(false);
+  });
+});
+
+// ─── P3A-03: ROOM_DIFF handler (T008) ────────────────────────────────────────
+
+function makeFakeElement(id: string, version = 1) {
+  return {
+    id, type: 'rectangle' as const,
+    x: 0, y: 0, width: 100, height: 100, angle: 0, zIndex: 1,
+    props: { strokeColor: '#000', fillColor: '#fff', strokeWidth: 1, strokeStyle: 'solid' as const, opacity: 1 },
+    version, versionNonce: 42, updatedAt: Date.now(),
+    isDeleted: false, groupId: null, frameId: null, locked: false, createdBy: 'test',
+  };
+}
+
+describe('socket-client — P3A-03/AC-3 (T008) ROOM_DIFF calls applyRemoteElements with changed', () => {
+  // @covers AC-3
+  it('ROOM_DIFF received → applyRemoteElements called with changed elements', async () => {
+    const applyModule = await import('../apply-remote');
+    const spy = vi.spyOn(applyModule, 'applyRemoteElements');
+
+    const { initSocketClient } = await import('../socket-client');
+    initSocketClient('room-abc');
+
+    const changedEl = makeFakeElement('diff-el-1');
+    const diffHandler = _handlers[WS_EVENTS.ROOM_DIFF];
+    expect(diffHandler).toBeDefined();
+    diffHandler({ changed: [changedEl], deleted: [], documentClock: 10 });
+
+    expect(spy).toHaveBeenCalledWith([changedEl]);
+    spy.mockRestore();
+  });
+});
+
+describe('socket-client — P3A-03/AC-2 (T008) ROOM_DIFF calls removeElements with deleted IDs', () => {
+  // @covers AC-2
+  it('ROOM_DIFF received → removeElements called with IDs from deleted list', async () => {
+    const { initSocketClient } = await import('../socket-client');
+    const { useElementsStore: elStore } = await import('../../store/elements.store');
+    const removeEl = makeFakeElement('ghost-el');
+    elStore.setState({ elements: [removeEl] });
+
+    initSocketClient('room-abc');
+
+    const diffHandler = _handlers[WS_EVENTS.ROOM_DIFF];
+    diffHandler({ changed: [], deleted: [{ id: 'ghost-el' }], documentClock: 7 });
+
+    expect(elStore.getState().elements.find((e) => e.id === 'ghost-el')).toBeUndefined();
+  });
+});
+
+describe('socket-client — P3A-03/AC-11 (T008) ROOM_DIFF updates _lastServerClock', () => {
+  // @covers AC-11
+  it('ROOM_DIFF received → _lastServerClock updated to documentClock in diff', async () => {
+    const { initSocketClient, getLastServerClock } = await import('../socket-client');
+    initSocketClient('room-abc');
+
+    const diffHandler = _handlers[WS_EVENTS.ROOM_DIFF];
+    diffHandler({ changed: [], deleted: [], documentClock: 42 });
+
+    expect(getLastServerClock()).toBe(42);
+  });
+});
+
+describe('socket-client — P3A-03/AC-12 (T008) ROOM_DIFF is a distinct handler from ROOM_SNAPSHOT', () => {
+  // @covers AC-12
+  it('ROOM_DIFF and ROOM_SNAPSHOT handlers are both registered as separate socket events', async () => {
+    const { initSocketClient } = await import('../socket-client');
+    initSocketClient('room-abc');
+
+    expect(_handlers[WS_EVENTS.ROOM_DIFF]).toBeDefined();
+    expect(_handlers[WS_EVENTS.ROOM_SNAPSHOT]).toBeDefined();
+    // They should be different functions
+    expect(_handlers[WS_EVENTS.ROOM_DIFF]).not.toBe(_handlers[WS_EVENTS.ROOM_SNAPSHOT]);
+  });
+});
+
+// ─── P3A-03: Pending queue (T014) ────────────────────────────────────────────
+
+describe('socket-client — P3A-03/AC-6 (T014) mutation while disconnected → queued, no ELEMENT_UPDATE', () => {
+  // @covers AC-6
+  it('when socket is disconnected, mutation is queued and ELEMENT_UPDATE is NOT emitted', async () => {
+    const { initSocketClient } = await import('../socket-client');
+    const { dispatchMutationEvent } = await import('../../store/mutation-pipeline');
+    initSocketClient('room-abc');
+
+    // Simulate socket being disconnected
+    mockSocket.connected = false;
+    mockEmit.mockClear();
+
+    const el = makeFakeElement('offline-el');
+    dispatchMutationEvent({ type: 'update', elements: [el], before: [] });
+
+    // ELEMENT_UPDATE must NOT be emitted while disconnected
+    const updateCalls = mockEmit.mock.calls.filter((c) => c[0] === WS_EVENTS.ELEMENT_UPDATE);
+    expect(updateCalls).toHaveLength(0);
+
+    // Restore connected state for other tests
+    mockSocket.connected = true;
+  });
+});
+
+describe('socket-client — P3A-03/AC-5 (T014) ROOM_DIFF replays pending queue via ELEMENT_UPDATE', () => {
+  // @covers AC-5
+  it('after ROOM_DIFF is applied, pending offline mutations are re-emitted via ELEMENT_UPDATE', async () => {
+    const { initSocketClient } = await import('../socket-client');
+    const { dispatchMutationEvent } = await import('../../store/mutation-pipeline');
+    initSocketClient('room-abc');
+
+    // Queue mutations while disconnected
+    mockSocket.connected = false;
+    const el1 = makeFakeElement('offline-1');
+    const el2 = makeFakeElement('offline-2');
+    dispatchMutationEvent({ type: 'update', elements: [el1], before: [] });
+    dispatchMutationEvent({ type: 'update', elements: [el2], before: [] });
+
+    // Reconnect and receive ROOM_DIFF
+    mockSocket.connected = true;
+    mockEmit.mockClear();
+
+    const diffHandler = _handlers[WS_EVENTS.ROOM_DIFF];
+    diffHandler({ changed: [], deleted: [], documentClock: 15 });
+
+    // Pending queue should be flushed via ELEMENT_UPDATE
+    const updateCalls = mockEmit.mock.calls.filter((c) => c[0] === WS_EVENTS.ELEMENT_UPDATE);
+    expect(updateCalls).toHaveLength(1);
+    const payload = updateCalls[0][1] as { elements: unknown[] };
+    expect(payload.elements).toHaveLength(2);
+    expect((payload.elements as Array<{ id: string }>).map((e) => e.id)).toContain('offline-1');
+    expect((payload.elements as Array<{ id: string }>).map((e) => e.id)).toContain('offline-2');
+  });
+});
+
+describe('socket-client — P3A-03/AC-6 (T014) no pending → no ELEMENT_UPDATE on ROOM_DIFF', () => {
+  // @covers AC-6
+  it('ROOM_DIFF with empty pending queue does NOT emit ELEMENT_UPDATE', async () => {
+    const { initSocketClient } = await import('../socket-client');
+    initSocketClient('room-abc');
+
+    // No offline mutations
+    mockEmit.mockClear();
+
+    const diffHandler = _handlers[WS_EVENTS.ROOM_DIFF];
+    diffHandler({ changed: [], deleted: [], documentClock: 5 });
+
+    const updateCalls = mockEmit.mock.calls.filter((c) => c[0] === WS_EVENTS.ELEMENT_UPDATE);
+    expect(updateCalls).toHaveLength(0);
+  });
+});
+
+describe('socket-client — P3A-03/AC-9 (T014) wipe-all ROOM_SNAPSHOT clears pending queue', () => {
+  // @covers AC-9
+  it('wipe-all ROOM_SNAPSHOT while reconnect pending clears queue and emits no ELEMENT_UPDATE', async () => {
+    const { initSocketClient } = await import('../socket-client');
+    const { dispatchMutationEvent } = await import('../../store/mutation-pipeline');
+    initSocketClient('room-abc');
+
+    // Queue mutations while disconnected
+    mockSocket.connected = false;
+    const el = makeFakeElement('wipe-offline-el');
+    dispatchMutationEvent({ type: 'update', elements: [el], before: [] });
+
+    // Reconnect (connect event fires, setting _reconnectPending = true)
+    mockSocket.connected = true;
+    mockEmit.mockClear();
+
+    // Manually simulate that _reconnectPending is true by calling connect handler
+    // (since our mock auto-fires connect when registered, _hasJoined was already set).
+    // We simulate a second reconnect by calling the connect handler directly.
+    const connectHandler = _handlers['connect'];
+    expect(connectHandler).toBeDefined();
+    connectHandler(undefined as unknown);
+    mockEmit.mockClear();
+
+    // Receive wipe-all ROOM_SNAPSHOT (server sent full state, not diff)
+    const snapHandler = _handlers[WS_EVENTS.ROOM_SNAPSHOT];
+    snapHandler({ elements: [makeFakeElement('server-el')], documentClock: 20 });
+
+    // Queue should be cleared — no ELEMENT_UPDATE
+    const updateCalls = mockEmit.mock.calls.filter((c) => c[0] === WS_EVENTS.ELEMENT_UPDATE);
+    expect(updateCalls).toHaveLength(0);
+  });
+});
+
+describe('socket-client — P3A-03/AC-7 (T014) LWW: pending changes not silently dropped', () => {
+  // @covers AC-7
+  it('pending element with higher version survives ROOM_DIFF application and is re-emitted', async () => {
+    const { initSocketClient } = await import('../socket-client');
+    const { dispatchMutationEvent } = await import('../../store/mutation-pipeline');
+    initSocketClient('room-abc');
+
+    // Queue offline mutation: element X at version 7 (higher than server's version 5)
+    mockSocket.connected = false;
+    const pendingEl = makeFakeElement('conflict-el', 7); // version 7
+    dispatchMutationEvent({ type: 'update', elements: [pendingEl], before: [] });
+
+    mockSocket.connected = true;
+    mockEmit.mockClear();
+
+    // Server diff carries element X at version 5 (lower)
+    const serverEl = makeFakeElement('conflict-el', 5);
+    const diffHandler = _handlers[WS_EVENTS.ROOM_DIFF];
+    diffHandler({ changed: [serverEl], deleted: [], documentClock: 10 });
+
+    // Pending element (version 7) must be re-emitted after diff — not silently dropped
+    const updateCalls = mockEmit.mock.calls.filter((c) => c[0] === WS_EVENTS.ELEMENT_UPDATE);
+    expect(updateCalls).toHaveLength(1);
+    const payload = updateCalls[0][1] as { elements: Array<{ id: string; version: number }> };
+    const replayedEl = payload.elements.find((e) => e.id === 'conflict-el');
+    expect(replayedEl).toBeDefined();
+    expect(replayedEl!.version).toBe(7); // higher version preserved
   });
 });

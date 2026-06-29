@@ -17,7 +17,7 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { saveRoomElements, loadRoomElements, getRoomClock } from './room-repository.js';
+import { saveRoomElements, loadRoomElements, getRoomClock, getRoomDiff } from './room-repository.js';
 import { makeElement, makeDeletedElement } from '../test/element-fixtures.js';
 import type { PrismaClient } from '@prisma/client';
 
@@ -430,6 +430,256 @@ describe('getRoomClock', () => {
     expect(findUnique).toHaveBeenCalledWith({
       where: { id: ROOM_ID },
       select: { documentClock: true },
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getRoomDiff — P3A-03 reconnect diff query
+// ---------------------------------------------------------------------------
+
+/**
+ * Builds a Prisma mock for the getRoomDiff read path.
+ * Supports: tombstone.aggregate, room.findUnique, record.findMany, tombstone.findMany.
+ */
+function buildDiffMockDb({
+  minDeletedClock,
+  documentClock,
+  changedRecords,
+  deletedTombstones,
+}: {
+  minDeletedClock: bigint | null;
+  documentClock: bigint;
+  changedRecords: Array<{ state: unknown; recordClock: bigint }>;
+  deletedTombstones: Array<{ recordId: string }>;
+}) {
+  const tombstoneAggregate = vi.fn().mockResolvedValue({
+    _min: { deletedClock: minDeletedClock },
+  });
+  const roomFindUnique = vi.fn().mockResolvedValue({ documentClock });
+  const recordFindMany = vi.fn().mockResolvedValue(changedRecords);
+  const tombstoneFindMany = vi.fn().mockResolvedValue(deletedTombstones);
+
+  const db = {
+    tombstone: {
+      aggregate: tombstoneAggregate,
+      findMany: tombstoneFindMany,
+    },
+    room: {
+      findUnique: roomFindUnique,
+    },
+    record: {
+      findMany: recordFindMany,
+    },
+  } as unknown as PrismaClient;
+
+  return { db, tombstoneAggregate, roomFindUnique, recordFindMany, tombstoneFindMany };
+}
+
+describe('getRoomDiff — P3A-03', () => {
+  const ROOM_ID = 'room-diff-test';
+
+  // =========================================================================
+  // @covers AC-10 — no tombstones → always diff mode (never wipe-all)
+  // =========================================================================
+  describe('AC-10: no tombstones in room → incremental diff always returned', () => {
+    it('returns mode=diff when there are no tombstones (min deletedClock = null)', async () => {
+      const el = makeElement({ id: 'el-1' });
+      const { db } = buildDiffMockDb({
+        minDeletedClock: null, // no tombstones
+        documentClock: 5n,
+        changedRecords: [{ state: el, recordClock: 3n }],
+        deletedTombstones: [],
+      });
+
+      const result = await getRoomDiff(db, ROOM_ID, 2, []);
+
+      expect(result.mode).toBe('diff');
+      if (result.mode === 'diff') {
+        expect(result.changed).toHaveLength(1);
+        expect(result.deleted).toHaveLength(0);
+        expect(result.documentClock).toBe(5);
+      }
+    });
+
+    it('returns diff with empty changed and deleted when client is fully up-to-date', async () => {
+      // @covers AC-10 (edge case: zero changes)
+      const { db } = buildDiffMockDb({
+        minDeletedClock: null,
+        documentClock: 7n,
+        changedRecords: [],
+        deletedTombstones: [],
+      });
+
+      const result = await getRoomDiff(db, ROOM_ID, 7, []);
+
+      expect(result.mode).toBe('diff');
+      if (result.mode === 'diff') {
+        expect(result.changed).toHaveLength(0);
+        expect(result.deleted).toHaveLength(0);
+        expect(result.documentClock).toBe(7);
+      }
+    });
+  });
+
+  // =========================================================================
+  // @covers AC-1 — changed records returned for valid lastServerClock
+  // =========================================================================
+  describe('AC-1: changed records since lastServerClock are included in diff', () => {
+    it('returns only records with recordClock > lastServerClock', async () => {
+      const el1 = makeElement({ id: 'changed-1' });
+      const { db } = buildDiffMockDb({
+        minDeletedClock: null,
+        documentClock: 10n,
+        changedRecords: [{ state: el1, recordClock: 8n }],
+        deletedTombstones: [],
+      });
+
+      const result = await getRoomDiff(db, ROOM_ID, 5, []);
+
+      expect(result.mode).toBe('diff');
+      if (result.mode === 'diff') {
+        expect(result.changed.map((e) => e.id)).toContain('changed-1');
+      }
+    });
+  });
+
+  // =========================================================================
+  // @covers AC-2 — deleted tombstones returned in diff
+  // =========================================================================
+  describe('AC-2: tombstones after lastServerClock are returned in deleted list', () => {
+    it('returns deleted IDs for tombstones with deletedClock > lastServerClock', async () => {
+      const { db } = buildDiffMockDb({
+        minDeletedClock: 3n, // history starts at 3, lastServerClock=3 → 3 >= 3 → diff mode
+        documentClock: 10n,
+        changedRecords: [],
+        deletedTombstones: [{ recordId: 'del-el-1' }, { recordId: 'del-el-2' }],
+      });
+
+      const result = await getRoomDiff(db, ROOM_ID, 3, []);
+
+      expect(result.mode).toBe('diff');
+      if (result.mode === 'diff') {
+        expect(result.deleted.map((d) => d.id)).toEqual(['del-el-1', 'del-el-2']);
+      }
+    });
+  });
+
+  // =========================================================================
+  // @covers AC-8 — wipe-all when lastServerClock < MIN(deletedClock)
+  // =========================================================================
+  describe('AC-8: wipe-all returned when tombstone history is insufficient', () => {
+    it('returns mode=wipe when lastServerClock=5 and MIN(deletedClock)=8', async () => {
+      const el1 = makeElement({ id: 'active-1' });
+      const elDeleted = makeDeletedElement({ id: 'ghost' });
+      const { db } = buildDiffMockDb({
+        minDeletedClock: 8n, // history starts at 8
+        documentClock: 12n,
+        changedRecords: [],     // not reached in wipe path
+        deletedTombstones: [],  // not reached in wipe path
+      });
+
+      const result = await getRoomDiff(db, ROOM_ID, 5, [el1, elDeleted]);
+
+      expect(result.mode).toBe('wipe');
+      if (result.mode === 'wipe') {
+        // Only active elements included in wipe snapshot
+        expect(result.elements.map((e) => e.id)).toContain('active-1');
+        expect(result.elements.map((e) => e.id)).not.toContain('ghost');
+        expect(result.documentClock).toBe(12);
+      }
+    });
+
+    it('does NOT hit record or tombstone findMany queries in wipe path', async () => {
+      const { db, recordFindMany, tombstoneFindMany } = buildDiffMockDb({
+        minDeletedClock: 8n,
+        documentClock: 12n,
+        changedRecords: [],
+        deletedTombstones: [],
+      });
+
+      await getRoomDiff(db, ROOM_ID, 5, []);
+
+      expect(recordFindMany).not.toHaveBeenCalled();
+      expect(tombstoneFindMany).not.toHaveBeenCalled();
+    });
+  });
+
+  // =========================================================================
+  // R-03: in-memory overlay — element not yet autosaved appears in diff
+  // =========================================================================
+  describe('R-03: in-memory overlay adds not-yet-autosaved elements', () => {
+    it('includes in-memory active elements not present in DB changed set', async () => {
+      const dbEl = makeElement({ id: 'db-el' });
+      const memEl = makeElement({ id: 'mem-only-el' }); // not in DB yet
+
+      const { db } = buildDiffMockDb({
+        minDeletedClock: null,
+        documentClock: 6n,
+        changedRecords: [{ state: dbEl, recordClock: 4n }],
+        deletedTombstones: [],
+      });
+
+      const result = await getRoomDiff(db, ROOM_ID, 2, [dbEl, memEl]);
+
+      expect(result.mode).toBe('diff');
+      if (result.mode === 'diff') {
+        const ids = result.changed.map((e) => e.id);
+        expect(ids).toContain('db-el');
+        expect(ids).toContain('mem-only-el');
+        // db-el should appear only once (not duplicated from overlay)
+        expect(ids.filter((id) => id === 'db-el')).toHaveLength(1);
+      }
+    });
+
+    it('does NOT include deleted in-memory elements in overlay', async () => {
+      const delMemEl = makeDeletedElement({ id: 'mem-deleted-el' });
+
+      const { db } = buildDiffMockDb({
+        minDeletedClock: null,
+        documentClock: 4n,
+        changedRecords: [],
+        deletedTombstones: [],
+      });
+
+      const result = await getRoomDiff(db, ROOM_ID, 0, [delMemEl]);
+
+      expect(result.mode).toBe('diff');
+      if (result.mode === 'diff') {
+        expect(result.changed.map((e) => e.id)).not.toContain('mem-deleted-el');
+      }
+    });
+  });
+
+  // =========================================================================
+  // documentClock is always a number (BigInt conversion at boundary)
+  // =========================================================================
+  describe('documentClock type conversion', () => {
+    it('documentClock is typeof number in diff result', async () => {
+      const { db } = buildDiffMockDb({
+        minDeletedClock: null,
+        documentClock: 99n,
+        changedRecords: [],
+        deletedTombstones: [],
+      });
+
+      const result = await getRoomDiff(db, ROOM_ID, 0, []);
+      expect(typeof result.documentClock).toBe('number');
+      expect(result.documentClock).toBe(99);
+    });
+
+    it('documentClock is typeof number in wipe result', async () => {
+      const { db } = buildDiffMockDb({
+        minDeletedClock: 10n,
+        documentClock: 55n,
+        changedRecords: [],
+        deletedTombstones: [],
+      });
+
+      const result = await getRoomDiff(db, ROOM_ID, 3, []);
+      expect(result.mode).toBe('wipe');
+      expect(typeof result.documentClock).toBe('number');
+      expect(result.documentClock).toBe(55);
     });
   });
 });

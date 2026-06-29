@@ -30,9 +30,15 @@ describe('WS_EVENTS', () => {
     expect(WS_EVENTS.ROOM_RESYNC).toBe('room-resync');
   });
 
-  it('has 11 distinct event values', () => {
+  it('defines ROOM_DIFF event for reconnect diff protocol (P3A-03 AC-12)', () => {
+    // @covers AC-12
+    expect(WS_EVENTS.ROOM_DIFF).toBe('room-diff');
+  });
+
+  it('has 12 distinct event values', () => {
+    // P3A-03: ROOM_DIFF added (AC-12)
     const values = Object.values(WS_EVENTS);
-    expect(values).toHaveLength(11);
-    expect(new Set(values).size).toBe(11);
+    expect(values).toHaveLength(12);
+    expect(new Set(values).size).toBe(12);
   });
 });

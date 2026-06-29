@@ -89,6 +89,7 @@ export const WS_EVENTS = {
   CURSOR_MOVE: 'cursor-move',
   USER_JOIN: 'user-join',
   USER_LEAVE: 'user-leave',
+  ROOM_DIFF: 'room-diff', // AC-12: distinct WS event for reconnect incremental diff (P3A-03)
   ROOM_SNAPSHOT: 'room-snapshot',
   ROOM_RESYNC: 'room-resync',
 } as const;

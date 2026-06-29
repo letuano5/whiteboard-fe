@@ -1,6 +1,19 @@
 import type { PrismaClient } from '@prisma/client';
 import type { Element } from '@vdt/shared';
 
+// ─── P3A-03: Reconnect diff types ────────────────────────────────────────────
+
+/**
+ * Result of getRoomDiff:
+ * - mode 'diff': incremental update — only changed/deleted elements since lastServerClock.
+ * - mode 'wipe': tombstone history too short — full snapshot (wipe-all fallback).
+ *
+ * @covers AC-1, AC-8, AC-10, AC-12
+ */
+export type RoomDiffResult =
+  | { mode: 'diff'; changed: Element[]; deleted: Array<{ id: string }>; documentClock: number }
+  | { mode: 'wipe'; elements: Element[]; documentClock: number };
+
 export interface SaveRoomElementsResult {
   /** New documentClock after the transaction. */
   documentClock: bigint;
@@ -142,4 +155,86 @@ export async function saveRoomElements(
   });
 
   return { documentClock: result };
+}
+
+// ─── P3A-03: Reconnect diff query ────────────────────────────────────────────
+
+/**
+ * Computes the reconnect diff for a room since `lastServerClock`.
+ *
+ * Algorithm (R-03, R-04):
+ * 1. Compute tombstoneHistoryStartsAtClock = MIN(tombstone.deletedClock) for the room.
+ *    If no tombstones exist, treat as +Infinity → always safe to do incremental diff.
+ * 2. If lastServerClock < tombstoneHistoryStartsAtClock: return wipe-all snapshot (AC-8).
+ * 3. Else: return incremental diff — DB changed records + DB deleted tombstones since clock.
+ *    Overlay any in-memory elements not already covered by the DB changed set (R-03).
+ *
+ * @param db                  Prisma client.
+ * @param roomId              UUID of the room.
+ * @param lastServerClock     Last documentClock the client received.
+ * @param inMemoryElements    Current in-memory hot-state for the room (may include not-yet-autosaved).
+ * @returns RoomDiffResult union — either { mode:'diff', ... } or { mode:'wipe', ... }.
+ *
+ * @covers AC-1, AC-2, AC-8, AC-10
+ */
+export async function getRoomDiff(
+  db: PrismaClient,
+  roomId: string,
+  lastServerClock: number,
+  inMemoryElements: Element[],
+): Promise<RoomDiffResult> {
+  // Step 1: Compute tombstoneHistoryStartsAtClock (R-04, FR-003)
+  const tombstoneAgg = await db.tombstone.aggregate({
+    where: { roomId },
+    _min: { deletedClock: true },
+  });
+
+  const minDeletedClockRaw = tombstoneAgg._min.deletedClock;
+  // If no tombstones exist (null), incremental diff is always safe — no tombstone gap (AC-10).
+  // Only wipe when tombstones exist AND lastServerClock predates the earliest tombstone.
+  const hasTombstones = minDeletedClockRaw !== null;
+  const tombstoneHistoryStartsAtClock = hasTombstones ? Number(minDeletedClockRaw) : Infinity;
+
+  // Step 2: Determine current documentClock for use in both paths
+  const room = await db.room.findUnique({
+    where: { id: roomId },
+    select: { documentClock: true },
+  });
+  const documentClock = room ? Number(room.documentClock) : 0;
+
+  // Step 3: Wipe-all fallback when tombstone history is insufficient (FR-005, AC-8).
+  // hasTombstones guard prevents wipe when there are no tombstones at all (AC-10).
+  if (hasTombstones && lastServerClock < tombstoneHistoryStartsAtClock) {
+    // Return full snapshot of currently active (non-deleted) in-memory elements
+    const activeElements = inMemoryElements.filter((e) => !e.isDeleted);
+    return { mode: 'wipe', elements: activeElements, documentClock };
+  }
+
+  // Step 4: Incremental diff path (FR-004, AC-1, AC-2, AC-10)
+  const clock = BigInt(lastServerClock);
+
+  // Changed records: DB elements updated after lastServerClock
+  const changedRecords = await db.record.findMany({
+    where: { roomId, recordClock: { gt: clock } },
+    orderBy: { recordClock: 'asc' },
+  });
+  const changedFromDb: Element[] = changedRecords.map((r) => r.state as unknown as Element);
+
+  // Deleted tombstones: elements tombstoned after lastServerClock (AC-2)
+  const deletedTombstones = await db.tombstone.findMany({
+    where: { roomId, deletedClock: { gt: clock } },
+    select: { recordId: true },
+  });
+  const deleted = deletedTombstones.map((t) => ({ id: t.recordId }));
+
+  // Overlay in-memory elements NOT already in DB changed set (R-03)
+  // Conservatively adds not-yet-autosaved mutations; LWW handles duplicates on client.
+  const changedIds = new Set(changedFromDb.map((e) => e.id));
+  const inMemoryOverlay = inMemoryElements.filter(
+    (e) => !changedIds.has(e.id) && !e.isDeleted,
+  );
+
+  const changed = [...changedFromDb, ...inMemoryOverlay];
+
+  return { mode: 'diff', changed, deleted, documentClock };
 }
