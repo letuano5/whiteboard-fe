@@ -5,7 +5,11 @@ import { Server, type Socket } from 'socket.io';
 import { WS_EVENTS } from '@vdt/shared';
 import type { Element, Presence } from '@vdt/shared';
 import { prisma } from './persistence/prisma.js';
-import { saveRoomElements } from './persistence/room-repository.js';
+import {
+  saveRoomElements,
+  loadRoomElements,
+  getRoomClock,
+} from './persistence/room-repository.js';
 import { createAutosaveManager } from './persistence/autosave.js';
 
 const app = express();
@@ -50,16 +54,22 @@ export function createWhiteboardServer(
     roomPresence: Map<string, Map<string, Presence>>;
     roomElements: Map<string, Map<string, Element>>;
     autosave: ReturnType<typeof createAutosaveManager>;
+    db?: typeof prisma;
   },
 ): void {
-  const { roomPresence: presence, roomElements: elements, autosave: save } = deps;
+  const {
+    roomPresence: presence,
+    roomElements: elements,
+    autosave: save,
+    db = prisma,
+  } = deps;
 
   ioServer.on('connection', (socket: Socket) => {
     console.log('client connected', socket.id);
 
     socket.on(
       WS_EVENTS.JOIN_ROOM,
-      (payload: { roomId: string; sessionId: string; name: string; color: string }) => {
+      async (payload: { roomId: string; sessionId: string; name: string; color: string }) => {
         const { roomId, sessionId, name, color } = payload;
 
         socket.join(roomId);
@@ -82,9 +92,28 @@ export function createWhiteboardServer(
 
         console.log(`socket ${socket.id} (${name}) joined room ${roomId}`);
 
+        // Load room elements from DB (cold path) or use in-memory state (warm path)
+        let documentClock = 0;
+        try {
+          const roomMap = elements.get(roomId);
+          if (!roomMap || roomMap.size === 0) {
+            // Cold path: room absent or empty in memory — load from DB
+            const loaded = await loadRoomElements(db, roomId);
+            if (!elements.has(roomId)) elements.set(roomId, new Map());
+            for (const el of loaded.elements) elements.get(roomId)!.set(el.id, el);
+            documentClock = loaded.documentClock;
+          } else {
+            // Warm path: elements already in memory — only fetch clock from DB
+            documentClock = await getRoomClock(db, roomId);
+          }
+        } catch (err) {
+          console.error('[load-room] DB error during join:', err);
+          documentClock = 0;
+        }
+
         // Send current room elements as a snapshot to the new joiner only
         const snapshot = elements.has(roomId) ? [...elements.get(roomId)!.values()] : [];
-        socket.emit(WS_EVENTS.ROOM_SNAPSHOT, { elements: snapshot });
+        socket.emit(WS_EVENTS.ROOM_SNAPSHOT, { elements: snapshot, documentClock });
 
         // Broadcast full presence list to the entire room (including the new joiner)
         const presences = [...roomMap.values()];
@@ -160,7 +189,8 @@ export function createWhiteboardServer(
   });
 }
 
-// Wire the default production instances
-createWhiteboardServer(io, { roomPresence, roomElements, autosave });
-
-httpServer.listen(PORT, () => console.log(`Server running on :${PORT}`));
+// Wire the default production instances (skip when imported by test runner)
+if (!process.env.VITEST) {
+  createWhiteboardServer(io, { roomPresence, roomElements, autosave });
+  httpServer.listen(PORT, () => console.log(`Server running on :${PORT}`));
+}

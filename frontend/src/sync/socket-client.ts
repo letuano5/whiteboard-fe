@@ -4,7 +4,6 @@ import type { Element, Presence } from '../types/shared';
 import { registerMutationHook } from '../store/mutation-pipeline';
 import { applyRemoteElements, isApplyingRemote } from './apply-remote';
 import { useInteractionStore } from '../store/interaction.store';
-import { useElementsStore } from '../store/elements.store';
 import { useCameraStore } from '../store/camera.store';
 import { saveCamera } from './camera-persistence';
 import { LOCAL_PRESENCE } from './presence';
@@ -12,6 +11,7 @@ import { LOCAL_PRESENCE } from './presence';
 const SERVER_URL = import.meta.env?.VITE_BACKEND_URL ?? 'http://localhost:3001';
 
 let _socket: Socket | null = null;
+let _lastServerClock = 0;
 let _unregisterHook: (() => void) | null = null;
 let _unsubCamera: (() => void) | null = null;
 let _unsubSelection: (() => void) | null = null;
@@ -20,6 +20,14 @@ let _viewportThrottle: ReturnType<typeof setTimeout> | null = null;
 let _selectionThrottle: ReturnType<typeof setTimeout> | null = null;
 let _draftThrottle: ReturnType<typeof setTimeout> | null = null;
 let _roomId: string | null = null;
+
+/**
+ * Returns the most recently received documentClock from the server.
+ * Updated on ROOM_SNAPSHOT. Used by P3A-03 reconnect diff protocol.
+ */
+export function getLastServerClock(): number {
+  return _lastServerClock;
+}
 
 export function initSocketClient(roomId: string): void {
   if (_socket) return;
@@ -36,8 +44,9 @@ export function initSocketClient(roomId: string): void {
   });
 
   // Full room snapshot received when joining — replaces localStorage hydration
-  _socket.on(WS_EVENTS.ROOM_SNAPSHOT, (data: { elements: Element[] }) => {
-    useElementsStore.getState().setElements(data.elements);
+  _socket.on(WS_EVENTS.ROOM_SNAPSHOT, (data: { elements: Element[]; documentClock: number }) => {
+    _lastServerClock = data.documentClock;
+    applyRemoteElements(data.elements);
   });
 
   _socket.on(WS_EVENTS.ELEMENT_UPDATE, (data: { elements: Element[]; sessionId?: string }) => {
@@ -230,6 +239,7 @@ export function stopSocketClient(): void {
   _socket?.disconnect();
   _socket = null;
   _roomId = null;
+  _lastServerClock = 0;
   // Clear all remote cursors and drafts when we leave the room
   const { setRemoteCursors, setRemoteDrafts } = useInteractionStore.getState();
   setRemoteCursors(new Map());

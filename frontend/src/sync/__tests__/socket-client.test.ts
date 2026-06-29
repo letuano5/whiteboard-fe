@@ -238,9 +238,11 @@ describe('socket-client — AC-5 (cursor removed when peer leaves)', () => {
 });
 
 describe('socket-client — ROOM_SNAPSHOT replaces elements on join', () => {
-  it('ROOM_SNAPSHOT event calls setElements with received elements', async () => {
+  it('ROOM_SNAPSHOT event calls setElements with received elements (legacy check via store)', async () => {
+    const applyModule = await import('../apply-remote');
+    const spy = vi.spyOn(applyModule, 'applyRemoteElements');
+
     const { initSocketClient } = await import('../socket-client');
-    const { useElementsStore: elStore } = await import('../../store/elements.store');
     initSocketClient('room-abc');
 
     const snapshotHandler = _handlers[WS_EVENTS.ROOM_SNAPSHOT];
@@ -254,8 +256,67 @@ describe('socket-client — ROOM_SNAPSHOT replaces elements on join', () => {
       isDeleted: false, groupId: null, frameId: null, locked: false, createdBy: 'test',
     };
 
-    snapshotHandler({ elements: [el] });
-    expect(elStore.getState().elements).toEqual([el]);
+    snapshotHandler({ elements: [el], documentClock: 0 });
+    expect(spy).toHaveBeenCalledWith([el]);
+    spy.mockRestore();
+  });
+});
+
+// ─── P3A-02: ROOM_SNAPSHOT handler with documentClock ───────────────────────
+
+describe('socket-client — P3A-02/AC-4 (T013) ROOM_SNAPSHOT with non-empty elements', () => {
+  // @covers AC-4
+  it('calls applyRemoteElements with received elements and sets lastServerClock', async () => {
+    const applyModule = await import('../apply-remote');
+    const spy = vi.spyOn(applyModule, 'applyRemoteElements');
+
+    const { initSocketClient, getLastServerClock } = await import('../socket-client');
+    initSocketClient('room-abc');
+
+    const snapshotHandler = _handlers[WS_EVENTS.ROOM_SNAPSHOT];
+    expect(snapshotHandler).toBeDefined();
+
+    const el = {
+      id: 'p3a02-el-1', type: 'rectangle' as const,
+      x: 10, y: 20, width: 100, height: 50, angle: 0, zIndex: 1,
+      props: { strokeColor: '#000', fillColor: '#fff', strokeWidth: 1, strokeStyle: 'solid' as const, opacity: 1 },
+      version: 2, versionNonce: 99, updatedAt: Date.now(),
+      isDeleted: false, groupId: null, frameId: null, locked: false, createdBy: 'test',
+    };
+
+    snapshotHandler({ elements: [el], documentClock: 5 });
+
+    expect(spy).toHaveBeenCalledWith([el]);
+    expect(getLastServerClock()).toBe(5);
+    spy.mockRestore();
+  });
+});
+
+describe('socket-client — P3A-02/AC-5 (T014) ROOM_SNAPSHOT with empty elements', () => {
+  // @covers AC-5
+  it('does not modify elements store and sets lastServerClock to 0 for empty snapshot', async () => {
+    const applyModule = await import('../apply-remote');
+    const spy = vi.spyOn(applyModule, 'applyRemoteElements');
+
+    const { useElementsStore: elStore } = await import('../../store/elements.store');
+    // Seed the store with an existing element to verify it is NOT cleared
+    elStore.setState({ elements: [] });
+
+    const { initSocketClient, getLastServerClock } = await import('../socket-client');
+    initSocketClient('room-abc');
+
+    const snapshotHandler = _handlers[WS_EVENTS.ROOM_SNAPSHOT];
+    expect(snapshotHandler).toBeDefined();
+
+    snapshotHandler({ elements: [], documentClock: 0 });
+
+    // applyRemoteElements called with empty array (it handles the no-op internally)
+    expect(spy).toHaveBeenCalledWith([]);
+    // lastServerClock set to 0
+    expect(getLastServerClock()).toBe(0);
+    // Store should remain empty (applyRemoteElements no-ops on empty array)
+    expect(elStore.getState().elements).toHaveLength(0);
+    spy.mockRestore();
   });
 });
 
