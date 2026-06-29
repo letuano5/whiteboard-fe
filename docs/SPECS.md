@@ -418,6 +418,40 @@ applyRemoteElements(incoming: Element[])  // LWW theo version/versionNonce; bỏ
 - [ ] **Arrow bám theo khi drag (draft mode):** trong `onSelectPointerMove`, khi tính draft position cho các element đang được kéo, tìm thêm các arrow có `startBinding`/`endBinding` tới chúng và đưa arrow đó (với points đã cập nhật) vào `draftElements` — để arrow di chuyển theo ngay khi kéo, không chờ đến `pointerUp`.
 - [ ] Hit-test và undo/redo không bị ảnh hưởng.
 
+### [P2.5-06] Elbow arrow routing tránh source/target shape
+
+- [ ] Arrow/connector hỗ trợ chế độ **elbow/orthogonal routing**: path gồm các đoạn ngang/dọc, được lưu dưới dạng danh sách `points`.
+- [ ] Arrow có thể bind vào 2 element:
+  - `startBinding?: { elementId, anchorRatio }`
+  - `endBinding?: { elementId, anchorRatio }`
+- [ ] Khi arrow bind vào source/target element, điểm đầu/cuối của arrow phải nằm trên hoặc gần outline của element, không nằm sâu bên trong shape.
+- [ ] Chỉ cần tránh **source element** và **target element**. Chưa cần tránh các shape không liên quan nằm giữa đường nối.
+- [ ] Source/target shape được coi là obstacle bằng `boundingBox + padding`.
+- [ ] Router tính path theo hướng **orthogonal/Manhattan**.
+- [ ] Router ưu tiên theo thứ tự:
+  1. Simple orthogonal path nếu không cắt source/target bbox.
+  2. Thêm đoạn “dongle” ngắn đi ra ngoài source/target shape trước khi bẻ hướng.
+  3. Nếu path đơn giản vẫn lỗi, dùng **A*** trên sparse grid để tìm đường orthogonal tránh source/target bbox.
+- [ ] A* chỉ được đi 4 hướng:
+  - left
+  - right
+  - up
+  - down
+- [ ] Cost function của A* nên ưu tiên:
+  - đường ngắn hơn
+  - ít góc gấp hơn
+  - không đi xuyên `boundingBox + padding` của source/target
+- [ ] Sau khi tìm được path, cần simplify points:
+  - bỏ điểm trùng nhau
+  - bỏ đoạn quá ngắn
+  - bỏ điểm trung gian thẳng hàng
+- [ ] Khi user di chuyển source hoặc target shape, các arrow bind với shape đó phải reroute.
+- [ ] Khi user kéo một đầu arrow sang shape khác, binding của đầu đó được cập nhật và path được tính lại.
+- [ ] Không cần xử lý obstacle là shape không liên quan.
+- [ ] Không cần reroute khi user di chuyển shape không phải source/target.
+- [ ] Không cần routing toàn cục giữa nhiều arrow.
+
+
 ---
 
 ## 9. Phase 3A — Persistence & reconnect
