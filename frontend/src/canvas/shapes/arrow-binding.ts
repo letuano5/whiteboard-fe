@@ -1,4 +1,5 @@
 import type { Element } from '../../types/shared';
+import { rotatePoint } from '../../utils/geometry';
 
 /** Snap threshold in world coordinates (view-independent). */
 export const ARROW_SNAP_THRESHOLD = 20;
@@ -11,15 +12,24 @@ export interface AttachmentPoint {
   y: number;
 }
 
-/** Returns the five canonical attachment points for a non-arrow element. */
+/** Returns the five canonical attachment points for a non-arrow element, rotated when angle !== 0. */
 export function getAttachmentPoints(el: Element): AttachmentPoint[] {
-  return [
-    { key: 'center', x: el.x + el.width / 2, y: el.y + el.height / 2 },
-    { key: 'top', x: el.x + el.width / 2, y: el.y },
-    { key: 'right', x: el.x + el.width, y: el.y + el.height / 2 },
-    { key: 'bottom', x: el.x + el.width / 2, y: el.y + el.height },
-    { key: 'left', x: el.x, y: el.y + el.height / 2 },
+  const cx = el.x + el.width / 2;
+  const cy = el.y + el.height / 2;
+  const points: AttachmentPoint[] = [
+    { key: 'center', x: cx, y: cy },
+    { key: 'top', x: cx, y: el.y },
+    { key: 'right', x: el.x + el.width, y: cy },
+    { key: 'bottom', x: cx, y: el.y + el.height },
+    { key: 'left', x: el.x, y: cy },
   ];
+  if (el.angle === 0) return points;
+  const center = { x: cx, y: cy };
+  return points.map((ap) => {
+    if (ap.key === 'center') return ap;
+    const rotated = rotatePoint({ x: ap.x, y: ap.y }, center, el.angle);
+    return { ...ap, x: rotated.x, y: rotated.y };
+  });
 }
 
 function dist(ax: number, ay: number, bx: number, by: number): number {
@@ -80,18 +90,19 @@ export function parseBinding(b: string | null | undefined): { elementId: string;
   return { elementId, pointKey };
 }
 
-/** Computes the world position of an attachment point on the target element. */
+/** Computes the world position of an attachment point on the target element, accounting for rotation. */
 export function computeBindingPoint(target: Element, pointKey: PointKey): { x: number; y: number } {
-  switch (pointKey) {
-    case 'center':
-      return { x: target.x + target.width / 2, y: target.y + target.height / 2 };
-    case 'top':
-      return { x: target.x + target.width / 2, y: target.y };
-    case 'right':
-      return { x: target.x + target.width, y: target.y + target.height / 2 };
-    case 'bottom':
-      return { x: target.x + target.width / 2, y: target.y + target.height };
-    case 'left':
-      return { x: target.x, y: target.y + target.height / 2 };
-  }
+  const cx = target.x + target.width / 2;
+  const cy = target.y + target.height / 2;
+  if (pointKey === 'center') return { x: cx, y: cy };
+  const unrotated =
+    pointKey === 'top'
+      ? { x: cx, y: target.y }
+      : pointKey === 'right'
+        ? { x: target.x + target.width, y: cy }
+        : pointKey === 'bottom'
+          ? { x: cx, y: target.y + target.height }
+          : { x: target.x, y: cy }; // 'left'
+  if (target.angle === 0) return unrotated;
+  return rotatePoint(unrotated, { x: cx, y: cy }, target.angle);
 }

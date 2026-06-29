@@ -1,5 +1,5 @@
 import type { Camera, Element } from '../../types/shared';
-import type { HandleId, ResizeHandleId } from '../../types/interaction';
+import type { EndpointHandleId, HandleId, ResizeHandleId } from '../../types/interaction';
 import { getShapeUtil } from '../shapes';
 import { useInteractionStore } from '../../store/interaction.store';
 import { findNearestSnap, ARROW_SNAP_THRESHOLD } from '../shapes/arrow-binding';
@@ -12,6 +12,40 @@ interface SelectionOverlayProps {
 }
 
 function SelectionOverlay({ element, onHandlePointerDown }: SelectionOverlayProps) {
+  // Arrow and line: render two endpoint handles instead of 8 bbox + rotate handles
+  if (element.type === 'arrow' || element.type === 'line') {
+    const pts = element.props.points;
+    if (!pts || pts.length < 2) return <g />;
+    const handles: [EndpointHandleId, number, number][] = [
+      ['ep-start', pts[0][0], pts[0][1]],
+      ['ep-end', pts[1][0], pts[1][1]],
+    ];
+    return (
+      <g>
+        {handles.map(([id, hx, hy]) => (
+          <circle
+            key={id}
+            data-handle={id}
+            cx={hx}
+            cy={hy}
+            r={5}
+            fill="white"
+            stroke="#3b82f6"
+            strokeWidth={1.5}
+            style={{ cursor: 'crosshair' }}
+            onPointerDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              const svgEl = e.currentTarget.closest('svg') as SVGSVGElement | null;
+              svgEl?.setPointerCapture?.(e.pointerId);
+              onHandlePointerDown?.(id, e);
+            }}
+          />
+        ))}
+      </g>
+    );
+  }
+
   const { x, y, width: w, height: h, angle } = element;
   const cx = x + w / 2;
   const cy = y + h / 2;
@@ -203,7 +237,11 @@ export default function SvgLayer({
             const util = getShapeUtil(draftEl.type);
             if (!util) return null;
             return (
-              <g key={`remote-draft-${sessionId}-${draftEl.id}`} opacity={0.5} style={{ pointerEvents: 'none' }}>
+              <g
+                key={`remote-draft-${sessionId}-${draftEl.id}`}
+                opacity={0.5}
+                style={{ pointerEvents: 'none' }}
+              >
                 {util.render(draftEl)}
                 <rect
                   x={draftEl.x}

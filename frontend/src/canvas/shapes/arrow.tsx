@@ -1,6 +1,7 @@
 import type { Element } from '../../types/shared';
 import type { ShapeUtil } from './types';
 import { strokeDashArray } from './utils';
+import { normalizeLinearBounds } from '../../utils/geometry';
 
 const ARROW_HEAD_LEN = 12;
 const ARROW_HEAD_WIDTH = 8;
@@ -91,8 +92,11 @@ export const arrowShapeUtil: ShapeUtil = {
     return dist <= HIT_THRESHOLD;
   },
 
-  getBounds({ x, y, width, height }) {
-    return { x, y, width, height };
+  getBounds(element) {
+    if (element.props.points && element.props.points.length >= 2) {
+      return normalizeLinearBounds(element.props.points);
+    }
+    return { x: element.x, y: element.y, width: element.width, height: element.height };
   },
 
   resize(): Partial<Element> {

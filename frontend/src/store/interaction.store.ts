@@ -1,12 +1,7 @@
 import { create } from 'zustand';
 import type { Element, Presence } from '../types/shared';
 import type { Point, Rect } from '../types/geometry';
-import type {
-  InteractionState,
-  ResizeHandleId,
-  ResizeSession,
-  ToolId,
-} from '../types/interaction';
+import type { HandleId, InteractionState, ResizeSession, ToolId } from '../types/interaction';
 
 const DEFAULT_STATE: InteractionState = {
   tool: 'select',
@@ -36,7 +31,7 @@ interface InteractionActions {
   setDraftElement: (el: Element | null) => void;
   setDraftElements: (els: Element[]) => void;
   setMarquee: (rect: Rect | null) => void;
-  setResizeHandle: (h: ResizeHandleId | null) => void;
+  setResizeHandle: (h: HandleId | null) => void;
   setResizeSession: (session: ResizeSession | null) => void;
   setIsRotating: (v: boolean) => void;
   setEditingId: (id: string | null) => void;

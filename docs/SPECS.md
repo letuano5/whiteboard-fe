@@ -405,6 +405,19 @@ applyRemoteElements(incoming: Element[])  // LWW theo version/versionNonce; bỏ
 - [ ] `selectedIds` trong presence; shape người khác đang chọn hiện viền màu của họ.
 - [ ] Khi user khác thay đổi element trên canvas/document, client hiện tại phải thấy được thay đổi realtime đó. Thay đổi realtime có thể là draft/pending change, chưa cần coi là thay đổi đã commit vào document. Chưa cần xử lý conflict phức tạp; mục tiêu chính là hiển thị được selection và preview thay đổi của người khác.
 
+### [P2.5-05] Point-based model cho linear elements (arrow, line, freehand)
+
+**Vấn đề:** `arrow` và `line` hiện lưu cả `x,y,width,height` (bbox) lẫn `props.points` (điểm thực). Hai nguồn sự thật này có thể diverge — bbox không cập nhật khi binding hook đổi points, resize theo bbox làm arrow "biến dạng" không trực quan. Freehand (P3C) sẽ gặp vấn đề tương tự nếu không sửa sớm.
+
+**Mục tiêu:** Linear elements (arrow, line, freehand) chuyển sang **point-based model**: `props.points` là nguồn sự thật duy nhất; `x,y,width,height` luôn được derive từ points (bounding box của tập điểm), không bao giờ được lưu độc lập.
+
+- [ ] `getBounds` của arrow/line ShapeUtil tính bbox từ `props.points` thay vì dùng `x,y,width,height`.
+- [ ] Khi commit mutation, pipeline tự chuẩn hoá `x,y,width,height` của linear elements theo bbox của points (helper `normalizeLinearBounds`).
+- [ ] Selection UI cho arrow/line hiển thị **endpoint handles** (vòng tròn kéo được tại mỗi điểm đầu/cuối) thay vì 8 bbox corner/edge handles.
+- [ ] Kéo endpoint handle cập nhật đúng điểm đó trong `props.points`; snap binding vẫn hoạt động khi thả.
+- [ ] **Arrow bám theo khi drag (draft mode):** trong `onSelectPointerMove`, khi tính draft position cho các element đang được kéo, tìm thêm các arrow có `startBinding`/`endBinding` tới chúng và đưa arrow đó (với points đã cập nhật) vào `draftElements` — để arrow di chuyển theo ngay khi kéo, không chờ đến `pointerUp`.
+- [ ] Hit-test và undo/redo không bị ảnh hưởng.
+
 ---
 
 ## 9. Phase 3A — Persistence & reconnect

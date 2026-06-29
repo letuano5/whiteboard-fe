@@ -1,6 +1,7 @@
 import type { Element } from '../types/shared';
 import { generateId } from '../utils/id';
 import { useElementsStore } from './elements.store';
+import { normalizeLinearBounds } from '../utils/geometry';
 
 export interface MutationEvent {
   type: 'create' | 'patch' | 'delete' | 'update';
@@ -32,6 +33,18 @@ function nextNonce(): number {
   return Math.floor(Math.random() * 1_000_000_000);
 }
 
+/** Keeps x,y,width,height in sync with props.points for arrow/line elements. */
+function applyLinearNorm(el: Element): Element {
+  if (
+    (el.type === 'arrow' || el.type === 'line') &&
+    el.props.points &&
+    el.props.points.length >= 2
+  ) {
+    return { ...el, ...normalizeLinearBounds(el.props.points) };
+  }
+  return el;
+}
+
 export type ElementDraft = Omit<
   Element,
   'id' | 'version' | 'versionNonce' | 'updatedAt' | 'zIndex' | 'isDeleted'
@@ -43,15 +56,17 @@ export function createElements(drafts: ElementDraft[]): Element[] {
   const baseZIndex = elements.length === 0 ? 0 : Math.max(...elements.map((e) => e.zIndex));
   const now = Date.now();
 
-  const created: Element[] = drafts.map((draft, i) => ({
-    ...draft,
-    id: generateId(),
-    zIndex: baseZIndex + 1 + i,
-    version: 1,
-    versionNonce: nextNonce(),
-    updatedAt: now,
-    isDeleted: false,
-  }));
+  const created: Element[] = drafts.map((draft, i) =>
+    applyLinearNorm({
+      ...draft,
+      id: generateId(),
+      zIndex: baseZIndex + 1 + i,
+      version: 1,
+      versionNonce: nextNonce(),
+      updatedAt: now,
+      isDeleted: false,
+    }),
+  );
 
   useElementsStore.getState().addElements(created);
   fireHooks({ type: 'create', elements: created, before: [] });
@@ -62,7 +77,7 @@ export function createElement(draft: ElementDraft): Element {
   const { elements } = useElementsStore.getState();
   const maxZIndex = elements.length === 0 ? 0 : Math.max(...elements.map((e) => e.zIndex));
 
-  const element: Element = {
+  const element: Element = applyLinearNorm({
     ...draft,
     id: generateId(),
     zIndex: maxZIndex + 1,
@@ -70,7 +85,7 @@ export function createElement(draft: ElementDraft): Element {
     versionNonce: nextNonce(),
     updatedAt: Date.now(),
     isDeleted: false,
-  };
+  });
 
   useElementsStore.getState().addElement(element);
   fireHooks({ type: 'create', elements: [element], before: [] });
@@ -85,14 +100,14 @@ export function patchElement(
   const existing = elements.find((e) => e.id === id);
   if (!existing || existing.isDeleted) return;
 
-  const updated: Element = {
+  const updated: Element = applyLinearNorm({
     ...existing,
     ...patch,
     id: existing.id,
     version: existing.version + 1,
     versionNonce: nextNonce(),
     updatedAt: Date.now(),
-  };
+  });
 
   useElementsStore.getState().updateElement(updated);
   fireHooks({ type: 'patch', elements: [updated], before: [existing] });
@@ -131,14 +146,16 @@ export function updateElements(
   const updated = patches.reduce<Element[]>((acc, { id, patch }) => {
     const existing = elements.find((e) => e.id === id);
     if (!existing || existing.isDeleted) return acc;
-    acc.push({
-      ...existing,
-      ...patch,
-      id: existing.id,
-      version: existing.version + 1,
-      versionNonce: nextNonce(),
-      updatedAt: now,
-    });
+    acc.push(
+      applyLinearNorm({
+        ...existing,
+        ...patch,
+        id: existing.id,
+        version: existing.version + 1,
+        versionNonce: nextNonce(),
+        updatedAt: now,
+      }),
+    );
     return acc;
   }, []);
 

@@ -129,7 +129,7 @@ pnpm --filter whiteboard-be dev
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan at
-`specs/019-zorder-arrow-binding/plan.md`.
+`specs/020-linear-point-model/plan.md`.
 <!-- SPECKIT END -->
 
 ## Established architectural decisions

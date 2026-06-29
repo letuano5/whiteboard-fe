@@ -7,11 +7,11 @@ import {
   createElements,
   type ElementDraft,
 } from '../../store/mutation-pipeline';
-import { findNearestSnap, parseBinding } from '../shapes/arrow-binding';
+import { findNearestSnap, parseBinding, computeBindingPoint } from '../shapes/arrow-binding';
 import { getShapeUtil } from '../shapes';
-import { rotatePoint, unrotatePoint } from '../../utils/geometry';
+import { rotatePoint, unrotatePoint, normalizeLinearBounds } from '../../utils/geometry';
 import type { Point, Rect } from '../../types/geometry';
-import type { ResizeHandleId, ResizeSession } from '../../types/interaction';
+import type { HandleId, ResizeHandleId, ResizeSession } from '../../types/interaction';
 import type { Element } from '../../types/shared';
 
 function normalizeRect(start: Point, end: Point): Rect {
@@ -258,6 +258,41 @@ function resizePointGeometry(
   };
 }
 
+function isFullyBoundArrow(el: Element): boolean {
+  return (
+    el.type === 'arrow' &&
+    parseBinding(el.props.startBinding) !== null &&
+    parseBinding(el.props.endBinding) !== null
+  );
+}
+
+function computeBoundArrowDrafts(draftTarget: Element, allElements: Element[]): Element[] {
+  return allElements
+    .filter((a) => !a.isDeleted && a.type === 'arrow' && a.id !== draftTarget.id)
+    .filter(
+      (a) =>
+        parseBinding(a.props.startBinding)?.elementId === draftTarget.id ||
+        parseBinding(a.props.endBinding)?.elementId === draftTarget.id,
+    )
+    .map((arrow) => {
+      const srcPts: [number, number][] =
+        arrow.props.points ?? ([[0, 0], [0, 0]] as [number, number][]);
+      const newPts: [number, number][] = srcPts.map((pt, idx) => {
+        const binding =
+          idx === 0
+            ? parseBinding(arrow.props.startBinding)
+            : parseBinding(arrow.props.endBinding);
+        if (binding?.elementId === draftTarget.id) {
+          const bp = computeBindingPoint(draftTarget, binding.pointKey);
+          return [bp.x, bp.y];
+        }
+        return [pt[0], pt[1]];
+      });
+      const bbox = normalizeLinearBounds(newPts);
+      return { ...arrow, ...bbox, props: { ...arrow.props, points: newPts } };
+    });
+}
+
 export function onSelectPointerDown(worldPt: Point, shiftKey = false): void {
   const elements = useElementsStore.getState().elements;
   const visible = elements.filter((el) => !el.isDeleted).sort((a, b) => b.zIndex - a.zIndex);
@@ -287,18 +322,22 @@ export function onSelectPointerDown(worldPt: Point, shiftKey = false): void {
         setDraggingId(null);
         setDragStart(null);
       } else if (selectedIds.includes(el.id)) {
-        // Already selected: keep multi-selection, start drag
-        setDraggingId(el.id);
-        setDragStart(worldPt);
-        setResizeHandle(null);
-        setResizeSession(null);
+        // Already selected: keep multi-selection, start drag (unless arrow is fully bound)
+        if (!isFullyBoundArrow(el)) {
+          setDraggingId(el.id);
+          setDragStart(worldPt);
+          setResizeHandle(null);
+          setResizeSession(null);
+        }
       } else {
         // Replace selection with this element
         setSelectedIds([el.id]);
-        setDraggingId(el.id);
-        setDragStart(worldPt);
-        setResizeHandle(null);
-        setResizeSession(null);
+        if (!isFullyBoundArrow(el)) {
+          setDraggingId(el.id);
+          setDragStart(worldPt);
+          setResizeHandle(null);
+          setResizeSession(null);
+        }
       }
       return;
     }
@@ -313,7 +352,7 @@ export function onSelectPointerDown(worldPt: Point, shiftKey = false): void {
   setMarquee(normalizeRect(worldPt, worldPt));
 }
 
-export function onSelectHandlePointerDown(handle: ResizeHandleId, worldPt: Point): void {
+export function onSelectHandlePointerDown(handle: HandleId, worldPt: Point): void {
   const { selectedIds, setDraggingId, setDragStart, setResizeHandle, setResizeSession } =
     useInteractionStore.getState();
   if (selectedIds.length === 0) return;
@@ -322,9 +361,21 @@ export function onSelectHandlePointerDown(handle: ResizeHandleId, worldPt: Point
     .elements.find((el) => el.id === selectedIds[0] && !el.isDeleted);
   if (!selected) return;
 
+  // Endpoint handles: just start a drag without creating a resize session
+  if (handle === 'ep-start' || handle === 'ep-end') {
+    setDraggingId(selected.id);
+    setDragStart(worldPt);
+    setResizeHandle(handle);
+    setResizeSession(null);
+    return;
+  }
+
+  // At this point handle is ResizeHandleId | 'rotate'; 'rotate' is handled by
+  // Whiteboard.tsx before calling this function, so it is always a ResizeHandleId here.
+  const resizeHandle = handle as ResizeHandleId;
   setDraggingId(selected.id);
   setDragStart(worldPt);
-  setResizeHandle(handle);
+  setResizeHandle(resizeHandle);
   setResizeSession({
     originalBounds: {
       x: selected.x,
@@ -332,8 +383,8 @@ export function onSelectHandlePointerDown(handle: ResizeHandleId, worldPt: Point
       width: selected.width,
       height: selected.height,
     },
-    originalHandle: handle,
-    anchor: getResizeAnchor(selected, handle),
+    originalHandle: resizeHandle,
+    anchor: getResizeAnchor(selected, resizeHandle),
   });
 }
 
@@ -387,7 +438,46 @@ export function onSelectPointerMove(worldPt: Point): void {
         y: el.y + dy,
         props: translatePointGeometry(el, dx, dy),
       }));
-    setDraftElements(drafts);
+
+    // @covers AC-8: add non-selected arrows bound to any selected element
+    const draftPositions = new Map(drafts.map((d) => [d.id, d]));
+    const selectedIdSet = new Set(selectedIds);
+    const boundArrows: Element[] = allElements
+      .filter((a) => !a.isDeleted && a.type === 'arrow' && !selectedIdSet.has(a.id))
+      .filter((a) => {
+        const startEl = parseBinding(a.props.startBinding)?.elementId;
+        const endEl = parseBinding(a.props.endBinding)?.elementId;
+        return (
+          (startEl !== undefined && selectedIdSet.has(startEl)) ||
+          (endEl !== undefined && selectedIdSet.has(endEl))
+        );
+      })
+      .map((arrow) => {
+        const srcPts =
+          arrow.props.points ??
+          ([
+            [0, 0],
+            [0, 0],
+          ] as [number, number][]);
+        const newPts: [number, number][] = srcPts.map((pt, idx) => {
+          const isStart = idx === 0;
+          const binding = isStart
+            ? parseBinding(arrow.props.startBinding)
+            : parseBinding(arrow.props.endBinding);
+          if (binding && selectedIdSet.has(binding.elementId)) {
+            const draftEl = draftPositions.get(binding.elementId);
+            if (draftEl) {
+              const bp = computeBindingPoint(draftEl, binding.pointKey);
+              return [bp.x, bp.y];
+            }
+          }
+          return [pt[0], pt[1]];
+        });
+        const bbox = normalizeLinearBounds(newPts);
+        return { ...arrow, ...bbox, props: { ...arrow.props, points: newPts } };
+      });
+
+    setDraftElements([...drafts, ...boundArrows]);
     return;
   }
 
@@ -401,7 +491,25 @@ export function onSelectPointerMove(worldPt: Point): void {
     const cy = el.y + el.height / 2;
     const rawAngle = Math.atan2(worldPt.y - cy, worldPt.x - cx) + Math.PI / 2;
     const angle = ((rawAngle + Math.PI) % (2 * Math.PI)) - Math.PI;
-    setDraftElement({ ...el, angle });
+    const draftEl = { ...el, angle };
+    setDraftElement(draftEl);
+    setDraftElements(computeBoundArrowDrafts(draftEl, useElementsStore.getState().elements));
+    return;
+  }
+
+  // @covers AC-6: endpoint handle drag — update only the dragged endpoint in props.points
+  const resizeHandle = useInteractionStore.getState().resizeHandle;
+  if (resizeHandle === 'ep-start' || resizeHandle === 'ep-end') {
+    const pointIdx = resizeHandle === 'ep-start' ? 0 : 1;
+    const pts = el.props.points;
+    if (!pts || pts.length < 2) return;
+    const newPoints: [number, number][] = [
+      [pts[0][0], pts[0][1]],
+      [pts[1][0], pts[1][1]],
+    ];
+    newPoints[pointIdx] = [worldPt.x, worldPt.y];
+    const bbox = normalizeLinearBounds(newPoints);
+    setDraftElement({ ...el, ...bbox, props: { ...el.props, points: newPoints } });
     return;
   }
 
@@ -447,11 +555,13 @@ export function onSelectPointerMove(worldPt: Point): void {
       const cy1 = anchorWorld.y - (dax * sin + day * cos);
 
       const bounds = { x: cx1 - width / 2, y: cy1 - height / 2, width, height };
-      setDraftElement({
+      const draftEl = {
         ...el,
         ...bounds,
         props: computeResizeProps(el, resizeSession, bounds, flippedX, flippedY),
-      });
+      };
+      setDraftElement(draftEl);
+      setDraftElements(computeBoundArrowDrafts(draftEl, useElementsStore.getState().elements));
       setResizeHandle(activeHandle);
     } else {
       const { flippedX, flippedY, activeHandle, ...rawBounds } = resizeBoundsFromAnchorAndPointer(
@@ -462,22 +572,27 @@ export function onSelectPointerMove(worldPt: Point): void {
         el.type === 'text'
           ? fitTextBoundsToFontScale(resizeSession, rawBounds, activeHandle)
           : rawBounds;
-      setDraftElement({
+      const draftEl = {
         ...el,
         ...bounds,
         props: computeResizeProps(el, resizeSession, bounds, flippedX, flippedY),
-      });
+      };
+      setDraftElement(draftEl);
+      setDraftElements(computeBoundArrowDrafts(draftEl, useElementsStore.getState().elements));
       setResizeHandle(activeHandle);
     }
   } else {
     const dx = worldPt.x - dragStart.x;
     const dy = worldPt.y - dragStart.y;
-    setDraftElement({
+    // @covers AC-8: find arrows bound to the dragged element and update in draft layer
+    const draftEl = {
       ...el,
       x: el.x + dx,
       y: el.y + dy,
       props: translatePointGeometry(el, dx, dy),
-    });
+    };
+    setDraftElement(draftEl);
+    setDraftElements(computeBoundArrowDrafts(draftEl, useElementsStore.getState().elements));
   }
 }
 
@@ -517,8 +632,8 @@ export function onSelectPointerUp(_worldPt: Point): void {
     return;
   }
 
-  // @covers AC-8: commit multi-drag
-  if (draftElements.length > 0) {
+  // @covers AC-8: commit multi-drag (pure multi-select, no single-element draftElement)
+  if (draftElements.length > 0 && !draftElement) {
     updateElements(
       draftElements.map((el) => ({
         id: el.id,
@@ -531,81 +646,88 @@ export function onSelectPointerUp(_worldPt: Point): void {
     return;
   }
 
+  // @covers AC-9: single drag with bound arrow drafts — commit bound arrows then fall through
+  if (draftElements.length > 0 && draftElement) {
+    updateElements(
+      draftElements.map((el) => ({
+        id: el.id,
+        patch: { x: el.x, y: el.y, props: el.props },
+      })),
+    );
+    setDraftElements([]);
+  }
+
   if (draggingId && dragStart && draftElement) {
     // AC-2: commit rotate via patchElement
     if (isRotating) {
       patchElement(draggingId, { angle: draftElement.angle });
-    } else if (resizeSession) {
-      // T022: Arrow endpoint binding snap — check if resizing an arrow endpoint
-      if (draftElement.type === 'arrow' && draftElement.props.points) {
-        const elements = useElementsStore.getState().elements;
-        const points = draftElement.props.points;
-        const existingEl = elements.find((e) => e.id === draggingId);
-        const originalPoints = existingEl?.props.points;
+    } else if (draftElement.type === 'arrow' && draftElement.props.points) {
+      // Arrow: apply snap binding regardless of how drag started (endpoint handle or resize)
+      const elements = useElementsStore.getState().elements;
+      const points = draftElement.props.points;
+      const existingEl = elements.find((e) => e.id === draggingId);
+      const originalPoints = existingEl?.props.points;
 
-        // Detect which endpoint moved (compare draft points vs original)
-        let movedIdx: 0 | (typeof points.length extends 0 ? never : number) = -1;
-        if (originalPoints && points.length > 0) {
-          if (
-            Math.abs(points[0][0] - (originalPoints[0]?.[0] ?? 0)) > 0.5 ||
-            Math.abs(points[0][1] - (originalPoints[0]?.[1] ?? 0)) > 0.5
-          ) {
-            movedIdx = 0;
-          } else {
-            movedIdx = points.length - 1;
-          }
+      // Detect which endpoint moved (compare draft points vs original)
+      let movedIdx = -1;
+      if (originalPoints && points.length > 0) {
+        if (
+          Math.abs(points[0][0] - (originalPoints[0]?.[0] ?? 0)) > 0.5 ||
+          Math.abs(points[0][1] - (originalPoints[0]?.[1] ?? 0)) > 0.5
+        ) {
+          movedIdx = 0;
+        } else {
+          movedIdx = points.length - 1;
         }
-
-        let resolvedProps = { ...draftElement.props };
-
-        if (movedIdx >= 0) {
-          const movedPt = { x: points[movedIdx][0], y: points[movedIdx][1] };
-          const snap = findNearestSnap(movedPt, elements, draggingId);
-          const newPoints: [number, number][] = points.map((p) => [p[0], p[1]]);
-
-          if (snap) {
-            newPoints[movedIdx] = [snap.x, snap.y];
-            const bindingStr = `${snap.elementId}:${snap.pointKey}`;
-            if (movedIdx === 0) {
-              resolvedProps = { ...resolvedProps, points: newPoints, startBinding: bindingStr };
-            } else {
-              resolvedProps = { ...resolvedProps, points: newPoints, endBinding: bindingStr };
-            }
-          } else {
-            // No snap — release binding for the moved endpoint
-            if (movedIdx === 0) {
-              const parsed = parseBinding(resolvedProps.startBinding);
-              if (parsed) {
-                resolvedProps = { ...resolvedProps, startBinding: undefined };
-              }
-            } else {
-              const parsed = parseBinding(resolvedProps.endBinding);
-              if (parsed) {
-                resolvedProps = { ...resolvedProps, endBinding: undefined };
-              }
-            }
-          }
-        }
-
-        patchElement(draggingId, {
-          x: draftElement.x,
-          y: draftElement.y,
-          width: draftElement.width,
-          height: draftElement.height,
-          props: resolvedProps,
-        });
-      } else {
-        patchElement(draggingId, {
-          x: draftElement.x,
-          y: draftElement.y,
-          width: draftElement.width,
-          height: draftElement.height,
-          ...(draftElement.props.points || draftElement.type === 'text'
-            ? { props: draftElement.props }
-            : {}),
-        });
       }
+
+      let resolvedProps = { ...draftElement.props };
+
+      if (movedIdx >= 0) {
+        const movedPt = { x: points[movedIdx][0], y: points[movedIdx][1] };
+        const snap = findNearestSnap(movedPt, elements, draggingId);
+        const newPoints: [number, number][] = points.map((p) => [p[0], p[1]]);
+
+        if (snap) {
+          newPoints[movedIdx] = [snap.x, snap.y];
+          const bindingStr = `${snap.elementId}:${snap.pointKey}`;
+          if (movedIdx === 0) {
+            // Only update startBinding; leave endBinding untouched
+            resolvedProps = { ...resolvedProps, points: newPoints, startBinding: bindingStr };
+          } else {
+            // Only update endBinding; leave startBinding untouched
+            resolvedProps = { ...resolvedProps, points: newPoints, endBinding: bindingStr };
+          }
+        } else {
+          // No snap — release binding only for the moved endpoint
+          if (movedIdx === 0 && parseBinding(resolvedProps.startBinding)) {
+            resolvedProps = { ...resolvedProps, startBinding: undefined };
+          } else if (movedIdx !== 0 && parseBinding(resolvedProps.endBinding)) {
+            resolvedProps = { ...resolvedProps, endBinding: undefined };
+          }
+        }
+      }
+
+      patchElement(draggingId, {
+        x: draftElement.x,
+        y: draftElement.y,
+        width: draftElement.width,
+        height: draftElement.height,
+        props: resolvedProps,
+      });
+    } else if (resizeSession) {
+      // Non-arrow resize
+      patchElement(draggingId, {
+        x: draftElement.x,
+        y: draftElement.y,
+        width: draftElement.width,
+        height: draftElement.height,
+        ...(draftElement.props.points || draftElement.type === 'text'
+          ? { props: draftElement.props }
+          : {}),
+      });
     } else {
+      // Plain move
       patchElement(draggingId, {
         x: draftElement.x,
         y: draftElement.y,
@@ -620,6 +742,7 @@ export function onSelectPointerUp(_worldPt: Point): void {
   setResizeSession(null);
   setIsRotating(false);
   setDraftElement(null);
+  setDraftElements([]);
 }
 
 // AC-1: initiate rotate drag on the selected element

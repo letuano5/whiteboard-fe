@@ -21,8 +21,9 @@ export type ToolId =
   | 'embed'
   | 'laser';
 
-export type HandleId = 'nw' | 'ne' | 'sw' | 'se' | 'n' | 's' | 'e' | 'w' | 'rotate';
-export type ResizeHandleId = Exclude<HandleId, 'rotate'>;
+export type EndpointHandleId = 'ep-start' | 'ep-end';
+export type ResizeHandleId = 'nw' | 'ne' | 'sw' | 'se' | 'n' | 's' | 'e' | 'w';
+export type HandleId = ResizeHandleId | 'rotate' | EndpointHandleId;
 
 export interface ResizeSession {
   originalBounds: Rect;
@@ -38,7 +39,7 @@ export interface InteractionState {
   draftElement: Element | null;
   draftElements: Element[];
   marquee: Rect | null;
-  resizeHandle: ResizeHandleId | null;
+  resizeHandle: HandleId | null;
   resizeSession: ResizeSession | null;
   isRotating: boolean;
   editingId: string | null;

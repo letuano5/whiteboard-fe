@@ -1,6 +1,7 @@
 import type { Element } from '../../types/shared';
 import type { ShapeUtil } from './types';
 import { strokeDashArray } from './utils';
+import { normalizeLinearBounds } from '../../utils/geometry';
 
 export const lineShapeUtil: ShapeUtil = {
   type: 'line',
@@ -64,8 +65,11 @@ export const lineShapeUtil: ShapeUtil = {
     );
   },
 
-  getBounds({ x, y, width, height }) {
-    return { x, y, width, height };
+  getBounds(element) {
+    if (element.props.points && element.props.points.length >= 2) {
+      return normalizeLinearBounds(element.props.points);
+    }
+    return { x: element.x, y: element.y, width: element.width, height: element.height };
   },
 
   resize(_element, _handle, _dx, _dy): Partial<Element> {
