@@ -161,9 +161,18 @@ export default function SvgLayer({
 
   // IDs currently shown as draftElements (hide their committed versions to avoid doubling)
   const draftElementIds = new Set(draftElements.map((el) => el.id));
+  const remoteDraftIds = new Set(
+    Array.from(remoteDrafts.values()).flatMap((draftEls) => draftEls.map((el) => el.id)),
+  );
 
   const visible = elements
-    .filter((el) => !el.isDeleted && el.id !== draftElement?.id && !draftElementIds.has(el.id))
+    .filter(
+      (el) =>
+        !el.isDeleted &&
+        el.id !== draftElement?.id &&
+        !draftElementIds.has(el.id) &&
+        !remoteDraftIds.has(el.id),
+    )
     .sort((a, b) => a.zIndex - b.zIndex);
 
   // T023: Arrow snap indicators — computed purely from draftElement and elements list (no state)
