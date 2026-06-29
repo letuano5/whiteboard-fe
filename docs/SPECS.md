@@ -10,8 +10,6 @@
 >
 > **Các sub-phase (P1A, P1B, P2.5, P3A…) là thứ tự triển khai (thứ tự tấn công), KHÔNG phải các milestone chấm điểm riêng.**
 
-> **[Frontend view]** File này dùng cho repo `frontend/`. Task đánh dấu `[BE]` thuộc repo `backend/` — liệt kê để tham khảo phụ thuộc, không phải việc của repo này.
-
 ---
 
 ## 1. Tổng quan
@@ -26,7 +24,7 @@
 | Render (P1–P2.5)        | **SVG/DOM-first** — mỗi shape là một node trong layer transform theo camera. **Image cũng render bằng SVG `<image>`/DOM `<img>`, không cần Canvas.** |
 | Render (P3C+)           | Bổ sung **một lớp Canvas overlay** chỉ cho freehand/highlighter/eraser (point-heavy/ink)                                                             |
 | State client            | Zustand — tách rõ `elements` (committed) và `interaction` (transient)                                                                                |
-| Shared types            | Mỗi repo tự copy `src/types/shared.ts`; đồng bộ thủ công khi model đổi                                                                               |
+| Shared types            | `packages/shared/src/index.ts` — single source of truth, import qua `@vdt/shared` workspace link                                                     |
 | Transport realtime      | Socket.IO client                                                                                                                                     |
 | **[BE]** Server         | Node + TypeScript + Express + Socket.IO; state phòng in-memory (authoritative-light)                                                                 |
 | Lưu trữ (P1)            | `localStorage` + `BroadcastChannel` (đồng bộ giữa các tab)                                                                                           |
@@ -203,8 +201,7 @@ applyRemoteElements(incoming: Element[])  // LWW theo version/versionNonce; bỏ
 ### [P0-01] Khung dự án & shared types
 
 - [ ] Khởi tạo frontend project (Vite + React + TypeScript + Zustand + Tailwind CSS).
-- [ ] `src/types/shared.ts` chứa type `Element`, `Camera`, hằng số WS event.
-- [BE] Khởi tạo backend project; `src/types/shared.ts` server-side (đồng bộ thủ công với frontend).
+- [ ] Sử dụng shared types.
 
 ### [P0-02] Store & camera utils
 
@@ -406,6 +403,54 @@ applyRemoteElements(incoming: Element[])  // LWW theo version/versionNonce; bỏ
 ### [P2.5-04] Thấy selection của người khác
 
 - [ ] `selectedIds` trong presence; shape người khác đang chọn hiện viền màu của họ.
+- [ ] Khi user khác thay đổi element trên canvas/document, client hiện tại phải thấy được thay đổi realtime đó. Thay đổi realtime có thể là draft/pending change, chưa cần coi là thay đổi đã commit vào document. Chưa cần xử lý conflict phức tạp; mục tiêu chính là hiển thị được selection và preview thay đổi của người khác.
+
+### [P2.5-05] Point-based model cho linear elements (arrow, line, freehand)
+
+**Vấn đề:** `arrow` và `line` hiện lưu cả `x,y,width,height` (bbox) lẫn `props.points` (điểm thực). Hai nguồn sự thật này có thể diverge — bbox không cập nhật khi binding hook đổi points, resize theo bbox làm arrow "biến dạng" không trực quan. Freehand (P3C) sẽ gặp vấn đề tương tự nếu không sửa sớm.
+
+**Mục tiêu:** Linear elements (arrow, line, freehand) chuyển sang **point-based model**: `props.points` là nguồn sự thật duy nhất; `x,y,width,height` luôn được derive từ points (bounding box của tập điểm), không bao giờ được lưu độc lập.
+
+- [ ] `getBounds` của arrow/line ShapeUtil tính bbox từ `props.points` thay vì dùng `x,y,width,height`.
+- [ ] Khi commit mutation, pipeline tự chuẩn hoá `x,y,width,height` của linear elements theo bbox của points (helper `normalizeLinearBounds`).
+- [ ] Selection UI cho arrow/line hiển thị **endpoint handles** (vòng tròn kéo được tại mỗi điểm đầu/cuối) thay vì 8 bbox corner/edge handles.
+- [ ] Kéo endpoint handle cập nhật đúng điểm đó trong `props.points`; snap binding vẫn hoạt động khi thả.
+- [ ] **Arrow bám theo khi drag (draft mode):** trong `onSelectPointerMove`, khi tính draft position cho các element đang được kéo, tìm thêm các arrow có `startBinding`/`endBinding` tới chúng và đưa arrow đó (với points đã cập nhật) vào `draftElements` — để arrow di chuyển theo ngay khi kéo, không chờ đến `pointerUp`.
+- [ ] Hit-test và undo/redo không bị ảnh hưởng.
+
+### [P2.5-06] Elbow arrow routing tránh source/target shape
+
+- [ ] Arrow/connector hỗ trợ chế độ **elbow/orthogonal routing**: path gồm các đoạn ngang/dọc, được lưu dưới dạng danh sách `points`.
+- [ ] Arrow có thể bind vào 2 element:
+  - `startBinding?: { elementId, anchorRatio }`
+  - `endBinding?: { elementId, anchorRatio }`
+- [ ] Khi arrow bind vào source/target element, điểm đầu/cuối của arrow phải nằm trên hoặc gần outline của element, không nằm sâu bên trong shape.
+- [ ] Chỉ cần tránh **source element** và **target element**. Chưa cần tránh các shape không liên quan nằm giữa đường nối.
+- [ ] Source/target shape được coi là obstacle bằng `boundingBox + padding`.
+- [ ] Router tính path theo hướng **orthogonal/Manhattan**.
+- [ ] Router ưu tiên theo thứ tự:
+  1. Simple orthogonal path nếu không cắt source/target bbox.
+  2. Thêm đoạn “dongle” ngắn đi ra ngoài source/target shape trước khi bẻ hướng.
+  3. Nếu path đơn giản vẫn lỗi, dùng **A*** trên sparse grid để tìm đường orthogonal tránh source/target bbox.
+- [ ] A* chỉ được đi 4 hướng:
+  - left
+  - right
+  - up
+  - down
+- [ ] Cost function của A* nên ưu tiên:
+  - đường ngắn hơn
+  - ít góc gấp hơn
+  - không đi xuyên `boundingBox + padding` của source/target
+- [ ] Sau khi tìm được path, cần simplify points:
+  - bỏ điểm trùng nhau
+  - bỏ đoạn quá ngắn
+  - bỏ điểm trung gian thẳng hàng
+- [ ] Khi user di chuyển source hoặc target shape, các arrow bind với shape đó phải reroute.
+- [ ] Khi user kéo một đầu arrow sang shape khác, binding của đầu đó được cập nhật và path được tính lại.
+- [ ] Không cần xử lý obstacle là shape không liên quan.
+- [ ] Không cần reroute khi user di chuyển shape không phải source/target.
+- [ ] Không cần routing toàn cục giữa nhiều arrow.
+
 
 ---
 
