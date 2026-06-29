@@ -13,6 +13,9 @@ dist-ssr/
 .env.local
 .env.*.local
 
+# Local data
+.data/
+
 # Testing
 coverage/
 
@@ -29,7 +32,9 @@ npm-debug.log*
 pnpm-debug.log*
 
 # Agent tooling
-.agents/
+.agents/*
+!.agents/skills/
+!.agents/skills/**
 .claude/
 skills-lock.json
-
+.implement-feature-state/
