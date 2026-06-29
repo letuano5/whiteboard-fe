@@ -18,7 +18,7 @@ and upsert `Tombstone` rows.
 **Language/Version**: TypeScript 5.8.x, Node.js 22.x LTS (backend only)
 
 **Primary Dependencies**: Express 5, Socket.IO 4.8.x, Prisma 6.x, `@prisma/client` 6.x, PostgreSQL
-17.x. Add `dotenv` only if implementation needs runtime `.env` loading from backend scripts.
+17.x, dotenv for backend runtime `.env` loading.
 
 **Storage**: PostgreSQL via Prisma. Existing `docker-compose.yml` and `.env.example` already define
 PostgreSQL and `DATABASE_URL`.
