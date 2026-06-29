@@ -69,7 +69,7 @@ already documented in repo context. Durable decisions go into `AGENTS.md`.
 
 ## Phase 3
 
-Generate planning artifacts before asking to start code edits:
+Generate planning artifacts before implementation:
 
 1. `$speckit-plan`
 2. `$speckit-tasks`
@@ -79,46 +79,66 @@ Instruct task generation to include one acceptance-test task per `AC-n`, with or
 coming from `acceptance.md`/`spec.md`, not from code.
 
 If analysis finds issues, fix by updating or regenerating the affected upstream artifact.
-Do not quietly hand-patch generated files in a way the next regeneration will erase.
+Do not quietly hand-patch generated files in a way the next regeneration will erase. Surface
+only issues that require a product, scope, data-shape, architecture, destructive-operation,
+or test-oracle decision from the user.
 
-If the user rejects the plan:
+Normal `$implement-feature` mode is full-flow authorization. Do not stop for a plan approval
+gate unless the user explicitly requested plan-only/gated mode with wording such as "plan
+only", "do not code yet", "wait for approval", or Vietnamese equivalents.
 
-- Revise: keep `specs/<feature>/`, update/regenerate affected artifacts, re-run analysis,
-  then present the gate again.
-- Abandon: remove just-created artifacts only after explicit confirmation.
-
-Before waiting on user approval, run:
+If the user requested explicit gated mode, run before waiting on approval:
 
 ```bash
 .codex/hooks/implement_feature_stop.py --awaiting-user "plan approval"
 ```
 
-When the user approves and implementation resumes, run:
+If the user rejects the plan in gated mode:
+
+- Revise: keep `specs/<feature>/`, update/regenerate affected artifacts, re-run analysis,
+  then present the gate again.
+- Abandon: remove just-created artifacts only after explicit confirmation.
+
+When the user approves in gated mode and implementation resumes, run:
 
 ```bash
 .codex/hooks/implement_feature_stop.py --resume
 ```
 
-After approval, keep the main thread as the conductor and delegate Phase 4-7:
+After Phase 3 completes in full-flow mode, or after approval in gated mode, keep the main
+thread as the conductor and delegate Phase 4-7:
 
 1. Read `references/impl-agent-prompt.md`.
 2. Fill `$SPEC_DIR`, `$FEATURE_NAME`, and `$ARTIFACTS_REGENERATED`.
 3. Spawn a Codex worker subagent when the current surface supports subagents.
 4. Pass only the filled prompt plus the approved artifact paths. Let the worker read code,
    run focused tests, and handle verbose implementation context in its own window.
-5. If subagents are unavailable, follow the same prompt in the main thread as a fallback.
+5. If subagents are unavailable, create a new Codex session/thread handoff for Phase 4-7
+   with the filled worker prompt and artifact paths. Do not implement in the conductor
+   thread unless the user explicitly asks for that fallback.
 6. When the worker returns, scan for `NEED USER INPUT:` before summarizing. If present,
    ask the user in Vietnamese, update/regenerate upstream artifacts if needed, re-run
    `$speckit-analyze`, then re-spawn or resume the worker with the updated context.
 
 ## Phase 4
 
-Implementation normally runs in the worker subagent so file reads, test logs, and local
-debugging do not pollute the conductor context. If no subagent mechanism is available,
-continue in the main thread with the same constraints.
+Implementation normally runs in the worker subagent or a new Phase 4-7 session so file
+reads, test logs, and local debugging do not pollute the conductor context. If no subagent
+mechanism is available, use a new session/thread handoff rather than the conductor thread,
+unless the user explicitly asks to keep implementation in the current thread.
 
 Follow `tasks.md` in dependency order. The checkbox is only a mirror: the real completion
 signal is code slice present plus relevant verification passing.
+
+The implementation worker/session is artifact-bound:
+
+- Read the approved artifacts first: `spec.md`, `acceptance.md`, `plan.md`, `tasks.md`, and
+  directly referenced data-model/contracts files.
+- Do not repeat broad repository discovery that Spec Kit already performed.
+- For each task, read only files named in `tasks.md`/`plan.md` plus at most 2-3 directly
+  related neighboring files needed for local style or API usage.
+- Use broad `rg` searches only when the task lacks a target path or a local import/API
+  cannot be resolved from the target files.
 
 Deviation handler:
 

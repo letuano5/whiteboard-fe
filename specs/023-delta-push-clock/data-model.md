@@ -17,8 +17,23 @@ New module-level map in `backend/src/index.ts`, parallel to the existing `elemen
 **Lifecycle**:
 - **Initialised** on first client join (cold path): value = `loaded.documentClock` from `loadRoomElements`.
 - **Skipped** on subsequent joins (warm path): map entry already exists and is current.
+- **Backfilled** on warm joins or first updates if missing: value = `getRoomClock(db, roomId)` or 0 for a new room.
 - **Incremented** by 1 on every `ELEMENT_UPDATE` received.
-- **Cleaned up** when the last client leaves the room (same as `elements` map cleanup).
+- **Retained** with `roomElements` after the last client leaves; both are process-local hot state until server restart.
+
+## Persistence Clock Flow
+
+### `targetDocumentClock`
+
+Autosave receives the current in-memory clock for the room and passes it to the repository.
+
+```
+saveRoomElements(roomId, elements, targetDocumentClock)
+```
+
+The repository persists `Room.documentClock`, `Record.recordClock`, and
+`Tombstone.deletedClock` using the target clock for that flush. If the database already has
+a higher clock, the repository must not decrease it.
 
 ## WebSocket Payload Changes
 

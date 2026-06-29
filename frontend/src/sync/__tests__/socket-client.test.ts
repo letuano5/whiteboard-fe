@@ -328,6 +328,77 @@ describe('socket-client — P3A-02/AC-5 (T014) ROOM_SNAPSHOT with empty elements
   });
 });
 
+// ─── P3A-04: ELEMENT_UPDATE documentClock tracking ──────────────────────────
+
+describe('socket-client — P3A-04/AC-5 ELEMENT_UPDATE updates lastServerClock', () => {
+  // @covers AC-5
+  it('receiving ELEMENT_UPDATE with documentClock sets getLastServerClock() to that value', async () => {
+    const { initSocketClient, getLastServerClock } = await import('../socket-client');
+    initSocketClient('room-abc');
+
+    const snapshotHandler = _handlers[WS_EVENTS.ROOM_SNAPSHOT];
+    snapshotHandler({ elements: [], documentClock: 5 });
+
+    const updateHandler = _handlers[WS_EVENTS.ELEMENT_UPDATE];
+    updateHandler({ elements: [makeFakeElement('clocked-update')], documentClock: 7 });
+
+    expect(getLastServerClock()).toBe(7);
+  });
+
+  it('ROOM_SNAPSHOT followed by ELEMENT_UPDATE stores the later update clock', async () => {
+    // @covers AC-5
+    const { initSocketClient, getLastServerClock } = await import('../socket-client');
+    initSocketClient('room-abc');
+
+    _handlers[WS_EVENTS.ROOM_SNAPSHOT]({ elements: [], documentClock: 10 });
+    _handlers[WS_EVENTS.ELEMENT_UPDATE]({
+      elements: [makeFakeElement('later-clocked-update')],
+      documentClock: 11,
+    });
+
+    expect(getLastServerClock()).toBe(11);
+  });
+});
+
+describe('socket-client — P3A-04/AC-6 legacy ELEMENT_UPDATE keeps lastServerClock', () => {
+  // @covers AC-6
+  it('receiving ELEMENT_UPDATE without documentClock leaves lastServerClock unchanged', async () => {
+    const { initSocketClient, getLastServerClock } = await import('../socket-client');
+    initSocketClient('room-abc');
+
+    _handlers[WS_EVENTS.ROOM_SNAPSHOT]({ elements: [], documentClock: 5 });
+    _handlers[WS_EVENTS.ELEMENT_UPDATE]({ elements: [makeFakeElement('legacy-update')] });
+
+    expect(getLastServerClock()).toBe(5);
+  });
+});
+
+describe('socket-client — P3A-04/AC-8 outbound clock ownership', () => {
+  // @covers AC-8
+  it('outbound ELEMENT_UPDATE payload does not include a client-authored documentClock', async () => {
+    const { initSocketClient } = await import('../socket-client');
+    const { dispatchMutationEvent } = await import('../../store/mutation-pipeline');
+    initSocketClient('room-abc');
+
+    mockEmit.mockClear();
+    const el = makeFakeElement('outbound-no-clock');
+    dispatchMutationEvent({
+      type: 'update',
+      elements: [el],
+      before: [],
+    });
+
+    const updateCall = mockEmit.mock.calls.find((call) => call[0] === WS_EVENTS.ELEMENT_UPDATE);
+    expect(updateCall).toBeDefined();
+    expect(updateCall?.[1]).toEqual({
+      roomId: 'room-abc',
+      elements: [el],
+    });
+    expect(updateCall?.[1]).not.toHaveProperty('documentClock');
+    expect(updateCall?.[1]).not.toHaveProperty('sentVersion');
+  });
+});
+
 describe('socket-client — same-user camera sync across tabs', () => {
   it('CURSOR_MOVE with own sessionId applies viewport to local camera', async () => {
     const { initSocketClient } = await import('../socket-client');

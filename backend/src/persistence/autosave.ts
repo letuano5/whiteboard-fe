@@ -5,8 +5,14 @@ export interface AutosaveManagerOptions {
   delayMs?: number;
   /** Returns the current in-memory elements for a room. */
   getRoomElements: (roomId: string) => Element[];
-  /** Persists elements to durable storage. Returns the new documentClock. */
-  saveRoomElements: (roomId: string, elements: Element[]) => Promise<unknown>;
+  /** Returns the current in-memory documentClock for a room. */
+  getRoomClock?: (roomId: string) => number;
+  /** Persists elements to durable storage. Returns the persisted documentClock. */
+  saveRoomElements: (
+    roomId: string,
+    elements: Element[],
+    targetDocumentClock?: number,
+  ) => Promise<unknown>;
   /** Logger used for error reporting. Defaults to console. */
   logger?: Pick<typeof console, 'error' | 'info'>;
 }
@@ -41,6 +47,7 @@ export interface AutosaveManager {
 export function createAutosaveManager({
   delayMs = 5000,
   getRoomElements,
+  getRoomClock,
   saveRoomElements,
   logger = console,
 }: AutosaveManagerOptions): AutosaveManager {
@@ -76,7 +83,12 @@ export function createAutosaveManager({
 
     inFlight.add(roomId);
     try {
-      await saveRoomElements(roomId, elements);
+      const targetDocumentClock = getRoomClock?.(roomId);
+      if (targetDocumentClock === undefined) {
+        await saveRoomElements(roomId, elements);
+      } else {
+        await saveRoomElements(roomId, elements, targetDocumentClock);
+      }
       // Mark clean only after a successful write (AC-10: keep dirty on failure)
       dirtyRooms.delete(roomId);
     } catch (err) {

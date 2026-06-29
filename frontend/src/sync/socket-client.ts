@@ -96,16 +96,20 @@ export function initSocketClient(roomId: string): void {
     },
   );
 
-  _socket.on(WS_EVENTS.ELEMENT_UPDATE, (data: { elements: Element[]; sessionId?: string }) => {
-    applyRemoteElements(data.elements);
-    // Clear the peer's remote draft now that they have committed
-    if (data.sessionId) {
-      const { setRemoteDrafts } = useInteractionStore.getState();
-      const current = new Map(useInteractionStore.getState().remoteDrafts);
-      current.delete(data.sessionId);
-      setRemoteDrafts(current);
-    }
-  });
+  _socket.on(
+    WS_EVENTS.ELEMENT_UPDATE,
+    (data: { elements: Element[]; sessionId?: string; documentClock?: number }) => {
+      applyRemoteElements(data.elements);
+      if (data.documentClock !== undefined) _lastServerClock = data.documentClock;
+      // Clear the peer's remote draft now that they have committed
+      if (data.sessionId) {
+        const { setRemoteDrafts } = useInteractionStore.getState();
+        const current = new Map(useInteractionStore.getState().remoteDrafts);
+        current.delete(data.sessionId);
+        setRemoteDrafts(current);
+      }
+    },
+  );
 
   // Server sends full presence list whenever anyone joins
   _socket.on(WS_EVENTS.USER_JOIN, (data: { presences: Presence[] }) => {

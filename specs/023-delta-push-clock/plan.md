@@ -6,7 +6,7 @@
 
 ## Summary
 
-Maintain a per-room `documentClock` counter in server memory, increment it on every `ELEMENT_UPDATE` batch, and broadcast the new clock value to peers. Clients update `lastServerClock` whenever they receive an `ELEMENT_UPDATE` that carries a `documentClock` field. No database schema changes are required; no periodic resync mechanism exists to remove.
+Maintain a per-room `documentClock` counter in server memory, increment it on every `ELEMENT_UPDATE` batch, broadcast the new clock value to peers, and pass that same clock to autosave so durable `recordClock`/`deletedClock` values match the live server clock. Clients update `lastServerClock` whenever they receive an `ELEMENT_UPDATE` that carries a `documentClock` field. No database schema changes are required; no periodic resync mechanism exists to remove.
 
 ## Technical Context
 
@@ -24,9 +24,9 @@ Maintain a per-room `documentClock` counter in server memory, increment it on ev
 
 **Performance Goals**: Clock increment is O(1) in-memory; zero extra DB round-trips per update.
 
-**Constraints**: Must not block the `ELEMENT_UPDATE` broadcast; clock increment is synchronous before `socket.to(roomId).emit`.
+**Constraints**: Must not block the `ELEMENT_UPDATE` broadcast; clock increment is synchronous before `socket.to(roomId).emit`. Autosave receives the current room clock through a synchronous getter and persists it later.
 
-**Scale/Scope**: Single Node.js instance (P3D handles multi-instance Redis path). One room clock per active room.
+**Scale/Scope**: Single Node.js instance (P3D handles multi-instance Redis path). One room clock per hot room state.
 
 ## Constitution Check
 
@@ -63,7 +63,10 @@ specs/023-delta-push-clock/
 ```text
 backend/
 └── src/
-    └── index.ts                ← add roomClocks Map; increment on ELEMENT_UPDATE; enrich broadcast
+    ├── index.ts                         ← add roomClocks Map; increment on ELEMENT_UPDATE; enrich broadcast
+    └── persistence/
+        ├── autosave.ts                  ← pass targetDocumentClock to save callback
+        └── room-repository.ts           ← persist DB clocks using targetDocumentClock
 
 frontend/
 └── src/
@@ -77,36 +80,43 @@ packages/shared/src/index.ts   ← no changes required (payload types are inline
 
 ```text
 backend/src/
-    └── index.test.ts (or socket-handler.test.ts)  ← new: clock increment + broadcast tests
+    └── persistence/
+        └── socket-delta-clock.test.ts   ← new: clock increment + broadcast tests
 
 frontend/src/sync/__tests__/
     └── socket-client.test.ts   ← extend: lastServerClock update on ELEMENT_UPDATE
 ```
 
-**Structure Decision**: Web application layout (Option 2). Only `backend/src/index.ts` and `frontend/src/sync/socket-client.ts` require changes.
+**Structure Decision**: Web application layout (Option 2). Backend clock wiring touches `index.ts`, `autosave.ts`, and `room-repository.ts`; frontend clock tracking touches `socket-client.ts`.
 
 ## Implementation Steps (high-level)
 
 1. **Backend — add `roomClocks` map** (`backend/src/index.ts`)
-   - Declare `const roomClocks = new Map<string, number>()` at module level (parallel to `elements`).
+   - Declare `const roomClocks = new Map<string, number>()` at module level (parallel to `roomElements`).
    - On join cold path: `roomClocks.set(roomId, loaded.documentClock)`.
    - On join warm path: if `!roomClocks.has(roomId)`, set from `getRoomClock` result.
-   - On room teardown (last client leaves): `roomClocks.delete(roomId)`.
+   - Keep `roomClocks` after the room empties, matching retained `roomElements` hot state.
 
 2. **Backend — increment clock on ELEMENT_UPDATE** (`backend/src/index.ts`)
    - In `ELEMENT_UPDATE` handler: `const newClock = (roomClocks.get(roomId) ?? 0) + 1; roomClocks.set(roomId, newClock)`.
    - Change broadcast to include clock: `socket.to(roomId).emit(WS_EVENTS.ELEMENT_UPDATE, { elements: incoming, sessionId, documentClock: newClock })`.
 
-3. **Frontend — update lastServerClock on ELEMENT_UPDATE** (`frontend/src/sync/socket-client.ts`)
+3. **Backend — pass live clock into autosave** (`backend/src/persistence/autosave.ts`, `backend/src/persistence/room-repository.ts`)
+   - Add `getRoomClock(roomId)` to `createAutosaveManager` options.
+   - Change autosave's save callback to receive `(roomId, elements, targetDocumentClock)`.
+   - Change `saveRoomElements` to accept `targetDocumentClock` and persist records/tombstones with that clock while keeping `Room.documentClock` monotonic.
+
+4. **Frontend — update lastServerClock on ELEMENT_UPDATE** (`frontend/src/sync/socket-client.ts`)
    - Widen listener type: `(data: { elements: Element[]; sessionId?: string; documentClock?: number })`.
    - Add: `if (data.documentClock !== undefined) _lastServerClock = data.documentClock;`.
 
-4. **Tests — backend clock behaviour**
+5. **Tests — backend clock behaviour**
    - Single update → clock increments by 1, broadcast contains `documentClock`.
    - Two consecutive updates → clocks are N+1, N+2 (monotonically increasing).
    - Batch of 3 elements in one update → clock increments by exactly 1.
+   - Autosave saves records/tombstones with the live target clock.
 
-5. **Tests — frontend lastServerClock update**
+6. **Tests — frontend lastServerClock update**
    - `ELEMENT_UPDATE` with `documentClock` field → `getLastServerClock()` returns new value.
    - `ELEMENT_UPDATE` without `documentClock` field → `getLastServerClock()` unchanged.
 

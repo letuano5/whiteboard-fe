@@ -89,11 +89,13 @@ function makeFakeIo() {
 describe('AC-8: hot path — element-update does not block on persistence', () => {
   let roomPresence: Map<string, Map<string, Presence>>;
   let roomElements: Map<string, Map<string, Element>>;
+  let roomClocks: Map<string, number>;
   let neverResolves: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     roomPresence = new Map();
     roomElements = new Map();
+    roomClocks = new Map();
     neverResolves = vi.fn().mockReturnValue(new Promise(() => {}));
   });
 
@@ -114,9 +116,10 @@ describe('AC-8: hot path — element-update does not block on persistence', () =
     const { ioServer, makeSocket, connect, getHandler } = makeFakeIo();
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    createWhiteboardServer(ioServer as any, { roomPresence, roomElements, autosave });
-
     const roomId = 'room-1';
+    roomClocks.set(roomId, 0);
+    createWhiteboardServer(ioServer as any, { roomPresence, roomElements, roomClocks, autosave });
+
     const socket = makeSocket(roomId);
     connect(socket);
 
@@ -148,9 +151,10 @@ describe('AC-8: hot path — element-update does not block on persistence', () =
     const { ioServer, makeSocket, connect, getHandler } = makeFakeIo();
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    createWhiteboardServer(ioServer as any, { roomPresence, roomElements, autosave });
-
     const roomId = 'room-2';
+    roomClocks.set(roomId, 0);
+    createWhiteboardServer(ioServer as any, { roomPresence, roomElements, roomClocks, autosave });
+
     const socket = makeSocket(roomId);
     connect(socket);
 
@@ -191,9 +195,10 @@ describe('AC-8: hot path — element-update does not block on persistence', () =
     const { ioServer, makeSocket, connect, getHandler } = makeFakeIo();
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    createWhiteboardServer(ioServer as any, { roomPresence, roomElements, autosave });
-
     const roomId = 'room-3';
+    roomClocks.set(roomId, 0);
+    createWhiteboardServer(ioServer as any, { roomPresence, roomElements, roomClocks, autosave });
+
     const socket = makeSocket(roomId);
     connect(socket);
 

@@ -4,7 +4,7 @@
 
 **Prerequisites**: plan.md ✓, spec.md ✓, research.md ✓, data-model.md ✓, contracts/ ✓
 
-**Tests**: Included — unit tests mentioned in quickstart.md and plan.md step 4–5.
+**Tests**: Included — unit tests mentioned in quickstart.md and plan.md steps 5–6. Acceptance tests must include `@covers AC-n` tags from `acceptance.md`.
 
 **Organization**: Tasks grouped by user story to enable independent implementation and testing.
 
@@ -19,7 +19,7 @@
 
 **Purpose**: No new packages or migrations needed. This phase confirms the no-op baseline.
 
-- [ ] T001 Verify no periodic resync timer exists — grep `backend/src/` for `setInterval`/`setTimeout` calls emitting `ROOM_RESYNC` or full element sets; confirm zero results
+- [x] T001 Verify no periodic resync timer exists — run `rg -n "setInterval|ROOM_RESYNC|setTimeout" backend/src/` and confirm no timer emits `ROOM_RESYNC` or full element sets
 
 **Checkpoint**: Baseline verified; US1 and US2 implementation can begin.
 
@@ -29,7 +29,7 @@
 
 **Purpose**: Add the per-room in-memory clock map in `backend/src/index.ts`. All US1/US2 tasks depend on this map existing.
 
-- [ ] T002 Add `const roomClocks = new Map<string, number>()` at module level in `backend/src/index.ts` (parallel to existing `elements` map)
+- [x] T002 Add `const roomClocks = new Map<string, number>()` at module level in `backend/src/index.ts` (parallel to existing `roomElements` map)
 
 **Checkpoint**: `roomClocks` map declared — US1 and US2 implementation can now begin.
 
@@ -45,19 +45,23 @@
 
 > Write these tests first; confirm they FAIL before implementation (T003, T004).
 
-- [ ] T003 [P] [US1] Add unit test in `backend/src/index.test.ts`: `ELEMENT_UPDATE` with one element emits broadcast containing `documentClock: 1` (starting from 0)
-- [ ] T004 [P] [US1] Add unit test in `backend/src/index.test.ts`: two consecutive `ELEMENT_UPDATE` calls produce `documentClock: 1` then `documentClock: 2` (monotonically increasing)
-- [ ] T005 [P] [US1] Add unit test in `backend/src/index.test.ts`: `ELEMENT_UPDATE` with a batch of 3 elements increments `documentClock` by exactly 1 (not 3)
+- [x] T003 [P] [US1] Add unit test in `backend/src/persistence/socket-delta-clock.test.ts`: `ELEMENT_UPDATE` with one element emits broadcast containing `documentClock: 1` (starting from 0) and tag it `@covers AC-1`
+- [x] T004 [P] [US1] Add unit test in `backend/src/persistence/socket-delta-clock.test.ts`: two consecutive `ELEMENT_UPDATE` calls produce `documentClock: 1` then `documentClock: 2` and tag it `@covers AC-3`
+- [x] T005 [P] [US1] Add unit test in `backend/src/persistence/socket-delta-clock.test.ts`: `ELEMENT_UPDATE` with a batch of 3 elements increments `documentClock` by exactly 1 (not 3) and tag it `@covers AC-2`
+- [x] T005a [P] [US1] Add unit/repository tests proving autosave persistence uses the live `targetDocumentClock` for `Record.recordClock` and `Tombstone.deletedClock`; tag them `@covers AC-2`
+- [x] T005b [P] [US1] Add unit test proving a missing in-memory clock is initialized from persisted `Room.documentClock` or 0 before the next increment; tag it `@covers AC-4`
 
 ### Implementation for User Story 1
 
-- [ ] T006 [US1] In the `JOIN_ROOM` handler cold path in `backend/src/index.ts`: after loading room from DB, set `roomClocks.set(roomId, loaded.documentClock)` (depends on T002)
-- [ ] T007 [US1] In the `JOIN_ROOM` handler warm path in `backend/src/index.ts`: if `!roomClocks.has(roomId)`, set `roomClocks.set(roomId, await getRoomClock(db, roomId))` (depends on T002)
-- [ ] T008 [US1] In the `ELEMENT_UPDATE` handler in `backend/src/index.ts`: compute `const newClock = (roomClocks.get(roomId) ?? 0) + 1; roomClocks.set(roomId, newClock);` before the broadcast (depends on T002)
-- [ ] T009 [US1] Update the `socket.to(roomId).emit(WS_EVENTS.ELEMENT_UPDATE, ...)` call in `backend/src/index.ts` to include `documentClock: newClock` in the payload (depends on T008)
-- [ ] T010 [US1] In the disconnect/room-teardown path in `backend/src/index.ts`: add `roomClocks.delete(roomId)` alongside `elements.delete(roomId)` when the last client leaves (depends on T002)
+- [x] T006 [US1] In the `JOIN_ROOM` handler cold path in `backend/src/index.ts`: after loading room from DB, set `roomClocks.set(roomId, loaded.documentClock)` (depends on T002)
+- [x] T007 [US1] In the `JOIN_ROOM` handler warm path in `backend/src/index.ts`: if `!roomClocks.has(roomId)`, set `roomClocks.set(roomId, await getRoomClock(db, roomId))` (depends on T002)
+- [x] T008 [US1] In the `ELEMENT_UPDATE` handler in `backend/src/index.ts`: compute `const newClock = (roomClocks.get(roomId) ?? 0) + 1; roomClocks.set(roomId, newClock);` before the broadcast (depends on T002)
+- [x] T009 [US1] Update the `socket.to(roomId).emit(WS_EVENTS.ELEMENT_UPDATE, ...)` call in `backend/src/index.ts` to include `documentClock: newClock` in the payload (depends on T008)
+- [x] T010 [US1] Wire autosave in `backend/src/index.ts` so `createAutosaveManager` can read the current `roomClocks` value for each room (depends on T002)
+- [x] T010a [US1] In `backend/src/persistence/autosave.ts`: pass `targetDocumentClock` from `getRoomClock(roomId)` to the save callback when flushing dirty elements
+- [x] T010b [US1] In `backend/src/persistence/room-repository.ts`: update `saveRoomElements` to accept `targetDocumentClock` and persist records/tombstones with that clock without decreasing `Room.documentClock`
 
-**Checkpoint**: Run `pnpm test` — T003, T004, T005 must now pass. Manual check: WS frame in Tab B shows `documentClock`.
+**Checkpoint**: Run focused backend tests — T003, T004, T005, T005a, and T005b must now pass. Manual check: WS frame in Tab B shows `documentClock`.
 
 ---
 
@@ -71,15 +75,16 @@
 
 > Write these tests first; confirm they FAIL before implementation (T011, T012).
 
-- [ ] T011 [P] [US2] Add unit test in `frontend/src/sync/__tests__/socket-client.test.ts`: receiving `ELEMENT_UPDATE` with `documentClock: 7` causes `getLastServerClock()` to return `7`
-- [ ] T012 [P] [US2] Add unit test in `frontend/src/sync/__tests__/socket-client.test.ts`: receiving `ELEMENT_UPDATE` without `documentClock` field leaves `getLastServerClock()` unchanged (backward-compat guard)
+- [x] T011 [P] [US2] Add unit test in `frontend/src/sync/__tests__/socket-client.test.ts`: receiving `ELEMENT_UPDATE` with `documentClock: 7` causes `getLastServerClock()` to return `7`; tag it `@covers AC-5`
+- [x] T012 [P] [US2] Add unit test in `frontend/src/sync/__tests__/socket-client.test.ts`: receiving `ELEMENT_UPDATE` without `documentClock` field leaves `getLastServerClock()` unchanged (backward-compat guard); tag it `@covers AC-6`
+- [x] T012a [P] [US2] Add or extend test in `frontend/src/sync/__tests__/socket-client.test.ts`: outbound `ELEMENT_UPDATE` does not include client-authored `documentClock` or per-element sent-version tracking; tag it `@covers AC-8`
 
 ### Implementation for User Story 2
 
-- [ ] T013 [US2] Widen the `ELEMENT_UPDATE` listener payload type in `frontend/src/sync/socket-client.ts` from `{ elements: Element[]; sessionId?: string }` to `{ elements: Element[]; sessionId?: string; documentClock?: number }`
-- [ ] T014 [US2] In the `ELEMENT_UPDATE` listener body in `frontend/src/sync/socket-client.ts`: add `if (data.documentClock !== undefined) _lastServerClock = data.documentClock;` immediately after `applyRemoteElements` (depends on T013)
+- [x] T013 [US2] Widen the `ELEMENT_UPDATE` listener payload type in `frontend/src/sync/socket-client.ts` from `{ elements: Element[]; sessionId?: string }` to `{ elements: Element[]; sessionId?: string; documentClock?: number }`
+- [x] T014 [US2] In the `ELEMENT_UPDATE` listener body in `frontend/src/sync/socket-client.ts`: add `if (data.documentClock !== undefined) _lastServerClock = data.documentClock;` immediately after `applyRemoteElements` (depends on T013)
 
-**Checkpoint**: Run `pnpm test` — T011, T012 must now pass. Manual check: `getLastServerClock()` returns the clock from the latest peer edit.
+**Checkpoint**: Run focused frontend tests — T011, T012, and T012a must now pass. Manual check: `getLastServerClock()` returns the clock from the latest peer edit.
 
 ---
 
@@ -91,11 +96,11 @@
 
 ### Tests for User Story 3
 
-- [ ] T015 [US3] Add unit test in `backend/src/index.test.ts`: after room initialisation and 30+ seconds of idle time, assert that no `ROOM_RESYNC` event was emitted (use fake timers)
+- [x] T015 [US3] Add unit test in `backend/src/persistence/socket-delta-clock.test.ts`: after room initialisation and 30+ seconds of idle time, assert that no `ROOM_RESYNC` event or full element-set update was emitted; tag it `@covers AC-7`
 
 ### Implementation for User Story 3
 
-- [ ] T016 [US3] Run `grep -rn "setInterval\|ROOM_RESYNC" backend/src/` and confirm no periodic emit of full element sets exists — document finding as a comment in `specs/023-delta-push-clock/research.md` under D-06 if needed
+- [x] T016 [US3] Run `rg -n "setInterval|ROOM_RESYNC|setTimeout" backend/src/` and confirm no periodic emit of full element sets exists — document finding as a note in `specs/023-delta-push-clock/research.md` under D-06 if needed
 
 **Checkpoint**: T015 passes. Idle WS inspection shows no unsolicited frames.
 
@@ -104,7 +109,7 @@
 ## Phase 6: Polish & Cross-Cutting Concerns
 
 - [ ] T017 [P] Run `pnpm typecheck` across the monorepo and fix any type errors introduced by the `documentClock?: number` payload widening
-- [ ] T018 [P] Run `pnpm lint` across the monorepo and fix any ESLint errors
+- [x] T018 [P] Run `pnpm lint` across the monorepo and fix any ESLint errors
 - [ ] T019 Run full test suite with `pnpm test` — all tests must pass
 - [ ] T020 Validate manually using `quickstart.md` Scenarios 1–4
 
@@ -116,8 +121,8 @@
 
 - **Phase 1 (Setup)**: No dependencies — start immediately
 - **Phase 2 (Foundational)**: Depends on Phase 1 — BLOCKS Phase 3 and 4
-- **Phase 3 (US1)**: Depends on Phase 2 — tests T003–T005 can be written in parallel with T002
-- **Phase 4 (US2)**: Depends on Phase 2 — tests T011–T012 can be written in parallel with Phase 3
+- **Phase 3 (US1)**: Depends on Phase 2 — tests T003–T005b can be written in parallel with T002
+- **Phase 4 (US2)**: Depends on Phase 2 — tests T011–T012a can be written in parallel with Phase 3
 - **Phase 5 (US3)**: Independent — can run in parallel with Phase 3 and 4
 - **Phase 6 (Polish)**: Depends on Phases 3, 4, 5
 
@@ -129,8 +134,8 @@
 
 ### Within Each User Story
 
-- Tests (T003–T005, T011–T012) MUST be written first and confirmed FAILING
-- T002 (roomClocks declaration) must precede T006–T010
+- Tests (T003–T005b, T011–T012a) MUST be written first and confirmed FAILING
+- T002 (roomClocks declaration) must precede T006–T010b
 - T008 must precede T009 (increment before broadcast)
 - T013 must precede T014 (type widening before usage)
 
@@ -140,13 +145,16 @@
 
 ```bash
 # After T002, these can run simultaneously:
-Task: T003 — backend clock test (index.test.ts)
-Task: T004 — backend monotonic test (index.test.ts)
-Task: T005 — backend batch test (index.test.ts)
+Task: T003 — backend clock test (socket-delta-clock.test.ts)
+Task: T004 — backend monotonic test (socket-delta-clock.test.ts)
+Task: T005 — backend batch test (socket-delta-clock.test.ts)
+Task: T005a — persistence target clock tests (autosave.test.ts / room-repository.test.ts)
+Task: T005b — missing clock initialization test (socket-delta-clock.test.ts)
 Task: T011 — frontend clock update test (socket-client.test.ts)
 Task: T012 — frontend backward-compat test (socket-client.test.ts)
+Task: T012a — outbound payload clock ownership test (socket-client.test.ts)
 
-# US1 impl tasks run sequentially: T006 → T007 → T008 → T009 → T010
+# US1 impl tasks run sequentially: T006 → T007 → T008 → T009 → T010 → T010a → T010b
 # US2 impl tasks run sequentially: T013 → T014
 
 # Polish tasks are fully parallel:
@@ -162,7 +170,7 @@ Task: T018 — lint
 
 1. Complete Phase 1: Setup (T001)
 2. Complete Phase 2: Foundational (T002)
-3. Complete Phase 3: US1 (T003–T010)
+3. Complete Phase 3: US1 (T003–T010b)
 4. **STOP and VALIDATE**: `pnpm test` passes; WS frame in peer tab shows `documentClock`
 5. Complete Phase 4: US2 (T011–T014)
 6. **STOP and VALIDATE**: `getLastServerClock()` reflects peer updates
@@ -170,7 +178,7 @@ Task: T018 — lint
 ### Incremental Delivery
 
 1. T001–T002 → infrastructure ready
-2. T003–T010 → server-side clock works, peers see `documentClock`
+2. T003–T010b → server-side clock works, peers see `documentClock`, and autosave persists that clock
 3. T011–T014 → clients track clock correctly; reconnect diffs will use accurate `lastServerClock`
 4. T015–T016 → no-resync invariant asserted
 5. T017–T020 → polish complete
@@ -180,6 +188,6 @@ Task: T018 — lint
 ## Notes
 
 - [P] tasks touch different files and have no inter-task dependency
-- Test tasks (T003–T005, T011–T012, T015) must FAIL before their corresponding implementation tasks
-- `backend/src/index.test.ts` may not exist yet — create it if needed, following the pattern in `backend/src/persistence/*.test.ts`
+- Test tasks (T003–T005b, T011–T012a, T015) must FAIL before their corresponding implementation tasks
+- Create `backend/src/persistence/socket-delta-clock.test.ts` following the pattern in existing `backend/src/persistence/*.test.ts`
 - No new npm packages, migrations, or shared-type changes are required

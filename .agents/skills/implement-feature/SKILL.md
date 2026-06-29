@@ -24,8 +24,9 @@ comments, identifiers, and commit messages follow the repository convention in
 4. Open references only as needed:
    - `references/speckit.md` for Spec Kit skill/command mapping.
    - `references/playbook.md` for phase details and deviation handling.
-   - `references/impl-agent-prompt.md` after Phase 3 approval to delegate Phase 4-7 to a
-     Codex worker subagent, or as the fallback checklist when subagents are unavailable.
+   - `references/impl-agent-prompt.md` after Phase 3 artifacts are ready to delegate
+     Phase 4-7 to a Codex worker subagent, or to prepare the new-session handoff when
+     subagents are unavailable.
    - `references/commit-convention.md` before drafting the final commit message.
 
 ## Hard Rules
@@ -42,6 +43,11 @@ comments, identifiers, and commit messages follow the repository convention in
 5. Do not call `$speckit-implement`. Implement by hand from `tasks.md`.
 6. Do not run `git add` or `git commit`; return a commit message in a code block.
 7. Preserve user changes in the working tree. Do not delete or rewrite unrelated artifacts.
+8. A normal `$implement-feature` invocation is explicit authorization to run the whole
+   feature workflow end-to-end. Do not stop for a plan approval gate unless the user
+   explicitly asks for plan-only/gated mode with wording such as "plan only", "do not code
+   yet", "wait for approval", or the Vietnamese equivalents. Still stop for genuine
+   blockers under rule 1.
 
 ## Codex Behavior Differences From Claude
 
@@ -56,9 +62,14 @@ comments, identifiers, and commit messages follow the repository convention in
   text gate. If Codex plan mode is available, use `/plan` for the approval discussion, but
   generate Spec Kit artifacts before any read-only planning gate.
 - Default to a conductor/worker split. The main Codex thread owns Phases 0-3, user gates,
-  plan-deviation decisions, and final handoff. After plan approval, spawn a Codex worker
-  subagent for Phases 4-7 when the current Codex surface supports subagents. Fall back to
-  the main thread only when subagents are unavailable.
+  plan-deviation decisions, and final handoff. In normal full-flow mode, Phase 3 is an
+  internal checkpoint, not a user approval gate. After artifacts exist and analysis passes
+  or is resolved, spawn a Codex worker subagent for Phases 4-7 when the current Codex
+  surface supports subagents.
+- If a worker subagent cannot be spawned, do not default to implementing Phase 4-7 in the
+  conductor thread. Create a new Codex session/thread handoff for Phase 4-7 with a complete
+  prompt and artifact paths. Use main-thread implementation only when the user explicitly
+  asks to keep working in the current thread.
 - Keep the main thread lean. Pass the worker only the feature name, spec directory,
   regenerated-artifacts flag, approved artifacts, and `references/impl-agent-prompt.md`.
   The worker reads implementation files and noisy test output in its own context, then
@@ -75,7 +86,7 @@ At the beginning of the workflow, run:
 When advancing phases, optionally update the phase hint:
 
 ```bash
-.codex/hooks/implement_feature_stop.py --phase "Phase 3 - plan approval"
+.codex/hooks/implement_feature_stop.py --phase "Phase 3 - artifacts and analysis"
 ```
 
 Before asking the user a blocking question or waiting at an approval gate, run:
@@ -147,39 +158,46 @@ high-churn or version-sensitive. Record durable repo conventions in `AGENTS.md`,
 
 ### Phase 3 - Plan And Approval
 
-Generate artifacts before asking for approval to code:
+Generate artifacts before implementation:
 
 1. If `plan.md` exists, read it; otherwise run or follow `$speckit-plan` with `AGENTS.md`
    and any Phase 2 notes as context.
 2. If `tasks.md` exists, read it; otherwise run or follow `$speckit-tasks` and require one
    acceptance-test task per `AC-n`.
 3. Always run or follow `$speckit-analyze` after tasks exist.
-4. Surface findings to the user. Fix by regenerating/updating upstream artifacts, not by
-   hand-patching generated artifacts behind the user's back.
-5. Present a concise Vietnamese approval gate pointing to `spec.md`, `acceptance.md`,
-   `plan.md`, and `tasks.md`. Do not start source-code edits until approved.
+4. Surface critical findings only when they need user input. Fix ordinary artifact
+   inconsistencies by regenerating/updating upstream artifacts before implementation.
+5. In normal full-flow mode, do not present a plan approval gate. The original
+   `$implement-feature` request already authorizes proceeding through code and tests.
+6. In explicit plan-only/gated mode, present a concise Vietnamese approval gate pointing to
+   `spec.md`, `acceptance.md`, `plan.md`, and `tasks.md`; then wait before source-code edits.
 
 If the plan is rejected, ask whether to revise or abandon. Never delete `specs/<feature>/`
 without explicit confirmation.
 
-On approval:
+When Phase 3 is complete in full-flow mode, or after approval in explicit gated mode:
 
-1. Run `.codex/hooks/implement_feature_stop.py --resume`.
+1. If resuming from an explicit user gate, run `.codex/hooks/implement_feature_stop.py --resume`.
 2. Read `references/impl-agent-prompt.md`.
 3. Fill `$SPEC_DIR`, `$FEATURE_NAME`, and `$ARTIFACTS_REGENERATED`.
 4. Spawn a Codex worker subagent for Phases 4-7 when available, and wait for its result.
-5. If subagents are unavailable, continue Phase 4-7 in the main thread using the same
-   prompt as a checklist.
+5. If subagents are unavailable, create a new Codex session/thread handoff for Phases 4-7
+   using the filled worker prompt and artifact paths. Do not continue in the conductor
+   thread unless the user explicitly asked for that fallback.
 6. If the worker returns `NEED USER INPUT:`, surface the blocker to the user in Vietnamese,
    update/regenerate upstream artifacts if the decision changes the plan, re-run
    `$speckit-analyze`, then re-spawn or resume the worker.
 
 ### Phase 4 - Implementation
 
-Implementation normally runs in the worker subagent. Whether in the worker or fallback main
-thread, implement manually from `tasks.md` in dependency order:
+Implementation normally runs in the worker subagent or the newly created Phase 4-7 session.
+Implement manually from `tasks.md` in dependency order:
 
-- Read 2-3 representative neighboring files before editing.
+- Do not redo repository discovery that the Spec Kit phases already performed.
+- Read only the approved artifacts, files named by `tasks.md`/`plan.md`, and at most 2-3
+  directly related neighboring files before editing.
+- Do not run broad repository searches unless `tasks.md` lacks a target path or a local
+  import/API cannot be resolved from the target files.
 - Code conforms to `plan.md`.
 - After each meaningful slice, run the smallest relevant verification.
 - Tick `tasks.md` checkboxes only after code exists and the related verification passes.

@@ -19,17 +19,19 @@ import type { Element } from '@vdt/shared';
 function setup(delayMs = 5000) {
   const elements: Element[] = [makeElement({ id: 'el-1' })];
   const getRoomElements = vi.fn().mockReturnValue(elements);
+  const getRoomClock = vi.fn().mockReturnValue(12);
   const saveRoomElements = vi.fn().mockResolvedValue({ documentClock: 1n });
   const logger = { error: vi.fn(), info: vi.fn() };
 
   const manager = createAutosaveManager({
     delayMs,
     getRoomElements,
+    getRoomClock,
     saveRoomElements,
     logger,
   });
 
-  return { manager, getRoomElements, saveRoomElements, logger, elements };
+  return { manager, getRoomElements, getRoomClock, saveRoomElements, logger, elements };
 }
 
 // ---------------------------------------------------------------------------
@@ -106,7 +108,19 @@ describe('createAutosaveManager', () => {
       vi.advanceTimersByTime(5000);
       await vi.runAllTimersAsync();
 
-      expect(saveRoomElements).toHaveBeenCalledWith('room-1', elements);
+      expect(saveRoomElements).toHaveBeenCalledWith('room-1', elements, 12);
+    });
+
+    // @covers AC-2
+    it('passes the live target documentClock to the save callback', async () => {
+      const { manager, getRoomClock, saveRoomElements, elements } = setup(5000);
+      getRoomClock.mockReturnValue(37);
+
+      manager.markDirty('room-1');
+      vi.advanceTimersByTime(5000);
+      await vi.runAllTimersAsync();
+
+      expect(saveRoomElements).toHaveBeenCalledWith('room-1', elements, 37);
     });
 
     it('does not flush again after the delay if room is already clean', async () => {

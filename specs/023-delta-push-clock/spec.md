@@ -78,7 +78,7 @@ The codebase must not contain a timer-based full-resync mechanism that overwrite
 ### Key Entities
 
 - **In-memory Room Clock**: A per-room integer counter managed by the server process. Starts at the value loaded from DB on room initialisation (join/warm-path) and increments on every `ELEMENT_UPDATE`.
-- **documentClock (DB)**: The persisted counter in the `Room` table. Advanced by the autosave module on each flush transaction. The in-memory counter feeds this on flush.
+- **documentClock (DB)**: The persisted counter in the `Room` table. Updated by the autosave module to catch up to the in-memory counter. The in-memory counter feeds this on flush.
 - **lastServerClock (client)**: A module-level integer in the frontend socket client. Updated on `ROOM_SNAPSHOT` and on every received `ELEMENT_UPDATE` that carries a `documentClock`.
 
 ## Success Criteria *(mandatory)*
@@ -93,7 +93,7 @@ The codebase must not contain a timer-based full-resync mechanism that overwrite
 ## Assumptions
 
 - The existing autosave module (`createAutosaveManager`) already handles DB persistence; this feature only needs to wire the in-memory clock into the broadcast path and the autosave flush signature.
-- The `documentClock` in-memory per-room counter is initialised from the DB value at room join time — this already happens in `backend/src/index.ts` (warm/cold path); P3A-04 only needs to keep it updated on `ELEMENT_UPDATE`.
+- The `documentClock` value is already loaded from the DB at room join time; P3A-04 adds the per-room in-memory map, initializes it from that loaded value, and keeps it updated on `ELEMENT_UPDATE`.
 - No periodic full-resync timer exists in the current codebase (verified by code search); FR-007 is a safeguard for future additions.
 - Frontend's existing `_lastServerClock` variable and `getLastServerClock()` function are the correct extension points — no new state structure is needed.
 - The `ROOM_RESYNC` event in `WS_EVENTS` may remain as a named constant for future use; it does not need to be removed.

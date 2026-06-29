@@ -28,13 +28,19 @@ const roomPresence = new Map<string, Map<string, Presence>>();
 // Durable persistence added in P3A (PostgreSQL).
 const roomElements = new Map<string, Map<string, Element>>();
 
+// Clock store: roomId → current in-memory documentClock (P3A-04).
+// Retained with roomElements hot state until server restart.
+const roomClocks = new Map<string, number>();
+
 // Autosave manager — batches dirty room flushes with a 5-second default delay.
 const autosave = createAutosaveManager({
   getRoomElements: (roomId) => {
     const elMap = roomElements.get(roomId);
     return elMap ? [...elMap.values()] : [];
   },
-  saveRoomElements: (roomId, elements) => saveRoomElements(prisma, roomId, elements),
+  getRoomClock: (roomId) => roomClocks.get(roomId) ?? 0,
+  saveRoomElements: (roomId, elements, targetDocumentClock) =>
+    saveRoomElements(prisma, roomId, elements, targetDocumentClock),
 });
 
 declare module 'socket.io' {
@@ -54,6 +60,7 @@ export function createWhiteboardServer(
   deps: {
     roomPresence: Map<string, Map<string, Presence>>;
     roomElements: Map<string, Map<string, Element>>;
+    roomClocks?: Map<string, number>;
     autosave: ReturnType<typeof createAutosaveManager>;
     db?: typeof prisma;
   },
@@ -61,6 +68,7 @@ export function createWhiteboardServer(
   const {
     roomPresence: presence,
     roomElements: elements,
+    roomClocks: clocks = new Map<string, number>(),
     autosave: save,
     db = prisma,
   } = deps;
@@ -108,14 +116,18 @@ export function createWhiteboardServer(
             const loaded = await loadRoomElements(db, roomId);
             if (!elements.has(roomId)) elements.set(roomId, new Map());
             for (const el of loaded.elements) elements.get(roomId)!.set(el.id, el);
+            clocks.set(roomId, loaded.documentClock);
             documentClock = loaded.documentClock;
           } else {
-            // Warm path: elements already in memory — only fetch clock from DB
-            documentClock = await getRoomClock(db, roomId);
+            // Warm path: use live clock when present; backfill from DB if missing.
+            if (!clocks.has(roomId)) {
+              clocks.set(roomId, await getRoomClock(db, roomId));
+            }
+            documentClock = clocks.get(roomId) ?? 0;
           }
         } catch (err) {
           console.error('[load-room] DB error during join:', err);
-          documentClock = 0;
+          documentClock = clocks.get(roomId) ?? 0;
         }
 
         // P3A-03: Reconnect-diff path when client sends a valid lastServerClock (FR-002, AC-1, AC-4)
@@ -130,13 +142,13 @@ export function createWhiteboardServer(
               socket.emit(WS_EVENTS.ROOM_DIFF, {
                 changed: diffResult.changed,
                 deleted: diffResult.deleted,
-                documentClock: diffResult.documentClock,
+                documentClock: clocks.get(roomId) ?? diffResult.documentClock,
               });
             } else {
               // AC-8: tombstone history too short — wipe-all fallback (same event as initial join)
               socket.emit(WS_EVENTS.ROOM_SNAPSHOT, {
                 elements: diffResult.elements,
-                documentClock: diffResult.documentClock,
+                documentClock: clocks.get(roomId) ?? diffResult.documentClock,
               });
             }
           } catch (err) {
@@ -158,7 +170,7 @@ export function createWhiteboardServer(
 
     socket.on(
       WS_EVENTS.ELEMENT_UPDATE,
-      (payload: { roomId: string; elements: Element[]; sessionId?: string }) => {
+      async (payload: { roomId: string; elements: Element[]; sessionId?: string }) => {
         const { roomId, elements: incoming, sessionId } = payload;
 
         // FR-002: Update in-memory hot path first (last-write-wins by element id)
@@ -170,11 +182,27 @@ export function createWhiteboardServer(
           elMap.set(el.id, el);
         }
 
+        if (!clocks.has(roomId)) {
+          try {
+            clocks.set(roomId, await getRoomClock(db, roomId));
+          } catch (err) {
+            console.error(`[delta-clock] Failed to load room clock for ${roomId}:`, err);
+            clocks.set(roomId, 0);
+          }
+        }
+
+        const newClock = (clocks.get(roomId) ?? 0) + 1;
+        clocks.set(roomId, newClock);
+
         // FR-008: Schedule autosave — must not block the broadcast below (AC-8)
         save.markDirty(roomId);
 
         // Broadcast to peers — runs synchronously after in-memory update (AC-8)
-        socket.to(roomId).emit(WS_EVENTS.ELEMENT_UPDATE, { elements: incoming, sessionId });
+        socket.to(roomId).emit(WS_EVENTS.ELEMENT_UPDATE, {
+          elements: incoming,
+          sessionId,
+          documentClock: newClock,
+        });
       },
     );
 
@@ -226,6 +254,6 @@ export function createWhiteboardServer(
 
 // Wire the default production instances (skip when imported by test runner)
 if (!process.env.VITEST) {
-  createWhiteboardServer(io, { roomPresence, roomElements, autosave });
+  createWhiteboardServer(io, { roomPresence, roomElements, roomClocks, autosave });
   httpServer.listen(PORT, () => console.log(`Server running on :${PORT}`));
 }

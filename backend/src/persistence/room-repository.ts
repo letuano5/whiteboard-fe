@@ -78,23 +78,92 @@ export async function getRoomClock(db: PrismaClient, roomId: string): Promise<nu
  *
  * - Returns without writing when `elements` is empty (AC-9).
  * - Creates or upserts the Room row.
- * - Increments `documentClock` exactly once per non-empty transaction (AC-2).
+ * - With targetDocumentClock: writes records/tombstones at that live server clock and
+ *   raises Room.documentClock to at least that value.
+ * - Without targetDocumentClock: legacy path increments documentClock once.
  * - For non-deleted elements: upserts active Record, deletes matching Tombstone (AC-1, AC-4).
  * - For deleted elements: deletes active Record, upserts Tombstone (AC-3).
  *
  * @param db     Prisma client (or transaction client for testing isolation).
  * @param roomId UUID of the room.
  * @param elements Batch of elements to persist.
- * @returns The new documentClock, or `null` when the batch is empty.
+ * @param targetDocumentClock Optional live in-memory room clock for P3A-04 flushes.
+ * @returns The persisted documentClock, or `null` when the batch is empty.
  */
 export async function saveRoomElements(
   db: PrismaClient,
   roomId: string,
   elements: Element[],
+  targetDocumentClock?: number,
 ): Promise<SaveRoomElementsResult | null> {
   // AC-9: empty batch — no writes, no clock increment.
   if (elements.length === 0) {
     return null;
+  }
+
+  if (targetDocumentClock !== undefined) {
+    const targetClock = BigInt(targetDocumentClock);
+
+    const result = await db.$transaction(async (tx) => {
+      await tx.room.upsert({
+        where: { id: roomId },
+        create: { id: roomId, documentClock: targetClock },
+        update: {},
+      });
+
+      const currentRoom = await tx.room.findUnique({
+        where: { id: roomId },
+        select: { documentClock: true },
+      });
+      const currentClock = currentRoom?.documentClock ?? targetClock;
+      const persistedRoomClock = currentClock > targetClock ? currentClock : targetClock;
+
+      if (currentClock < targetClock) {
+        await tx.room.update({
+          where: { id: roomId },
+          data: { documentClock: targetClock },
+        });
+      }
+
+      for (const el of elements) {
+        if (!el.isDeleted) {
+          await tx.record.upsert({
+            where: { roomId_recordId: { roomId, recordId: el.id } },
+            create: {
+              roomId,
+              recordId: el.id,
+              typeName: el.type,
+              // Prisma JSON fields require InputJsonValue; Element serializes cleanly
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              state: el as any,
+              recordClock: targetClock,
+            },
+            update: {
+              typeName: el.type,
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              state: el as any,
+              recordClock: targetClock,
+            },
+          });
+          await tx.tombstone.deleteMany({
+            where: { roomId, recordId: el.id },
+          });
+        } else {
+          await tx.record.deleteMany({
+            where: { roomId, recordId: el.id },
+          });
+          await tx.tombstone.upsert({
+            where: { roomId_recordId: { roomId, recordId: el.id } },
+            create: { roomId, recordId: el.id, deletedClock: targetClock },
+            update: { deletedClock: targetClock },
+          });
+        }
+      }
+
+      return persistedRoomClock;
+    });
+
+    return { documentClock: result };
   }
 
   const result = await db.$transaction(async (tx) => {

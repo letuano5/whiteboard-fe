@@ -1,9 +1,9 @@
 # Phase 4-7 Worker Prompt
 
-Use this prompt after the user-approved plan is ready. Prefer running it in a Codex worker
-subagent so implementation file reads, debug output, and test logs stay out of the
-conductor thread. If subagents are unavailable, follow the same instructions in the main
-thread as a fallback.
+Use this prompt after the approved Spec Kit artifacts are ready. Prefer running it in a
+Codex worker subagent so implementation file reads, debug output, and test logs stay out of
+the conductor thread. If subagents are unavailable, use this prompt in a new Codex
+session/thread handoff for Phase 4-7 rather than continuing in the conductor thread.
 
 Feature: **$FEATURE_NAME**
 Spec directory: `$SPEC_DIR`
@@ -21,6 +21,12 @@ Artifacts regenerated this run: `$ARTIFACTS_REGENERATED`
 Do not prioritize `research.md` or `quickstart.md` for implementation; they are supporting
 artifacts, not the approved task list.
 
+You are not doing repository discovery. The Spec Kit phases already produced the approved
+artifacts. Read only the artifacts above, files directly named by `tasks.md`/`plan.md`, and
+at most 2-3 directly related neighboring files when needed for local style or API usage.
+Do not run broad repository searches unless a task lacks a target path or a local import/API
+cannot be resolved from the target files.
+
 ## Constraints
 
 - User-facing status and handoff are Vietnamese.
@@ -30,7 +36,7 @@ artifacts, not the approved task list.
 - The conductor thread owns continuation state. If you are running as a worker subagent,
   do not run `.codex/hooks/implement_feature_stop.py --finish`, `--awaiting-user`, or
   `--resume`; return a compact result to the conductor instead. If this prompt is being
-  used as main-thread fallback, follow the hook commands in `SKILL.md`.
+  used in a new Phase 4-7 session, do not mutate the conductor's continuation state.
 - For minor local choices, make a conservative technical decision and report it under
   "Quyết định kỹ thuật".
 - For a plan blocker, stop immediately and return:
@@ -45,7 +51,8 @@ blocker, update upstream artifacts if needed, and re-spawn or resume the worker.
 ## Implementation
 
 - Work through `$SPEC_DIR/tasks.md` in dependency order.
-- Read 2-3 neighboring files before editing to match style.
+- Read the target file(s) named by each task before editing.
+- Read at most 2-3 neighboring files before editing to match style or resolve local APIs.
 - After each task, verify the smallest relevant slice.
 - Tick a checkbox only when the code slice exists and its verification passes.
 - Done means code plus passing `@covers AC-n` tests, not checkbox count.
@@ -77,5 +84,5 @@ Layer 2 robustness tests:
 - Return a Vietnamese report with: what changed, tests/AC coverage, technical decisions,
   TODOs/blockers, and the commit message.
 - If you are a worker subagent, do not run the finish hook command; the conductor runs it
-  after the final user-facing handoff. If this is the main-thread fallback, run `--finish`
-  only after that handoff is complete.
+  after the final user-facing handoff. If this is a new Phase 4-7 session, report whether
+  the conductor should run `--finish` after reviewing the handoff.

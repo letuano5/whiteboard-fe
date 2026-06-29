@@ -7,9 +7,9 @@
 
 ### D-01: In-memory clock storage strategy
 
-**Decision**: Add a module-level `Map<roomId, number>` (e.g. `roomClocks`) in `backend/src/index.ts`, mirroring the existing `elements` map.
+**Decision**: Add a module-level `Map<roomId, number>` (e.g. `roomClocks`) in `backend/src/index.ts`, mirroring the existing `roomElements` map.
 
-**Rationale**: The `documentClock` per-room counter must survive across multiple `ELEMENT_UPDATE` events without a DB round-trip. Keeping it module-level (parallel to `elements`) is the minimal change consistent with the existing architecture. No new module or class is needed.
+**Rationale**: The `documentClock` per-room counter must survive across multiple `ELEMENT_UPDATE` events without a DB round-trip. Keeping it module-level (parallel to `roomElements`) is the minimal change consistent with the existing architecture. No new module or class is needed.
 
 **Alternatives considered**:
 - Store clock inside each room's element map value — rejected; would require changing `Map<roomId, Map<elementId, Element>>` to a compound type and touching all callsites.
@@ -17,14 +17,15 @@
 
 ---
 
-### D-02: Clock initialisation on join (warm vs cold path)
+### D-02: Clock initialisation and lifecycle
 
-**Decision**: On the cold path, initialise `roomClocks.set(roomId, loaded.documentClock)` from the DB value already fetched by `loadRoomElements`. On the warm path, `roomClocks` is already set from a previous join; skip re-initialisation unless the room clock is missing.
+**Decision**: On the cold path, initialise `roomClocks.set(roomId, loaded.documentClock)` from the DB value already fetched by `loadRoomElements`. On the warm path, `roomClocks` is already set from a previous join; skip re-initialisation unless the room clock is missing. Keep the room clock in memory alongside `roomElements` after the last client leaves; both are the authoritative hot path until process restart.
 
-**Rationale**: The join handler already branches on cold/warm. Reusing the already-fetched `documentClock` from `loadRoomElements` avoids an extra DB query. If a second client joins while the room is warm, the in-memory clock is already current — no DB read needed.
+**Rationale**: The join handler already branches on cold/warm. Reusing the already-fetched `documentClock` from `loadRoomElements` avoids an extra DB query. If a second client joins while the room is warm, the in-memory clock is already current — no DB read needed. Retaining the clock with the hot element state avoids losing live-session clock progress if an immediate empty-room flush fails and the room is rejoined before process restart.
 
 **Alternatives considered**:
 - Always re-read clock from DB on join — rejected; unnecessary extra DB round-trip on warm path.
+- Delete the clock when the room empties — rejected; current `roomElements` are intentionally retained after empty-room flush, so deleting only the clock can make hot state and clock state diverge.
 
 ---
 
@@ -54,12 +55,13 @@
 
 ### D-05: Autosave clock relationship
 
-**Decision**: The autosave flush continues to increment the DB `documentClock` independently via `saveRoomElements`. The in-memory `roomClocks` counter diverges from DB while updates are batched between flushes. On flush, the DB catches up to a single increment (not N increments). This is acceptable.
+**Decision**: Autosave receives the current in-memory room clock as `targetDocumentClock` and persists all records/tombstones in that flush with that exact clock. `saveRoomElements` updates `Room.documentClock` to the maximum of the existing persisted clock and `targetDocumentClock`, never decreasing it.
 
-**Rationale**: The in-memory clock is the "live session clock" seen by peers. The DB clock is the "durable checkpoint clock." Reconnect diffs (P3A-03) query DB records by `recordClock`. Since autosave writes all current elements with `recordClock = new_db_clock`, the diff query still returns the correct set — it just uses fewer, larger clock steps in the DB.
+**Rationale**: `docs/SPECS.md` requires each `ELEMENT_UPDATE` batch to advance the server document clock and the throttled DB persist to assign `recordClock = documentClock`. Reconnect diffs query records/tombstones by clock, so durable state must catch up to the same live-session clock that peers received in broadcasts.
 
 **Alternatives considered**:
-- Pass in-memory clock to `saveRoomElements` and use it as the DB increment target — more complex; deferred. The current per-flush-increment is sufficient for P3A-03 correctness.
+- Let the repository increment DB clock once per flush — rejected; this can collapse multiple live update clocks into one durable clock and conflicts with P3A-04.
+- Add a separate ack event so the sender learns the new clock immediately — deferred to P4-01a.
 
 ---
 

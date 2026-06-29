@@ -55,6 +55,7 @@ function makeTombstoneDeleteMany() {
  */
 function buildMockDb(clockToReturn: bigint = 1n) {
   const roomUpsert = makeRoomUpsert();
+  const roomFindUnique = vi.fn().mockResolvedValue({ documentClock: clockToReturn });
   const roomUpdate = makeRoomUpdate(clockToReturn);
   const recordUpsert = makeRecordUpsert();
   const recordDeleteMany = makeRecordDeleteMany();
@@ -62,7 +63,7 @@ function buildMockDb(clockToReturn: bigint = 1n) {
   const tombstoneDeleteMany = makeTombstoneDeleteMany();
 
   const tx = {
-    room: { upsert: roomUpsert, update: roomUpdate },
+    room: { upsert: roomUpsert, findUnique: roomFindUnique, update: roomUpdate },
     record: { upsert: recordUpsert, deleteMany: recordDeleteMany },
     tombstone: { upsert: tombstoneUpsert, deleteMany: tombstoneDeleteMany },
   };
@@ -74,12 +75,23 @@ function buildMockDb(clockToReturn: bigint = 1n) {
 
   const db = {
     $transaction,
-    room: { upsert: roomUpsert, update: roomUpdate },
+    room: { upsert: roomUpsert, findUnique: roomFindUnique, update: roomUpdate },
     record: { upsert: recordUpsert, deleteMany: recordDeleteMany },
     tombstone: { upsert: tombstoneUpsert, deleteMany: tombstoneDeleteMany },
   } as unknown as PrismaClient;
 
-  return { db, tx, roomUpsert, roomUpdate, recordUpsert, recordDeleteMany, tombstoneUpsert, tombstoneDeleteMany, $transaction };
+  return {
+    db,
+    tx,
+    roomUpsert,
+    roomFindUnique,
+    roomUpdate,
+    recordUpsert,
+    recordDeleteMany,
+    tombstoneUpsert,
+    tombstoneDeleteMany,
+    $transaction,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -188,6 +200,52 @@ describe('saveRoomElements', () => {
         const arg = call[0] as { create: { recordClock: bigint } };
         expect(arg.create.recordClock).toEqual(clock);
       }
+    });
+
+    it('uses the live targetDocumentClock for all active recordClock values', async () => {
+      // @covers AC-2
+      const targetDocumentClock = 42;
+      const elements = [makeElement({ id: 'target-el-A' }), makeElement({ id: 'target-el-B' })];
+      const { db, recordUpsert } = buildMockDb(BigInt(targetDocumentClock));
+
+      await saveRoomElements(db, ROOM_ID, elements, targetDocumentClock);
+
+      for (const call of recordUpsert.mock.calls) {
+        const arg = call[0] as {
+          create: { recordClock: bigint };
+          update: { recordClock: bigint };
+        };
+        expect(arg.create.recordClock).toEqual(42n);
+        expect(arg.update.recordClock).toEqual(42n);
+      }
+    });
+
+    it('uses the live targetDocumentClock for tombstone deletedClock values', async () => {
+      // @covers AC-2
+      const targetDocumentClock = 43;
+      const deleted = makeDeletedElement({ id: 'target-del' });
+      const { db, tombstoneUpsert } = buildMockDb(BigInt(targetDocumentClock));
+
+      await saveRoomElements(db, ROOM_ID, [deleted], targetDocumentClock);
+
+      expect(tombstoneUpsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          create: expect.objectContaining({ deletedClock: 43n }),
+          update: expect.objectContaining({ deletedClock: 43n }),
+        }),
+      );
+    });
+
+    it('does not decrease Room.documentClock when the database clock is already higher than target', async () => {
+      const { db, roomUpdate } = buildMockDb(50n);
+
+      await saveRoomElements(db, ROOM_ID, [makeElement({ id: 'lower-target-el' })], 40);
+
+      expect(roomUpdate).not.toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: { documentClock: 40n },
+        }),
+      );
     });
   });
 
