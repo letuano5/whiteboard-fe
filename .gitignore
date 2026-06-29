@@ -32,4 +32,6 @@ pnpm-debug.log*
 .agents/
 .claude/
 skills-lock.json
-
+.data/
+.data
+.implement-feature-state/

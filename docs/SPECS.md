@@ -2,11 +2,13 @@
 
 |               |                                                                                            |
 | ------------- | ------------------------------------------------------------------------------------------ |
-| **Phiên bản** | 0.2                                                                                        |
-| **Ngày**      | 2026-06-07                                                                                 |
+| **Phiên bản** | 0.3                                                                                        |
+| **Ngày**      | 2026-06-30                                                                                 |
 | **Phạm vi**   | Đồ án web collaborative whiteboard, đồng bộ realtime nhiều người trên một canvas/bản đồ số |
 
 > **Ghi chú v0.2:** restructure lộ trình để không bị ngợp — tách Phase 1 thành P1A/P1B, tách Phase 3 thành P3A/P3B/P3C, thêm Phase 0 foundation; bổ sung **mutation pipeline** và tách **committed vs transient state**; đưa undo/redo và optimistic update lên sớm; tách `image` khỏi Canvas overlay.
+>
+> **Ghi chú v0.3:** bổ sung Phase 4 cho workspace/document management, sharing/public/private access, admission control, import/export, version history/rollback; đẩy các phần sync polish/advanced canvas/refactor xuống các phase sau.
 >
 > **Các sub-phase (P1A, P1B, P2.5, P3A…) là thứ tự triển khai (thứ tự tấn công), KHÔNG phải các milestone chấm điểm riêng.**
 
@@ -29,6 +31,7 @@
 | **[BE]** Server         | Node + TypeScript + Express + Socket.IO; state phòng in-memory (authoritative-light)                                                                 |
 | Lưu trữ (P1)            | `localStorage` + `BroadcastChannel` (đồng bộ giữa các tab)                                                                                           |
 | **[BE]** Lưu trữ (P3A+) | PostgreSQL + Prisma                                                                                                                                  |
+| **[BE]** Lưu trữ (P3D+) | Redis (shared room state + Socket.IO adapter) + write-behind → PostgreSQL                                                                           |
 | Conflict resolution     | Last-Write-Wins theo `version` + `versionNonce`                                                                                                      |
 
 ### 1.2 Nguyên tắc kiến trúc xuyên suốt
@@ -62,7 +65,7 @@ type ElementType =
   | 'highlighter' // P3C (Canvas overlay)
   | 'frame'
   | 'sticky'
-  | 'embed'; // P4
+  | 'embed'; // P5
 
 interface Element {
   id: string;
@@ -159,11 +162,56 @@ interface Presence {
 
 > Schema này implement ở backend repo. Frontend chỉ cần biết để hiểu shape của snapshot nhận được.
 
-```ts
-Room       { id, name, ownerId, createdAt, updatedAt }
-RoomMember { roomId, userId, role: 'owner' | 'editor' | 'viewer' }
-Snapshot   { id, roomId, data: jsonb /* Element[] */, createdAt }
+```prisma
+model Room {
+  id                            String      @id @default(uuid()) @db.Uuid
+  name                          String      @default("Untitled")
+  ownerId                       String?     // FK → User, thêm ở P3B
+  documentClock                 BigInt      @default(0)
+  tombstoneHistoryStartsAtClock BigInt      @default(0)
+  createdAt                     DateTime    @default(now())
+  updatedAt                     DateTime    @updatedAt
+  members    RoomMember[]
+  records    Record[]
+  tombstones Tombstone[]
+}
+
+model RoomMember {
+  roomId String @db.Uuid
+  userId String
+  role   String // 'owner' | 'editor' | 'viewer'
+  room   Room   @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  @@id([roomId, userId])
+}
+
+// Một row = một Element đang sống (chưa bị xóa).
+// Khi element bị xóa: xóa row này, insert Tombstone.
+model Record {
+  roomId      String @db.Uuid
+  recordId    String // = Element.id
+  typeName    String // = Element.type
+  state       Json   // toàn bộ Element object
+  recordClock BigInt
+  room        Room   @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  @@id([roomId, recordId])
+  @@index([roomId, recordClock])
+}
+
+// Ghi nhớ element đã bị xóa để reconnecting client biết cần xóa — không resurrect shape cũ.
+model Tombstone {
+  roomId       String @db.Uuid
+  recordId     String
+  deletedClock BigInt
+  room         Room   @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  @@id([roomId, recordId])
+  @@index([roomId, deletedClock])
+}
 ```
+
+> Bảng `Snapshot` (version history / checkpoint) dời sang **P4-07**.
+>
+> **Invariant:** `documentClock` chỉ tăng, không bao giờ giảm. Mỗi write transaction tăng clock
+> một lần rồi gán `recordClock = documentClock` cho toàn bộ elements trong batch đó.
 
 ---
 
@@ -349,7 +397,7 @@ applyRemoteElements(incoming: Element[])  // LWW theo version/versionNonce; bỏ
 
 ### [P2-03] Optimistic local update
 
-- [ ] Thao tác áp ngay cục bộ, không chờ server (cảm giác tức thì). (Ack/rebase nâng cao → P4.)
+- [ ] Thao tác áp ngay cục bộ, không chờ server (cảm giác tức thì). (Ack/rebase nâng cao → P5.)
 
 ### [P2-04] LWW conflict (version + nonce)
 
@@ -460,32 +508,39 @@ applyRemoteElements(incoming: Element[])  // LWW theo version/versionNonce; bỏ
 
 ### [P3A-01] PostgreSQL + Prisma + autosave — [BE]
 
-- [BE] Server persist state phòng vào PostgreSQL (throttle ~5–10s) và khi phòng trống.
-- [BE] Schema theo §2.5: `Room`, `RoomMember`, `Snapshot`.
+- [BE] Prisma schema theo §2.5: `Room`, `RoomMember`, `Record`, `Tombstone`.
+- [BE] Autosave throttle ~5–10s và ngay khi phòng trống (0 client):
+  - Mỗi write transaction: tăng `documentClock` một lần, upsert từng element vào `Record` với `recordClock = documentClock`.
+  - Element bị xóa (`isDeleted = true`): xóa row `Record`, insert `Tombstone` với `deletedClock = documentClock`.
+- [BE] In-memory `roomElements` vẫn là authoritative hot path; DB là backing store cho durability.
 
 ### [P3A-02] Load khi mở phòng
 
-- [ ] Client nhận full snapshot từ server khi join phòng; áp vào store qua `applyRemoteElements`.
-- [ ] Phòng chưa có dữ liệu → khởi tạo store rỗng.
-- [BE] Server query DB và gửi snapshot khi client join.
+- [ ] Client nhận `ROOM_SNAPSHOT { elements, documentClock }` khi join; áp qua `applyRemoteElements`; lưu `lastServerClock = documentClock`.
+- [ ] Phòng chưa có dữ liệu → `elements: [], documentClock: 0`.
+- [BE] Server query `Record WHERE roomId = ?` và gửi snapshot kèm `documentClock` hiện tại.
 
 ### [P3A-03] Reconnect không mất data
 
-- [ ] Socket.IO tự reconnect; sau reconnect áp full snapshot từ server (LWW).
-- [ ] Thay đổi cục bộ chưa kịp gửi được gửi lại sau reconnect.
-- [BE] Server gửi full snapshot khi client reconnect.
+- [ ] Socket.IO tự reconnect; client gửi `lastServerClock` khi reconnect.
+- [ ] Client áp diff nhận về: upsert `changed` elements, xóa `deleted` khỏi store (`applyRemoteElements`).
+- [ ] Thay đổi cục bộ chưa kịp gửi: gửi lại qua `ELEMENT_UPDATE` sau khi đã áp server diff.
+- [BE] Nhận `lastServerClock` từ client, trả về:
+  - Bình thường (`lastServerClock >= tombstoneHistoryStartsAtClock`): diff `{ changed: Record[], deleted: Tombstone[], documentClock }` — chỉ những gì thay đổi sau `lastServerClock`.
+  - Clock quá cũ (`lastServerClock < tombstoneHistoryStartsAtClock`): wipe_all — trả full snapshot như P3A-02.
 
-### [P3A-04] Chỉ gửi đã đổi + resync định kỳ
+### [P3A-04] Delta push theo clock
 
-- [ ] Theo dõi `version` đã gửi từng element, chỉ gửi khi tăng.
-- [ ] Nhận full-resync định kỳ từ server → `applyRemoteElements`.
-- [BE] Server gửi full-resync định kỳ (~20s) làm lưới an toàn.
+- [BE] Sau mỗi `ELEMENT_UPDATE` nhận vào: tăng `documentClock` một lần cho cả batch, gán `recordClock = documentClock`; persist throttled vào DB.
+- [ ] Client không cần track `version đã gửi` per element — clock trên server quản lý.
+- [ ] `lastServerClock` client cập nhật mỗi khi nhận ack hoặc patch từ server.
+- [BE] Bỏ full-resync định kỳ — clock-based diff đã đủ. Nếu phát hiện drift, thêm lại ở P5-01a.
 
 ---
 
 ## 10. Phase 3B — Auth & permission
 
-**Chủ đề:** danh tính + phân quyền (tách khỏi persistence để giảm rủi ro).
+**Chủ đề:** danh tính + phân quyền (tách khỏi persistence để giảm rủi ro). Yêu cầu: Thiết kế extendable (để sau này có thể dùng các auth provider khác, như Supabase self-hosted, hay Firebase).
 
 ### [P3B-01] Auth đăng nhập
 
@@ -523,61 +578,420 @@ applyRemoteElements(incoming: Element[])  // LWW theo version/versionNonce; bỏ
 
 ---
 
-## 12. Phase 4 — Advanced & polish
+## 12. Phase 3D — Horizontal scaling (Redis)
 
-### [P4-01] Optimistic nâng cao (ack / rebase)
+**Chủ đề:** cho phép chạy nhiều Node.js instance song song; Redis thay thế in-process Map làm shared authoritative state.
 
-- [ ] Xử lý ack từ server; rollback/rebase khi peer phản hồi khác; hội tụ theo LWW.
-- [BE] Server gửi ack; resolve conflict và broadcast kết quả cuối.
+> Phase này là optional — chỉ cần khi muốn scale ngang hoặc zero-downtime deploy. P3A–P3C không phụ thuộc vào đây.
 
-### [P4-02] Version history (snapshot) + Restore
+### [P3D-01] Redis làm shared room state — [BE]
 
-- [ ] UI liệt kê phiên bản; Restore gửi lệnh lên server và áp snapshot nhận về.
-- [BE] Server lưu `Snapshot` theo timestamp; API trả danh sách + thực hiện restore.
+- [BE] Thay `roomElements: Map<roomId, Map<elementId, Element>>` bằng Redis Hash: `room:{roomId}:elements` → field = `elementId`, value = JSON-serialized `Element`.
+- [BE] Upsert element: `HSET room:{roomId}:elements {elementId} {json}`.
+- [BE] Load snapshot: `HGETALL room:{roomId}:elements`.
+- [BE] Tombstone: `SREM` khỏi hash + `SADD room:{roomId}:tombstones {elementId}`.
+- [BE] Redis persistence bật **AOF** (`appendfsync everysec`) để giảm cửa sổ mất data xuống ~1s.
 
-### [P4-03] Export PNG / SVG / JSON + Import JSON
+### [P3D-02] Socket.IO Redis Adapter — [BE]
 
-- [ ] Export PNG/SVG khớp nội dung; Export/Import JSON (`Element[]`).
+- [BE] Thêm `@socket.io/redis-adapter`; mọi `io.to(roomId).emit(...)` tự động fan-out sang tất cả instance.
+- [BE] Không còn phụ thuộc vào việc client phải kết nối đúng instance.
 
-### [P4-04] Lock / Unlock
+### [P3D-03] Write-behind: Redis → PostgreSQL — [BE]
+
+- [BE] Background job (setInterval hoặc Bull queue) flush `room:{roomId}:elements` → bảng `Record` trong PostgreSQL, throttle ~3s.
+- [BE] Flush ngay khi phòng trống (0 client) và khi nhận `SIGTERM`.
+- [BE] PostgreSQL vẫn là source of truth cho cold load (server restart); Redis là hot cache cho active rooms.
+
+---
+
+## 13. Phase 4 — Workspace, sharing & file lifecycle
+
+**Chủ đề:** nâng whiteboard từ một "room realtime" thành document product: user có workspace/file riêng, chia sẻ có kiểm soát, giới hạn người tham gia, import/export, và rollback lịch sử.
+
+### [P4-01] Workspace + document dashboard
+
+- [ ] User có dashboard liệt kê các room/document mình sở hữu, được share, và mở gần đây.
+- [ ] Tạo room mới từ dashboard; room mới mặc định `visibility = 'private'`, owner là user hiện tại.
+- [ ] Đổi tên room/document; xóa hoặc archive room chỉ owner/admin được làm.
+- [ ] Search/filter theo tên, owner, updatedAt, và trạng thái shared/locked.
+- [BE] Thêm `Workspace` và `WorkspaceMember` nếu cần nhóm nhiều document; tối thiểu P4 có thể dùng personal workspace mặc định cho mỗi user.
+- [BE] Room lưu `workspaceId`, `ownerId`, `visibility`, `locked`, `archivedAt`, `lastOpenedAt`.
+
+### [P4-02] Sharing, public/private access, invited users
+
+- [ ] Room hỗ trợ access mode:
+  - `private`: chỉ owner và invited members được vào.
+  - `link_view`: ai có link vào được với quyền viewer.
+  - `link_edit`: ai có link vào được với quyền editor, trừ khi room bị locked hoặc editor slots đã đầy.
+  - `public_view`: room có thể xem công khai, mutation vẫn cần role editor/owner.
+- [ ] Owner có UI bật/tắt share link, copy link, đổi link mode, và revoke link.
+- [ ] Owner có UI mời user theo email, đổi role `owner/editor/viewer`, remove member.
+- [BE] Server quyết định `effectiveRole` khi join dựa trên `RoomMember.role`, `visibility`, lock state, và room capacity.
+- [BE] Tất cả HTTP/socket mutation phải check permission server-side; UI chỉ là lớp UX.
+
+### [P4-03] Room lock + admission control
+
+- [ ] Owner có thể lock/unlock room; khi locked, chỉ owner/admin được mutate, editor/viewer vẫn xem realtime.
+- [ ] Room có `maxParticipants` và `maxEditors` để tránh quá tải realtime.
+- [ ] Nếu phòng chưa đầy: user join theo role thật hoặc role từ link.
+- [ ] Nếu editor slots đã đầy: user có quyền editor vẫn được join dưới `effectiveRole = 'viewer'`.
+- [ ] Khi editor rời phòng, server có thể promote user đang chờ lên editor nếu base role cho phép.
+- [BE] Presence/session list phân biệt `baseRole` và `effectiveRole`.
+- [BE] Server reject `ELEMENT_UPDATE`, restore, import, delete khi `effectiveRole` không đủ quyền.
+
+### [P4-04] Native file lifecycle: save/load `.vdt.json`
+
+- [ ] Export native `.vdt.json` gồm schema version, room metadata tối thiểu, camera, elements, và optional assets metadata.
+- [ ] Import `.vdt.json` vào room hiện tại hoặc tạo room mới.
+- [ ] Import phải validate schema version; file lạ/thiếu field cần báo lỗi rõ ràng.
+- [ ] Load file không được ghi đè room đang mở nếu user chưa confirm.
+- [ ] Save/load native format phải round-trip được toàn bộ element types hiện có.
+- [BE] Import vào persisted room tạo batch mutation mới và tăng `documentClock`, không ghi DB bypass mutation pipeline.
+
+### [P4-05] Cross-platform import/export
+
+- [ ] Export PNG/SVG khớp nội dung đang thấy hoặc selection tuỳ chọn.
+- [ ] Export JSON native (`.vdt.json`) là format chính để backup/migrate.
+- [ ] Import Excalidraw JSON ở mức best-effort: rectangle/ellipse/line/arrow/text/image cơ bản.
+- [ ] Import draw.io XML ở mức best-effort: basic shapes/connectors/text; không cam kết full fidelity.
+- [ ] Unsupported styles/shapes phải degrade có kiểm soát, không crash.
+- [ ] Mỗi importer trả report: số object import được, số object bị bỏ qua, lý do chính.
+
+### [P4-06] Asset metadata + storage adapter (pre-S3)
+
+- [ ] Image/file asset không nên chỉ nhúng base64 lâu dài; cần metadata để sau này chuyển sang object storage.
+- [BE] Thêm `Asset` metadata: `id`, `roomId`, `ownerId`, `mimeType`, `size`, `storageKey`, `createdAt`.
+- [BE] Storage adapter interface hỗ trợ ít nhất local/dev storage; để ngỏ S3-compatible backend (S3/R2/MinIO/Supabase Storage).
+- [BE] Backend check role trước khi cấp upload/read URL hoặc nhận upload.
+- [ ] Element `image.props.src` có thể trỏ tới asset URL hoặc data URL; native export cần giữ đủ thông tin để restore.
+
+### [P4-07] Version history (snapshot) + owner restore
+
+**Prerequisite:** P3A (PostgreSQL + Prisma schema với `Room`, `Record`, `Tombstone` đã có). P4-03 khuyến nghị (permission/lock đã rõ).
+
+**Schema bổ sung vào Prisma (P4-07):**
+
+```prisma
+model Snapshot {
+  id            String   @id @default(uuid()) @db.Uuid
+  roomId        String   @db.Uuid
+  documentClock BigInt
+  createdBy     String?
+  createdAt     DateTime @default(now())
+  reason        String   // 'interval' | 'manual' | 'restore' | 'import'
+  records       Json     // Element[] — toàn bộ elements sống tại thời điểm snapshot
+  tombstones    Json     // { recordId: string; deletedClock: string }[]
+  room          Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  @@index([roomId, createdAt])
+}
+```
+
+**Trigger snapshot (server-side):**
+
+- Sau mỗi commit batch tăng `documentClock`: nếu `now - lastSnapshotAt >= 30_000ms` và `documentClock > lastSnapshotClock` → enqueue snapshot với `reason: 'interval'`.
+- Manual (user bấm nút lưu phiên bản): immediate snapshot với `reason: 'manual'`.
+- Trước khi import/restore: snapshot trạng thái hiện tại với `reason: 'import'` hoặc `reason: 'restore'` (safety net).
+- Retention: giữ mỗi 30s trong 1h gần nhất, mỗi 5m trong 24h, mỗi 1h trong 30 ngày.
+
+**Protocol (`@vdt/shared` — thêm events):**
+
+```ts
+// Events mới
+SNAPSHOT_LIST:    'snapshot-list'     // client request → server HTTP GET hoặc socket
+SNAPSHOT_RESTORE: 'snapshot-restore'  // client → server: { roomId, snapshotId }
+ROOM_RESTORED:    'room-restored'     // server → broadcast toàn phòng
+```
+
+```ts
+// ROOM_RESTORED payload
+interface RoomRestoredPayload {
+  roomId: string;
+  snapshotId: string;
+  serverClock: number;
+  mode: 'wipe_all';
+  elements: Element[]; // toàn bộ elements từ snapshot
+}
+```
+
+**Server restore transaction:**
+
+1. Check user là owner/admin của room.
+2. Load snapshot theo `snapshotId`.
+3. Insert snapshot hiện tại với `reason: 'restore'` (safety net).
+4. Xóa toàn bộ `Record` của room, insert lại từ `snapshot.records`.
+5. Xóa toàn bộ `Tombstone`, insert lại từ `snapshot.tombstones`.
+6. `Room.documentClock = max(current + 1, snapshot.documentClock + 1)`.
+7. Broadcast `ROOM_RESTORED` với `mode: 'wipe_all'` và toàn bộ elements.
+
+**Client xử lý `ROOM_RESTORED`:**
+
+```ts
+// Xóa pending queue — state cũ không còn valid
+pendingPushRequests = [];
+lastServerClock = data.serverClock;
+// Wipe và load snapshot
+useElementsStore.getState().setElements(data.elements);
+```
+
+**Acceptance criteria:**
+
+- [ ] UI có panel liệt kê snapshots (timestamp, reason, createdBy); có nút Restore cho owner/admin.
+- [ ] Restore hiển thị confirm dialog vì sẽ thay toàn bộ document state.
+- [ ] Sau restore, tất cả client trong phòng nhận `ROOM_RESTORED` và hiển thị đúng state snapshot.
+- [ ] `pendingPushRequests` bị clear khi nhận `ROOM_RESTORED` để tránh ghost push.
+- [BE] Snapshot được tạo tự động mỗi ≥30s khi có thay đổi.
+- [BE] Restore là atomic transaction — không có trạng thái partial.
+- [BE] Snapshot trước restore/import được lưu để có thể quay lại nếu cần.
+
+---
+
+## 14. Phase 5 — Advanced sync & polish
+
+### [P5-01a] Optimistic ack — commit / discard
+
+**Prerequisite:** P3A (PostgreSQL + `documentClock` đã có).
+
+Thêm vòng ack tối giản: client biết server đã nhận và xử lý push, có thể detect timeout và retry.
+
+**Protocol thêm vào `@vdt/shared`:**
+
+```ts
+// Mở rộng ELEMENT_UPDATE payload (client → server)
+interface ElementUpdatePayload {
+  roomId: string;
+  requestId: string;   // uuid v4, client tự sinh
+  clientClock: number; // counter tăng dần per-client
+  elements: Element[];
+}
+
+// Event mới: ELEMENT_UPDATE_ACK (server → sender only, không broadcast)
+type ElementUpdateAck =
+  | { requestId: string; clientClock: number; serverClock: number; action: 'commit' }
+  | { requestId: string; clientClock: number; serverClock: number; action: 'discard' };
+```
+
+**Server (`backend/src/index.ts`):**
+
+- Thêm `roomClock: Map<string, number>` (in-memory, sau P3A migrate sang `documentClock` từ DB).
+- Sau khi LWW upsert batch elements: tăng `roomClock` một lần, gán `serverClock = roomClock`.
+- Gửi `ELEMENT_UPDATE_ACK` về **chỉ sender** (không broadcast):
+  - `commit`: ít nhất một element được lưu đúng như request (version mới nhất của nó).
+  - `discard`: toàn bộ elements trong batch đều bị bỏ qua vì server đang giữ version cao hơn hoặc nonce thắng.
+- [BE] Tiếp tục broadcast `ELEMENT_UPDATE` cho peers như hiện tại.
+
+**Client (`sync/pending-push.ts` — file mới, import vào `socket-client.ts`):**
+
+```ts
+interface PendingPush {
+  requestId: string;
+  clientClock: number;
+  sentAt: number; // Date.now() — cho timeout
+}
+```
+
+- `clientClock` tăng mỗi lần emit `ELEMENT_UPDATE`.
+- Khi ack nhận về: xóa request khỏi `pendingPushRequests`.
+- Timeout (ví dụ 10s không nhận ack): log warning, xóa khỏi queue; không cần tự retry — Socket.IO reconnect tự xử lý resend qua `ROOM_RESYNC` của P3A.
+- `lastServerClock` client cập nhật từ `ack.serverClock`.
+
+**Acceptance criteria:**
+
+- [ ] Mỗi `ELEMENT_UPDATE` client gửi có `requestId` và `clientClock` duy nhất.
+- [ ] Server gửi `ELEMENT_UPDATE_ACK` về đúng sender, không về peer khác.
+- [ ] `pendingPushRequests` queue được dọn sạch sau khi nhận ack.
+- [ ] `lastServerClock` client cập nhật chính xác.
+- [BE] Server `roomClock` tăng monotonically, không giảm.
+
+### [P5-01b] Optimistic rebase khi conflict
+
+**Prerequisite:** P5-01a đã xong.
+
+Xử lý trường hợp cạnh: hai client edit **cùng một element** đồng thời — server LWW chọn winner khác với những gì client đã gửi.
+
+**Mở rộng protocol (bổ sung thêm vào `ELEMENT_UPDATE_ACK`):**
+
+```ts
+// Thêm action thứ ba vào union type
+| { requestId: string; clientClock: number; serverClock: number; action: 'rebase'; elements: Element[] }
+// elements = các element mà server đã commit với version/nonce khác request
+```
+
+**Server rule — khi nào gửi `rebase`:**
+
+Sau khi apply LWW batch: với từng element trong request, nếu `elMap.get(el.id)` kết quả **khác** với `el` đã gửi (cùng id nhưng `versionNonce` khác — tức là một concurrent push với nonce thấp hơn đã thắng trước đó), gom các element winners đó vào `rebase.elements`.
+
+**Client xử lý `rebase`:**
+
+```ts
+// Không cần reverse speculativeChanges — applyRemoteElements đã có LWW đúng
+// Server trả về winner với cùng version nhưng nonce thấp hơn → applyRemoteElements sẽ apply
+applyRemoteElements(ack.elements);
+```
+
+Lý do không cần `speculativeChanges` stack (khác tldraw): codebase này LWW trên whole-element, không phải field-level CRDT diff. `applyRemoteElements` với `(version === current.version && versionNonce < current.versionNonce)` → winner apply tự động.
+
+**Acceptance criteria:**
+
+- [ ] Server phát hiện và trả `rebase` khi concurrent push có nonce thấp hơn đã thắng.
+- [ ] Client nhận `rebase` → `applyRemoteElements(elements)` → store hội tụ về winner.
+- [ ] Test: 2 client đồng thời patch cùng element → sau ack cả hai client hiển thị cùng một state.
+- [ ] Không có vòng lặp (rebase không trigger thêm push).
+
+### [P5-02] Element lock / unlock
 
 - [ ] `locked = true` chặn move/resize/delete đến khi unlock.
 
-### [P4-05] Align / Distribute + Flip
+### [P5-03] Align / Distribute + Flip
 
 - [ ] Align 6 hướng + distribute đều; flip ngang/dọc đúng cả khi đã xoay.
 
-### [P4-06] Snap to grid + đường gióng + Grid background
+### [P5-04] Snap to grid + đường gióng + Grid background
 
 - [ ] Snap làm tròn theo lưới; đường gióng khi thẳng hàng; bật/tắt grid (co theo zoom).
 
-### [P4-07] Zoom to fit / selection / reset
+### [P5-05] Zoom to fit / selection / reset
 
 - [ ] Mỗi chế độ tính `camera` đúng.
 
-### [P4-08] Idle/Away + Follow viewport
+### [P5-06] Idle/Away + Follow viewport
 
 - [ ] Không thao tác > ngưỡng → idle; ẩn tab → away.
 - [ ] A follow B → camera A bám viewport B; có dừng follow; tránh vòng lặp.
 - [BE] Server relay viewport cho Follow mode.
 
-### [P4-09] Sticky note + Embed/iframe/video
+### [P5-07] Sticky note + Embed/iframe/video
 
 - [ ] Sticky có nền màu + text.
 - [ ] Embed render DOM (iframe); mặc định `pointer-events:none`, chỉ bật khi vào chế độ interact.
 
-### [P4-10] Roughness (tuỳ chọn)
+### [P5-08] Roughness (tuỳ chọn)
 
 - [ ] `props.roughness` điều khiển độ "vẽ tay"; render ổn định giữa client (SVG rough mode hoặc Canvas).
 
-### [P4-11] Context menu + Keyboard shortcuts
+### [P5-09] Context menu + Keyboard shortcuts
 
 - [ ] Menu chuột phải theo ngữ cảnh.
 - [ ] Tối thiểu: V/H/R/O/L/T, Del, Ctrl/Cmd+Z/Shift+Z, Ctrl/Cmd+C/V/D.
 
 ---
 
-## 13. Ngoài phạm vi (Bỏ qua)
+## 15. Phase 6 — Refactor: LWW → Field-level CRDT diffs (future / ngoài phạm vi đồ án)
+
+> Phase này **không nằm trong kế hoạch triển khai** của đồ án. Ghi lại để rõ hướng phát triển nếu scale lên, và để hiểu rõ hơn trade-off của LWW hiện tại.
+
+**Động lực:** LWW per-element có một điểm yếu rõ ràng — khi hai người edit **cùng shape nhưng khác field** đồng thời (A kéo, B đổi màu), một người mất trắng thay đổi. Với field-level diffs, cả hai thay đổi được giữ miễn là không đụng cùng field.
+
+### [P6-01] Định nghĩa `ElementDiff` và merge strategy per field
+
+```ts
+// Đơn vị sync không còn là Element nguyên vẹn mà là diff từng field
+type ScalarDiff<T> = { prev: T; next: T };  // LWW-Register per field
+
+interface ElementDiff {
+  id: string;
+  // Top-level scalar fields — mỗi field là LWW-Register riêng
+  x?:      ScalarDiff<number>;
+  y?:      ScalarDiff<number>;
+  width?:  ScalarDiff<number>;
+  height?: ScalarDiff<number>;
+  angle?:  ScalarDiff<number>;
+  zIndex?: ScalarDiff<number>;
+  locked?: ScalarDiff<boolean>;
+  isDeleted?: ScalarDiff<boolean>;
+  // Props — tương tự, từng field con
+  props?: Partial<{
+    strokeColor: ScalarDiff<string>;
+    fillColor:   ScalarDiff<string>;
+    strokeWidth: ScalarDiff<number>;
+    opacity:     ScalarDiff<number>;
+    text:        ScalarDiff<string>;       // LWW-string (char-level CRDT để sau)
+    points:      ScalarDiff<[number, number][]>;  // LWW-array (replace toàn bộ)
+    // ... các field còn lại
+  }>;
+}
+```
+
+**Merge strategy mỗi loại:**
+
+| Field | Strategy | Ghi chú |
+|---|---|---|
+| `x`, `y`, `width`, `height`, `angle` | LWW-Register theo `updatedAt` + nonce | Số → không có "trung gian" hợp lý |
+| `strokeColor`, `fillColor`, `opacity` | LWW-Register | Style → winner takes all per field |
+| `zIndex` | LWW-Register | Fractional index sau này |
+| `locked`, `isDeleted` | LWW-Register | Boolean |
+| `text` | LWW-string (toàn bộ) ở P6; char-level (Yjs) nếu muốn collaborative text | Char-level cần thư viện riêng |
+| `points` | LWW-array (replace toàn bộ) | Merge point-by-point không có ngữ nghĩa rõ ràng |
+
+### [P6-02] Mutation pipeline xuất diff thay vì element
+
+Hiện tại `MutationEvent.elements` là `Element[]` — toàn bộ snapshot sau mutation. Sau refactor:
+
+```ts
+interface MutationEvent {
+  type: 'create' | 'patch' | 'delete' | 'update';
+  diffs: ElementDiff[];   // chỉ những field đã thay đổi
+  before: Element[];      // vẫn giữ để undo/redo
+  after: Element[];       // committed state
+}
+```
+
+Pipeline tính diff bằng cách so sánh `before` và `after` field-by-field trước khi fire hooks.
+
+### [P6-03] Server apply diffs thay vì replace
+
+```ts
+// Hiện tại (LWW):
+elMap.set(el.id, el);   // replace toàn bộ
+
+// Sau refactor:
+function applyDiff(existing: Element, diff: ElementDiff): Element {
+  // Với mỗi field trong diff: so sánh diff.prev với existing[field]
+  // Nếu existing[field] === diff.prev → apply diff.next  (fast-forward, không conflict)
+  // Nếu existing[field] !== diff.prev → concurrent edit cùng field
+  //   → LWW-Register: giữ giá trị có updatedAt cao hơn (hoặc nonce nhỏ hơn nếu bằng nhau)
+  // Trả về element đã merge
+}
+```
+
+Server không cần hiểu "ý nghĩa" của từng field — chỉ cần biết merge rule (LWW-Register per field).
+
+Ack thay đổi: `ELEMENT_UPDATE_ACK` với `action: 'rebase'` trả về **diff thực tế đã apply** (có thể khác diff client gửi nếu có conflict per-field).
+
+### [P6-04] `applyRemoteElements` → `applyRemoteDiffs`
+
+```ts
+// Hiện tại: nhận Element[], so sánh version/nonce toàn bộ
+applyRemoteElements(incoming: Element[])
+
+// Sau refactor: nhận ElementDiff[], merge per-field
+applyRemoteDiffs(diffs: ElementDiff[])
+```
+
+Không còn skip element vì "đang kéo" — thay vào đó skip **từng field** đang active (ví dụ: đang kéo → bỏ qua `x`, `y` từ remote nhưng vẫn apply `strokeColor` nếu peer vừa đổi màu).
+
+### [P6-05] Undo/redo với diffs
+
+Với LWW: undo = `patchElement(id, before)` → đơn giản.
+
+Với diffs: undo = apply inverse diff `{ prev: next, next: prev }` cho từng field. Nếu trong lúc đó peer đã thay đổi field khác → inverse diff không đụng field đó → không mất thay đổi của peer. Tốt hơn LWW nhưng cần cẩn thận với thứ tự apply.
+
+### Tóm tắt delta so với LWW hiện tại
+
+| Thành phần | LWW (hiện tại) | CRDT diffs (P6) |
+|---|---|---|
+| Đơn vị sync | `Element` (whole) | `ElementDiff` (per-field) |
+| Conflict unit | Element | Field |
+| Server logic | `map.set(id, el)` | `applyDiff(existing, diff)` |
+| Ack rebase payload | `Element[]` | `ElementDiff[]` |
+| `applyRemoteElements` | skip element nếu đang active | skip field nếu field đang active |
+| Undo | restore `before` element | apply inverse diff per-field |
+| Complexity | thấp | trung bình–cao |
+| Khi nào upgrade | conflict per-field xảy ra thường xuyên, hoặc yêu cầu "không ai mất thay đổi" | — |
+
+---
+
+## 16. Ngoài phạm vi (Bỏ qua)
 
 | Tính năng                       | Lý do                                                                                 |
 | ------------------------------- | ------------------------------------------------------------------------------------- |
@@ -588,9 +1002,9 @@ applyRemoteElements(incoming: Element[])  // LWW theo version/versionNonce; bỏ
 
 ---
 
-## 14. Yêu cầu phi chức năng
+## 17. Yêu cầu phi chức năng
 
 - **Hiệu năng:** vẽ/zoom mượt ở hàng chục–trăm shape; độ trễ sync < ~200ms mạng bình thường.
-- **Quy mô:** ~10–50 người/phòng đồng thời.
+- **Quy mô:** ~10–50 người/phòng đồng thời; vượt ngưỡng thì P4 admission control cho user vào sau ở `viewer`/read-only thay vì làm nghẽn mutation path.
 - **Độ bền:** reload/reconnect không mất dữ liệu (P3A); state hội tụ nhất quán giữa client.
 - **Khả năng mở rộng:** thêm loại shape mới chỉ qua một ShapeUtil; mọi mutation qua một pipeline.
