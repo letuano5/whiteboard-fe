@@ -283,9 +283,12 @@ export default function SvgLayer({
           );
         })}
         {/* Remote selection highlights — solid colored border, no handles; rendered above local drafts */}
-        {Array.from(remoteCursors.values()).flatMap((peer) =>
-          peer.selectedIds
+        {Array.from(remoteCursors.values()).flatMap((peer) => {
+          const peerDraftIds = new Set((remoteDrafts.get(peer.sessionId) ?? []).map((el) => el.id));
+          return peer.selectedIds
             .map((elId) => {
+              // Skip: remoteDraft already shows a colored border at the correct position
+              if (peerDraftIds.has(elId)) return null;
               const el = elements.find((e) => e.id === elId && !e.isDeleted);
               if (!el) return null;
               return (
@@ -302,8 +305,8 @@ export default function SvgLayer({
                 />
               );
             })
-            .filter((node): node is React.ReactElement => node !== null),
-        )}
+            .filter((node): node is React.ReactElement => node !== null);
+        })}
         {/* Single selection overlay with handles */}
         {overlayElement && !editingId && draftElements.length === 0 && (
           <SelectionOverlay element={overlayElement} onHandlePointerDown={onHandlePointerDown} />
