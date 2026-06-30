@@ -543,12 +543,24 @@ applyRemoteElements(incoming: Element[])  // LWW theo version/versionNonce; bỏ
 
 ## 10. Phase 3B — Auth & permission
 
-**Chủ đề:** danh tính + phân quyền (tách khỏi persistence để giảm rủi ro). Yêu cầu: Thiết kế extendable (để sau này có thể dùng các auth provider khác, như Supabase self-hosted, hay Firebase).
+**Chủ đề:** danh tính + phân quyền (tách khỏi persistence để giảm rủi ro). Yêu cầu: Thiết kế provider-agnostic để có thể đổi hoặc thêm auth provider khác (Supabase self-hosted, Firebase, OIDC/custom provider) mà không viết lại authorization/domain logic.
+
+### [P3B-00] Supabase Auth integration foundation
+
+- [ ] Chọn Supabase self-hosted làm auth provider đầu tiên, nhưng backend phải đi qua abstraction kiểu `AuthVerifier`/provider adapter; domain code không phụ thuộc trực tiếp vào Supabase SDK/API.
+- [ ] Sparse-clone/copy nguyên thư mục `docker/` chính thức của Supabase để giữ đủ init files (`volumes/db/*.sql`), rồi tạo compose tối giản cho project.
+- [ ] P3B mặc định giữ Supabase `db` + `auth` + `kong` để frontend dùng `@supabase/supabase-js` theo URL chuẩn (`/auth/v1`) và giảm code auth tự viết.
+- [ ] Dùng `supabase/postgres:17.6.1.136` thay cho `postgres:latest`; pin image auth theo compose chính thức đang dùng.
+- [ ] Được phép rebuild toàn bộ DB local/dev hiện tại từ Supabase Postgres sạch: bỏ physical data dir cũ (`.data/postgres`), tạo volume/data dir mới, rồi chạy lại Prisma migrations.
+- [ ] Không modify trực tiếp bảng `auth.users`; nếu app cần thông tin user/profiles, tạo bảng app riêng trong schema `public` và sync/upsert bằng backend/Prisma sau khi verify token.
+- [ ] JWT chỉ chứng minh identity; room authorization vẫn dùng dữ liệu app (`RoomMember.role`) làm nguồn sự thật.
 
 ### [P3B-01] Auth đăng nhập
 
-- [ ] UI login; lưu token; attach token vào socket connection.
-- [BE] Luồng login (JWT); middleware verify token cho socket và HTTP.
+- [ ] UI login qua provider adapter; với Supabase dùng `@supabase/supabase-js` trỏ vào Kong (`SUPABASE_PUBLIC_URL`) để login, restore session, refresh token.
+- [ ] Lưu/khôi phục session token; attach access token vào socket connection và HTTP requests.
+- [BE] Middleware verify JWT cho socket và HTTP thông qua `AuthVerifier`, trả về identity chuẩn hóa (`provider`, `providerSubject`, `email`, `name`, `avatarUrl`).
+- [BE] Sau khi verify token, upsert user nội bộ trong DB app; các bảng domain dùng user id nội bộ hoặc Supabase `sub` đã chuẩn hóa, không đọc trực tiếp `auth.users` ở business logic.
 
 ### [P3B-02] Role owner / editor / viewer
 
@@ -556,6 +568,7 @@ applyRemoteElements(incoming: Element[])  // LWW theo version/versionNonce; bỏ
 - [ ] Owner có UI đổi role thành viên.
 - [BE] **Server từ chối mutation từ session role `viewer`** (enforce ở server, không chỉ ẩn UI).
 - [BE] `RoomMember.role` lưu vai trò trong DB.
+- [BE] Không lưu room role trong JWT làm nguồn sự thật; role được resolve khi join room và kiểm tra lại ở mutation path.
 
 ---
 
