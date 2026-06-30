@@ -129,7 +129,7 @@ pnpm --filter whiteboard-be dev
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan at
-`specs/020-linear-point-model/plan.md`.
+`specs/024-reconnect-diff/plan.md`.
 <!-- SPECKIT END -->
 
 ## Established architectural decisions

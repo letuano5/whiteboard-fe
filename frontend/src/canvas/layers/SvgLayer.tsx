@@ -161,9 +161,18 @@ export default function SvgLayer({
 
   // IDs currently shown as draftElements (hide their committed versions to avoid doubling)
   const draftElementIds = new Set(draftElements.map((el) => el.id));
+  const remoteDraftIds = new Set(
+    Array.from(remoteDrafts.values()).flatMap((draftEls) => draftEls.map((el) => el.id)),
+  );
 
   const visible = elements
-    .filter((el) => !el.isDeleted && el.id !== draftElement?.id && !draftElementIds.has(el.id))
+    .filter(
+      (el) =>
+        !el.isDeleted &&
+        el.id !== draftElement?.id &&
+        !draftElementIds.has(el.id) &&
+        !remoteDraftIds.has(el.id),
+    )
     .sort((a, b) => a.zIndex - b.zIndex);
 
   // T023: Arrow snap indicators — computed purely from draftElement and elements list (no state)
@@ -274,9 +283,12 @@ export default function SvgLayer({
           );
         })}
         {/* Remote selection highlights — solid colored border, no handles; rendered above local drafts */}
-        {Array.from(remoteCursors.values()).flatMap((peer) =>
-          peer.selectedIds
+        {Array.from(remoteCursors.values()).flatMap((peer) => {
+          const peerDraftIds = new Set((remoteDrafts.get(peer.sessionId) ?? []).map((el) => el.id));
+          return peer.selectedIds
             .map((elId) => {
+              // Skip: remoteDraft already shows a colored border at the correct position
+              if (peerDraftIds.has(elId)) return null;
               const el = elements.find((e) => e.id === elId && !e.isDeleted);
               if (!el) return null;
               return (
@@ -293,8 +305,8 @@ export default function SvgLayer({
                 />
               );
             })
-            .filter((node): node is React.ReactElement => node !== null),
-        )}
+            .filter((node): node is React.ReactElement => node !== null);
+        })}
         {/* Single selection overlay with handles */}
         {overlayElement && !editingId && draftElements.length === 0 && (
           <SelectionOverlay element={overlayElement} onHandlePointerDown={onHandlePointerDown} />

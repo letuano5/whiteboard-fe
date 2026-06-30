@@ -1,0 +1,55 @@
+// Prisma schema for P3A-01: PostgreSQL + Prisma + Autosave
+// Matches data model in specs/021-postgresql-prisma-autosave/data-model.md
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Room {
+  id                          String       @id @default(uuid())
+  name                        String       @default("Untitled")
+  ownerId                     String?
+  documentClock               BigInt       @default(0)
+  tombstoneHistoryStartsAtClock BigInt     @default(0)
+  createdAt                   DateTime     @default(now())
+  updatedAt                   DateTime     @updatedAt
+  members                     RoomMember[]
+  records                     Record[]
+  tombstones                  Tombstone[]
+}
+
+model RoomMember {
+  roomId String
+  userId String
+  role   String
+  room   Room   @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@id([roomId, userId])
+}
+
+model Record {
+  roomId      String
+  recordId    String
+  typeName    String
+  state       Json
+  recordClock BigInt
+  room        Room   @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@id([roomId, recordId])
+  @@index([roomId, recordClock])
+}
+
+model Tombstone {
+  roomId       String
+  recordId     String
+  deletedClock BigInt
+  room         Room   @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@id([roomId, recordId])
+  @@index([roomId, deletedClock])
+}
