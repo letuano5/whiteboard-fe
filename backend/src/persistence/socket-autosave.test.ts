@@ -17,71 +17,7 @@ import { createAutosaveManager } from './autosave.js';
 import type { Element, Presence } from '@vdt/shared';
 import { WS_EVENTS } from '@vdt/shared';
 import { makeElement } from '../test/element-fixtures.js';
-
-// ---------------------------------------------------------------------------
-// Fake io-server helpers (no real network binding)
-// ---------------------------------------------------------------------------
-
-type ConnectionHandler = (socket: FakeSocket) => void;
-
-interface FakeSocket {
-  id: string;
-  data: { sessionId: string; roomId: string };
-  join: ReturnType<typeof vi.fn>;
-  emit: ReturnType<typeof vi.fn>;
-  to: ReturnType<typeof vi.fn>;
-  on: ReturnType<typeof vi.fn>;
-}
-
-function makeFakeIo() {
-  let connectionHandler: ConnectionHandler | null = null;
-  const broadcastEmitted: Array<[string, unknown]> = [];
-
-  const toReturn = {
-    emit: vi.fn((event: string, payload: unknown) => {
-      broadcastEmitted.push([event, payload]);
-    }),
-  };
-
-  const ioServer = {
-    on: vi.fn((event: string, handler: ConnectionHandler) => {
-      if (event === 'connection') {
-        connectionHandler = handler;
-      }
-    }),
-    to: vi.fn().mockReturnValue(toReturn),
-  };
-
-  function makeSocket(roomId = 'room-test', socketId = 'socket-1'): FakeSocket {
-    const broadcastTo = {
-      emit: vi.fn((event: string, payload: unknown) => {
-        broadcastEmitted.push([event, payload]);
-      }),
-    };
-    return {
-      id: socketId,
-      data: { sessionId: 'session-1', roomId },
-      join: vi.fn(),
-      emit: vi.fn(),
-      to: vi.fn().mockReturnValue(broadcastTo),
-      on: vi.fn(),
-    };
-  }
-
-  function connect(socket: FakeSocket): void {
-    if (!connectionHandler) throw new Error('connection handler not registered');
-    connectionHandler(socket);
-  }
-
-  function getHandler(socket: FakeSocket, event: string) {
-    const onCalls = (socket.on as ReturnType<typeof vi.fn>).mock.calls as Array<[string, (...args: unknown[]) => unknown]>;
-    const entry = onCalls.find((c) => c[0] === event);
-    if (!entry) throw new Error(`No handler registered for '${event}'`);
-    return entry[1];
-  }
-
-  return { ioServer, makeSocket, connect, getHandler, broadcastEmitted };
-}
+import { makeFakeIo } from '../test/fake-socket-io.js';
 
 // ---------------------------------------------------------------------------
 // @covers AC-8
@@ -120,7 +56,7 @@ describe('AC-8: hot path — element-update does not block on persistence', () =
     roomClocks.set(roomId, 0);
     createWhiteboardServer(ioServer as any, { roomPresence, roomElements, roomClocks, autosave });
 
-    const socket = makeSocket(roomId);
+    const socket = makeSocket({ roomId, sessionId: 'session-1' });
     connect(socket);
 
     const handler = getHandler(socket, WS_EVENTS.ELEMENT_UPDATE) as (payload: {
@@ -155,7 +91,7 @@ describe('AC-8: hot path — element-update does not block on persistence', () =
     roomClocks.set(roomId, 0);
     createWhiteboardServer(ioServer as any, { roomPresence, roomElements, roomClocks, autosave });
 
-    const socket = makeSocket(roomId);
+    const socket = makeSocket({ roomId, sessionId: 'session-1' });
     connect(socket);
 
     const handler = getHandler(socket, WS_EVENTS.ELEMENT_UPDATE) as (payload: {
@@ -199,7 +135,7 @@ describe('AC-8: hot path — element-update does not block on persistence', () =
     roomClocks.set(roomId, 0);
     createWhiteboardServer(ioServer as any, { roomPresence, roomElements, roomClocks, autosave });
 
-    const socket = makeSocket(roomId);
+    const socket = makeSocket({ roomId, sessionId: 'session-1' });
     connect(socket);
 
     const handler = getHandler(socket, WS_EVENTS.ELEMENT_UPDATE) as (payload: {

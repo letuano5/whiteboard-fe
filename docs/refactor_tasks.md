@@ -27,14 +27,14 @@ marks groups that can be worked at the same time with low conflict risk.
 
 ## Parallel Lanes
 
-| Lane | Scope | Can run with | Avoid running with |
-| ---- | ----- | ------------ | ------------------ |
-| A | Backend realtime + repository | B, C, D, E | F if adding shared lint scripts |
-| B | SVG layer split | A, D, E | C, because selection overlay contracts may move |
-| C | Select tool split | A, D, E | B and D, because pointer/selection contracts overlap |
-| D | Whiteboard orchestration hooks | A, B, E | C, because pointer handler contracts overlap |
-| E | Detail panel UI split | A, B, C, D | None expected |
-| F | Tooling/test utilities | A, B, C, D, E | Any active branch changing package scripts/config heavily |
+| Lane | Scope                          | Can run with  | Avoid running with                                        |
+| ---- | ------------------------------ | ------------- | --------------------------------------------------------- |
+| A    | Backend realtime + repository  | B, C, D, E    | F if adding shared lint scripts                           |
+| B    | SVG layer split                | A, D, E       | C, because selection overlay contracts may move           |
+| C    | Select tool split              | A, D, E       | B and D, because pointer/selection contracts overlap      |
+| D    | Whiteboard orchestration hooks | A, B, E       | C, because pointer handler contracts overlap              |
+| E    | Detail panel UI split          | A, B, C, D    | None expected                                             |
+| F    | Tooling/test utilities         | A, B, C, D, E | Any active branch changing package scripts/config heavily |
 
 ## Group A: Backend Realtime Structure
 
@@ -250,7 +250,7 @@ Parallel lane: F
 
 Goal: clean remaining high-friction files and enforce the new convention with tooling.
 
-- [ ] F1. Split frontend socket client.
+- [x] F1. Split frontend socket client.
   - Target folder:
     - `frontend/src/sync/socket/`
   - Target files:
@@ -262,7 +262,7 @@ Goal: clean remaining high-friction files and enforce the new convention with to
     - `types.ts`
   - Keep compatibility exports from `frontend/src/sync/socket-client.ts` until callers are updated.
 
-- [ ] F2. Split backend room repository by concern.
+- [x] F2. Split backend room repository by concern.
   - Target folder:
     - `backend/src/persistence/room-repository/`
   - Target files:
@@ -273,7 +273,7 @@ Goal: clean remaining high-friction files and enforce the new convention with to
     - `index.ts`
   - Avoid changing repository behavior while moving code.
 
-- [ ] F3. Extract backend socket test utilities.
+- [x] F3. Extract backend socket test utilities.
   - Target file:
     - `backend/src/test/fake-socket-io.ts`
   - Candidates duplicated across tests:
@@ -282,7 +282,7 @@ Goal: clean remaining high-friction files and enforce the new convention with to
     - `connect`
     - `getHandler`
 
-- [ ] F4. Add lint enforcement for file-size and import cycles.
+- [x] F4. Add lint enforcement for file-size and import cycles.
   - Targets:
     - `frontend/eslint.config.ts`
     - backend lint config/script if introduced
@@ -291,9 +291,11 @@ Goal: clean remaining high-friction files and enforce the new convention with to
     - `backend/package.json`
   - Notes:
     - Adding `eslint-plugin-import` or `eslint-plugin-unicorn` may require dependency install.
-    - If avoiding new deps, start with built-in `max-lines` and document filename/no-cycle follow-up.
+    - Implemented without new deps per `specs/024-reconnect-diff/plan.md`: frontend production
+      source now enforces built-in `max-lines`; filename/no-cycle enforcement remains a follow-up
+      for when adding lint plugins is allowed.
 
-- [ ] F5. Validate all packages after tooling changes.
+- [x] F5. Validate all packages after tooling changes.
   - Commands:
     - `pnpm typecheck`
     - `pnpm lint`
