@@ -1,28 +1,27 @@
 import type React from 'react';
 import type { Element, Presence } from '../../../types/shared';
 import ElementOutline from './ElementOutline';
+import type { ElementLookup, RemoteDraftLookup } from './selectors';
 
 interface RemoteSelectionOverlayProps {
-  elements: Element[];
+  elementsById: ElementLookup;
   remoteCursors: Map<string, Presence>;
-  remoteDrafts: Map<string, Element[]>;
+  remoteDraftsBySessionId: RemoteDraftLookup;
 }
 
 export default function RemoteSelectionOverlay({
-  elements,
+  elementsById,
   remoteCursors,
-  remoteDrafts,
+  remoteDraftsBySessionId,
 }: RemoteSelectionOverlayProps) {
   return (
     <>
       {Array.from(remoteCursors.values()).flatMap((peer) => {
-        const peerDrafts = remoteDrafts.get(peer.sessionId) ?? [];
+        const peerDraftsById = remoteDraftsBySessionId.get(peer.sessionId);
 
         return peer.selectedIds
           .map((elementId) => {
-            const element =
-              peerDrafts.find((draftEl) => draftEl.id === elementId && !draftEl.isDeleted) ??
-              elements.find((el) => el.id === elementId && !el.isDeleted);
+            const element = peerDraftsById?.get(elementId) ?? elementsById.get(elementId);
             if (!element) return null;
 
             return (

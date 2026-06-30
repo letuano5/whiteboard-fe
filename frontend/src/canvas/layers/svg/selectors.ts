@@ -4,6 +4,43 @@ import type { ToolId } from '../../../types/interaction';
 import { findNearestSnap } from '../../shapes/arrow-binding';
 import type { MultiSelectBounds } from './types';
 
+export type ElementLookup = Map<string, Element>;
+export type RemoteDraftLookup = Map<string, ElementLookup>;
+
+export function getElementLookup(elements: Element[]): ElementLookup {
+  const lookup: ElementLookup = new Map();
+
+  for (const element of elements) {
+    if (!element.isDeleted) lookup.set(element.id, element);
+  }
+
+  return lookup;
+}
+
+export function getRemoteDraftLookup(remoteDrafts: Map<string, Element[]>): RemoteDraftLookup {
+  const lookup: RemoteDraftLookup = new Map();
+
+  for (const [sessionId, draftElements] of remoteDrafts) {
+    lookup.set(sessionId, getElementLookup(draftElements));
+  }
+
+  return lookup;
+}
+
+export function getRemoteDraftElementLookup(remoteDrafts: Map<string, Element[]>): ElementLookup {
+  const lookup: ElementLookup = new Map();
+
+  for (const draftElements of remoteDrafts.values()) {
+    for (const draftElement of draftElements) {
+      if (!draftElement.isDeleted && !lookup.has(draftElement.id)) {
+        lookup.set(draftElement.id, draftElement);
+      }
+    }
+  }
+
+  return lookup;
+}
+
 export function getVisibleElements(
   elements: Element[],
   draftElement: Element | null | undefined,
@@ -27,24 +64,19 @@ export function getVisibleElements(
 }
 
 export function getSelectedOverlayElement(
-  elements: Element[],
+  elementsById: ElementLookup,
   selectedIds: string[],
   draftElement: Element | null | undefined,
-  remoteDrafts: Map<string, Element[]> = new Map(),
+  remoteDraftsByElementId: ElementLookup = new Map(),
 ) {
   if (selectedIds.length !== 1) return null;
 
-  const selectedElement = elements.find((el) => el.id === selectedIds[0] && !el.isDeleted);
+  const selectedElement = elementsById.get(selectedIds[0]);
   if (!selectedElement) return null;
 
   if (draftElement?.id === selectedElement.id) return draftElement;
 
-  for (const draftEls of remoteDrafts.values()) {
-    const remoteDraft = draftEls.find((el) => el.id === selectedElement.id && !el.isDeleted);
-    if (remoteDraft) return remoteDraft;
-  }
-
-  return selectedElement;
+  return remoteDraftsByElementId.get(selectedElement.id) ?? selectedElement;
 }
 
 export function isExistingDraftElement(

@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import ElementLayer from './ElementLayer';
 import DraftLayer from './DraftLayer';
 import LaserTrailOverlay from './LaserTrailOverlay';
@@ -7,7 +8,10 @@ import RemoteSelectionOverlay from './RemoteSelectionOverlay';
 import { MultiSelectionOverlay, SelectionOverlay } from './SelectionOverlay';
 import SnapIndicators from './SnapIndicators';
 import {
+  getElementLookup,
   getMultiSelectBounds,
+  getRemoteDraftElementLookup,
+  getRemoteDraftLookup,
   getSelectedOverlayElement,
   getSnapIndicatorPoints,
   getVisibleElements,
@@ -38,12 +42,18 @@ export default function SvgLayer({
   const remoteDrafts = useInteractionStore((s) => s.remoteDrafts);
   const tool = useInteractionStore((s) => s.tool);
 
+  const elementsById = useMemo(() => getElementLookup(elements), [elements]);
+  const remoteDraftsBySessionId = useMemo(() => getRemoteDraftLookup(remoteDrafts), [remoteDrafts]);
+  const remoteDraftsByElementId = useMemo(
+    () => getRemoteDraftElementLookup(remoteDrafts),
+    [remoteDrafts],
+  );
   const visibleElements = getVisibleElements(elements, draftElement, draftElements, remoteDrafts);
   const overlayElement = getSelectedOverlayElement(
-    elements,
+    elementsById,
     selectedIds,
     draftElement,
-    remoteDrafts,
+    remoteDraftsByElementId,
   );
   const isEditingExistingElement = isExistingDraftElement(elements, draftElement);
   const multiSelectBounds = getMultiSelectBounds(elements, selectedIds);
@@ -77,9 +87,9 @@ export default function SvgLayer({
           isEditingExistingElement={isEditingExistingElement}
         />
         <RemoteSelectionOverlay
-          elements={elements}
+          elementsById={elementsById}
           remoteCursors={remoteCursors}
-          remoteDrafts={remoteDrafts}
+          remoteDraftsBySessionId={remoteDraftsBySessionId}
         />
         {overlayElement && canShowLocalSelection && (
           <SelectionOverlay element={overlayElement} onHandlePointerDown={onHandlePointerDown} />
