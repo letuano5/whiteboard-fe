@@ -1,26 +1,7 @@
-import type React from 'react';
-import { useEffect, useRef, useState } from 'react';
-import { useElementsStore, useInteractionStore, useCameraStore, useHistoryStore } from '../store';
+import { useRef } from 'react';
+import { useElementsStore, useInteractionStore, useCameraStore } from '../store';
 import ContextMenu from '../components/context-menu/ContextMenu';
-import { screenToWorld, ZOOM_SENSITIVITY } from '../utils/camera';
-import {
-  isShapeTool,
-  onShapePointerDown,
-  onShapePointerMove,
-  onShapePointerUp,
-  cancelShapeDraw,
-} from './tools/create-shape-tool';
-import {
-  onSelectPointerDown,
-  onSelectHandlePointerDown,
-  onSelectPointerMove,
-  onSelectPointerUp,
-  onSelectKeyDown,
-  onRotateHandlePointerDown,
-} from './tools/select-tool';
-
-import TextEditor, { onCanvasDoubleClick } from './tools/text-editor';
-import { onLaserPointerMove, onLaserPointerLeave } from './tools/laser-tool';
+import TextEditor from './tools/text-editor';
 import SvgLayer from './layers/SvgLayer';
 import CursorOverlay from './layers/CursorOverlay';
 import Toolbar from '../components/toolbar/Toolbar';
@@ -28,14 +9,10 @@ import DetailPanel from '../components/detail-panel/DetailPanel';
 import BackToContent from '../components/back-to-content/BackToContent';
 import ShareLinkButton from '../components/ShareLinkButton';
 import OnlineUsersPanel from '../components/ui/OnlineUsersPanel';
-import { emitCursorMove } from '../sync/socket-client';
-import type { HandleId } from '../types/interaction';
-import { getShapeUtil } from './shapes';
-
-function svgLocalPoint(e: React.PointerEvent) {
-  const rect = (e.currentTarget as SVGSVGElement).getBoundingClientRect();
-  return { x: e.clientX - rect.left, y: e.clientY - rect.top };
-}
+import { useSpacePanMode } from './hooks/use-space-pan-mode';
+import { useWheelPanZoom } from './hooks/use-wheel-pan-zoom';
+import { useWhiteboardPointerHandlers } from './hooks/use-whiteboard-pointer-handlers';
+import { useWhiteboardShortcuts } from './hooks/use-whiteboard-shortcuts';
 
 export default function Whiteboard() {
   const elements = useElementsStore((s) => s.elements);
@@ -45,279 +22,21 @@ export default function Whiteboard() {
   const editingId = useInteractionStore((s) => s.editingId);
   const selectedIds = useInteractionStore((s) => s.selectedIds);
   const editingElement = editingId
-    ? elements.find((el) => el.id === editingId && !el.isDeleted) ?? null
+    ? (elements.find((el) => el.id === editingId && !el.isDeleted) ?? null)
     : null;
 
-  // T001: refs and state for pan/zoom
   const containerRef = useRef<HTMLDivElement>(null);
-  const panStart = useRef<{ x: number; y: number } | null>(null);
-  // T014: cursor broadcast throttle (~33ms)
-  const lastCursorSent = useRef<number>(0);
-  const [spaceDown, setSpaceDown] = useState(false);
-  const [isPanning, setIsPanning] = useState(false);
-
-  // T011: context menu state
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; id: string } | null>(null);
-
-  // T008/T013: non-passive wheel listener — pan or zoom based on ctrlKey (AC-6, AC-7, AC-8, AC-12)
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    function handleWheel(e: WheelEvent) {
-      e.preventDefault();
-      const rect = el!.getBoundingClientRect();
-      const { camera: cam, zoomTo, panBy } = useCameraStore.getState();
-
-      // Normalize delta for LINE/PAGE modes (AC-12)
-      const normY =
-        e.deltaMode === 1 ? e.deltaY * 16 : e.deltaMode === 2 ? e.deltaY * rect.height : e.deltaY;
-      const normX =
-        e.deltaMode === 1 ? e.deltaX * 16 : e.deltaMode === 2 ? e.deltaX * rect.width : e.deltaX;
-
-      if (e.ctrlKey || e.metaKey) {
-        // Zoom: trackpad pinch (browser sets ctrlKey=true) or Ctrl/Cmd + wheel (AC-7)
-        // Smooth sensitivity via exp formula (AC-8): ZOOM_SENSITIVITY = 0.001
-        const factor = Math.exp(-normY * ZOOM_SENSITIVITY);
-        zoomTo(cam.zoom * factor, { x: e.clientX - rect.left, y: e.clientY - rect.top });
-      } else {
-        // Two-finger scroll → pan (AC-6)
-        panBy(normX / cam.zoom, normY / cam.zoom);
-      }
-    }
-    el.addEventListener('wheel', handleWheel, { passive: false });
-    return () => el.removeEventListener('wheel', handleWheel);
-  }, []);
-
-  // T021: Space key → temporary pan mode (covers AC-10 – AC-12)
-  useEffect(() => {
-    function onKeyDown(e: KeyboardEvent) {
-      if (e.code !== 'Space') return;
-      const target = e.target as HTMLElement;
-      if (
-        target.tagName === 'INPUT' ||
-        target.tagName === 'TEXTAREA' ||
-        target.tagName === 'SELECT' ||
-        target.isContentEditable
-      )
-        return;
-      e.preventDefault();
-      setSpaceDown(true);
-    }
-    function onKeyUp(e: KeyboardEvent) {
-      if (e.code === 'Space') setSpaceDown(false);
-    }
-    window.addEventListener('keydown', onKeyDown);
-    window.addEventListener('keyup', onKeyUp);
-    return () => {
-      window.removeEventListener('keydown', onKeyDown);
-      window.removeEventListener('keyup', onKeyUp);
-    };
-  }, []);
-
-  // Select-tool keyboard shortcuts
-  useEffect(() => {
-    if (tool !== 'select') return;
-    function handleKeyDown(e: KeyboardEvent) {
-      const target = e.target as HTMLElement;
-      if (
-        target.tagName === 'INPUT' ||
-        target.tagName === 'TEXTAREA' ||
-        target.tagName === 'SELECT' ||
-        target.isContentEditable
-      ) {
-        return;
-      }
-      const ctrlOrMeta = e.ctrlKey || e.metaKey;
-      if (ctrlOrMeta && (e.key === 'd' || e.key === 'c' || e.key === 'v')) {
-        e.preventDefault();
-      }
-      onSelectKeyDown(e.key, ctrlOrMeta);
-    }
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [tool]);
-
-  // Undo / Redo — active in all tool modes (AC-15: guard text inputs)
-  useEffect(() => {
-    function handleUndoRedo(e: KeyboardEvent) {
-      const target = e.target as HTMLElement;
-      if (
-        target.tagName === 'INPUT' ||
-        target.tagName === 'TEXTAREA' ||
-        target.tagName === 'SELECT' ||
-        target.isContentEditable
-      )
-        return;
-      const isMod = e.ctrlKey || e.metaKey;
-      if (!isMod) return;
-      if (e.key === 'z' && !e.shiftKey) {
-        e.preventDefault();
-        useHistoryStore.getState().undo();
-      } else if (e.key === 'z' && e.shiftKey) {
-        e.preventDefault();
-        useHistoryStore.getState().redo();
-      }
-    }
-    window.addEventListener('keydown', handleUndoRedo);
-    return () => window.removeEventListener('keydown', handleUndoRedo);
-  }, []);
-
-  // T002/T003: pan trigger helper — checked FIRST in every pointer handler
-  function isPanTrigger(e: React.PointerEvent) {
-    return tool === 'hand' || e.button === 1 || spaceDown;
-  }
-
-  function handlePointerDown(e: React.PointerEvent<SVGSVGElement>) {
-    // T003: pan check BEFORE the SVGElement guard (covers AC-5, AC-8, AC-10)
-    if (isPanTrigger(e)) {
-      panStart.current = { x: e.clientX, y: e.clientY };
-      setIsPanning(true);
-      e.currentTarget.setPointerCapture(e.pointerId);
-      e.preventDefault();
-      e.stopPropagation();
-      return;
-    }
-
-    if (tool === 'laser') {
-      e.currentTarget.setPointerCapture(e.pointerId);
-      const local = svgLocalPoint(e);
-      onLaserPointerMove(screenToWorld(local.x, local.y, camera));
-      return;
-    }
-
-    if (!(e.target instanceof SVGElement)) return;
-    if (tool === 'select') {
-      const local = svgLocalPoint(e);
-      onSelectPointerDown(screenToWorld(local.x, local.y, camera), e.shiftKey);
-      const state = useInteractionStore.getState();
-      if (state.draggingId || state.marquee !== null) {
-        e.currentTarget.setPointerCapture(e.pointerId);
-      }
-      return;
-    }
-    if (!isShapeTool(tool)) return;
-    e.currentTarget.setPointerCapture(e.pointerId);
-    const local = svgLocalPoint(e);
-    onShapePointerDown(tool, screenToWorld(local.x, local.y, camera));
-  }
-
-  function handlePointerMove(e: React.PointerEvent<SVGSVGElement>) {
-    // T014: throttled cursor broadcast to peers (~33ms)
-    const now = Date.now();
-    if (now - lastCursorSent.current >= 33) {
-      const rect = (e.currentTarget as SVGSVGElement).getBoundingClientRect();
-      const local = { x: e.clientX - rect.left, y: e.clientY - rect.top };
-      emitCursorMove(screenToWorld(local.x, local.y, camera));
-      lastCursorSent.current = now;
-    }
-
-    // T013: pan move (covers AC-5, AC-8, AC-10)
-    if (panStart.current) {
-      const dx = e.clientX - panStart.current.x;
-      const dy = e.clientY - panStart.current.y;
-      const { camera: cam, panBy } = useCameraStore.getState();
-      panBy(-dx / cam.zoom, -dy / cam.zoom);
-      panStart.current = { x: e.clientX, y: e.clientY };
-      return;
-    }
-
-    if (tool === 'laser') {
-      const local = svgLocalPoint(e);
-      onLaserPointerMove(screenToWorld(local.x, local.y, camera));
-      return;
-    }
-
-    if (tool === 'select') {
-      const local = svgLocalPoint(e);
-      onSelectPointerMove(screenToWorld(local.x, local.y, camera));
-      return;
-    }
-    if (!isShapeTool(tool)) return;
-    const local = svgLocalPoint(e);
-    onShapePointerMove(tool, screenToWorld(local.x, local.y, camera));
-  }
-
-  function handlePointerUp(e: React.PointerEvent<SVGSVGElement>) {
-    // T014: stop pan on pointer up (covers AC-6, AC-9, AC-11)
-    if (panStart.current) {
-      panStart.current = null;
-      setIsPanning(false);
-      return;
-    }
-
-    if (tool === 'laser') {
-      return;
-    }
-
-    if (tool === 'select') {
-      const local = svgLocalPoint(e);
-      onSelectPointerUp(screenToWorld(local.x, local.y, camera));
-      return;
-    }
-    if (!isShapeTool(tool)) return;
-    const local = svgLocalPoint(e);
-    onShapePointerUp(tool, screenToWorld(local.x, local.y, camera));
-  }
-
-  function handlePointerLeave(_e: React.PointerEvent<SVGSVGElement>) {
-    // T014: defensive fallback — pointer capture normally prevents this during active pan
-    if (panStart.current) {
-      panStart.current = null;
-      setIsPanning(false);
-      return;
-    }
-    if (tool === 'laser') {
-      onLaserPointerLeave();
-      return;
-    }
-    if (!isShapeTool(tool)) return;
-    cancelShapeDraw();
-  }
-
-  // T011: right-click context menu — hit-test elements top-to-bottom by zIndex descending
-  function handleContextMenu(e: React.MouseEvent<SVGSVGElement>) {
-    e.preventDefault();
-    const rect = (e.currentTarget as SVGSVGElement).getBoundingClientRect();
-    const worldPt = screenToWorld(e.clientX - rect.left, e.clientY - rect.top, camera);
-    const visible = elements.filter((el) => !el.isDeleted).sort((a, b) => b.zIndex - a.zIndex);
-
-    for (const el of visible) {
-      const util = getShapeUtil(el.type);
-      if (!util) continue;
-      if (util.hitTest(el, worldPt.x, worldPt.y)) {
-        setContextMenu({ x: e.clientX, y: e.clientY, id: el.id });
-        return;
-      }
-    }
-    // Click on empty canvas — close any open menu
-    setContextMenu(null);
-  }
-
-  function handleDoubleClick(e: React.MouseEvent<SVGSVGElement>) {
-    if (tool !== 'select') return;
-    if (editingId) return;
-    const { draggingId, isRotating, resizeSession } = useInteractionStore.getState();
-    if (draggingId || isRotating || resizeSession) return;
-    const rect = (e.currentTarget as SVGSVGElement).getBoundingClientRect();
-    const local = { x: e.clientX - rect.left, y: e.clientY - rect.top };
-    onCanvasDoubleClick(screenToWorld(local.x, local.y, camera));
-  }
-
-  function handleHandlePointerDown(
-    handle: HandleId,
-    e: React.PointerEvent<SVGCircleElement>,
-  ) {
-    const svgEl = e.currentTarget.closest('svg') as SVGSVGElement | null;
-    if (!svgEl) return;
-    const rect = svgEl.getBoundingClientRect();
-    const worldPt = screenToWorld(e.clientX - rect.left, e.clientY - rect.top, camera);
-    if (handle === 'rotate') {
-      svgEl.setPointerCapture(e.pointerId);
-      onRotateHandlePointerDown(worldPt);
-    } else {
-      onSelectHandlePointerDown(handle, worldPt);
-    }
-  }
+  const spaceDown = useSpacePanMode();
+  useWheelPanZoom(containerRef);
+  useWhiteboardShortcuts(tool);
+  const { contextMenu, isPanning, onCloseContextMenu, svgLayerHandlers } =
+    useWhiteboardPointerHandlers({
+      camera,
+      elements,
+      editingId,
+      spaceDown,
+      tool,
+    });
 
   // T023: cursor style based on pan/zoom mode
   const cursor = isPanning
@@ -338,13 +57,7 @@ export default function Whiteboard() {
         camera={camera}
         draftElement={draftElement}
         editingId={editingId}
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        onPointerLeave={handlePointerLeave}
-        onDoubleClick={handleDoubleClick}
-        onContextMenu={handleContextMenu}
-        onHandlePointerDown={handleHandlePointerDown}
+        {...svgLayerHandlers}
       />
       {/* T015: CursorOverlay — sibling div after SvgLayer, pointer-events: none, zIndex: 10 */}
       <CursorOverlay />
@@ -354,20 +67,27 @@ export default function Whiteboard() {
           x={contextMenu.x}
           y={contextMenu.y}
           selectedId={contextMenu.id}
-          selectedCount={
-            selectedIds.includes(contextMenu.id) ? selectedIds.length : 1
-          }
-          onClose={() => setContextMenu(null)}
+          selectedCount={selectedIds.includes(contextMenu.id) ? selectedIds.length : 1}
+          onClose={onCloseContextMenu}
         />
       )}
-      {editingElement && (
-        <TextEditor element={editingElement} camera={camera} />
-      )}
+      {editingElement && <TextEditor element={editingElement} camera={camera} />}
       <Toolbar />
       <DetailPanel />
       <BackToContent containerRef={containerRef} />
       {/* T021: Online users panel + share button stacked in top-right */}
-      <div style={{ position: 'absolute', top: '12px', right: '12px', zIndex: 50, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
+      <div
+        style={{
+          position: 'absolute',
+          top: '12px',
+          right: '12px',
+          zIndex: 50,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'flex-end',
+          gap: 6,
+        }}
+      >
         <ShareLinkButton />
         <OnlineUsersPanel />
       </div>
