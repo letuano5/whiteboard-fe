@@ -648,14 +648,55 @@ Clone Repo chính thức tại: https://github.com/supabase/supabase/tree/master
 
 **Chủ đề:** nâng whiteboard từ một "room realtime" thành document product: user có workspace/file riêng, chia sẻ có kiểm soát, giới hạn người tham gia, import/export, và rollback lịch sử.
 
+**Prerequisite:** P3A persistence/reconnect đã chạy ổn; P3B auth + room role enforcement đã
+được wire vào runtime thật (không chỉ unit test module rời). Từ P4 trở đi cần phân biệt rõ:
+
+- **Local board**: anonymous, chỉ localStorage/BroadcastChannel, không tạo `Room` trong DB.
+- **Saved document**: authenticated, có `Room` trong DB, owner/members/visibility rõ ràng.
+
+### [P4-00] Anonymous local board + Login to save
+
+- [ ] Người chưa đăng nhập có thể tạo board local-only và dùng một mình ngay.
+- [ ] Local-only board không tạo `Room`, `Record`, `Tombstone`, `RoomMember` trong DB.
+- [ ] Local-only board vẫn lưu localStorage và sync qua các tab cùng browser bằng BroadcastChannel.
+- [ ] Local-only board không kết nối persistence/autosave DB; network realtime cho anonymous saved room dời sang P4-02 link/public modes.
+- [ ] UI trong local-only board chỉ hiện một CTA ở góc: `Login to save`.
+- [ ] Bấm `Login to save` chuyển sang màn login, sau login quay lại board local hiện tại.
+- [ ] Sau login, user được hỏi confirm để lưu board local thành saved document.
+- [ ] Nếu user confirm: tạo room persisted mới, copy toàn bộ elements hiện tại vào DB qua mutation/import path hợp lệ, user hiện tại là owner, room mặc định `visibility = 'private'`.
+- [ ] Nếu user cancel: board vẫn ở local-only mode, không tạo DB room.
+- [ ] Convert local → saved không làm mất element, zIndex, version metadata, deleted/tombstone semantics cần thiết, và camera hiện tại nếu có lưu.
+
+**Acceptance criteria:**
+
+- [ ] Anonymous tạo board, vẽ, reload cùng browser vẫn thấy data.
+- [ ] Anonymous mở tab thứ hai cùng local board, thay đổi sync qua tab.
+- [ ] Anonymous local board không xuất hiện trong DB và không có room id persisted.
+- [ ] `Login to save` chỉ hiện cho local-only board; saved document không hiện CTA này.
+- [ ] Login thành công rồi confirm save tạo saved document với owner đúng.
+- [ ] Convert local → saved giữ nguyên nội dung canvas nhìn thấy trước khi login.
+- [ ] Nếu login hoặc save thất bại, local board không mất data và user thấy lỗi rõ ràng.
+
 ### [P4-01] Workspace + document dashboard
 
-- [ ] User có dashboard liệt kê các room/document mình sở hữu, được share, và mở gần đây.
+- [ ] User đã đăng nhập có dashboard liệt kê các room/document mình sở hữu, được share, và mở gần đây.
+- [ ] Anonymous user không có dashboard cá nhân; chỉ có local board hiện tại và CTA login.
+- [ ] Dashboard tách rõ nhóm: `Owned`, `Shared with me`, `Recent`.
 - [ ] Tạo room mới từ dashboard; room mới mặc định `visibility = 'private'`, owner là user hiện tại.
 - [ ] Đổi tên room/document; xóa hoặc archive room chỉ owner/admin được làm.
 - [ ] Search/filter theo tên, owner, updatedAt, và trạng thái shared/locked.
 - [BE] Thêm `Workspace` và `WorkspaceMember` nếu cần nhóm nhiều document; tối thiểu P4 có thể dùng personal workspace mặc định cho mỗi user.
-- [BE] Room lưu `workspaceId`, `ownerId`, `visibility`, `locked`, `archivedAt`, `lastOpenedAt`.
+- [BE] Room lưu `workspaceId`, `ownerId`, `visibility`, `locked`, `archivedAt`, `lastOpenedAt`, `createdBy`.
+- [BE] Query dashboard chỉ trả document mà user có quyền xem; không leak private room qua search.
+- [BE] Mở document cập nhật `lastOpenedAt` cho user/session hiện tại.
+
+**Acceptance criteria:**
+
+- [ ] User chỉ thấy document mình sở hữu hoặc được share.
+- [ ] Document được share xuất hiện trong `Shared with me`.
+- [ ] Archived/deleted document không xuất hiện mặc định nhưng owner có thể xem bằng filter nếu còn retained.
+- [ ] Tạo document từ dashboard mở thẳng canvas saved document với role owner.
+- [ ] Rename/archive/delete bị server reject nếu actor không phải owner/admin.
 
 ### [P4-02] Sharing, public/private access, invited users
 
@@ -665,9 +706,28 @@ Clone Repo chính thức tại: https://github.com/supabase/supabase/tree/master
   - `link_edit`: ai có link vào được với quyền editor, trừ khi room bị locked hoặc editor slots đã đầy.
   - `public_view`: room có thể xem công khai, mutation vẫn cần role editor/owner.
 - [ ] Owner có UI bật/tắt share link, copy link, đổi link mode, và revoke link.
-- [ ] Owner có UI mời user theo email, đổi role `owner/editor/viewer`, remove member.
-- [BE] Server quyết định `effectiveRole` khi join dựa trên `RoomMember.role`, `visibility`, lock state, và room capacity.
+- [ ] Owner có nút `Manage access`; bấm vào mở modal quản lý quyền với backdrop tối nền phía sau.
+- [ ] Modal quản lý quyền hiển thị members hiện tại, role owner/editor/viewer, trạng thái pending invite nếu có.
+- [ ] Owner mời user theo email với role `editor` hoặc `viewer`.
+- [ ] Owner đổi role member giữa `editor` và `viewer`, remove member, và revoke pending invite.
+- [ ] Bản P4 đầu không hỗ trợ transfer owner; không cho owner tự hạ role hoặc remove chính mình.
+- [ ] Nếu email chưa có account, tạo pending invitation theo email; khi user đăng ký/login bằng email đó thì claim invite.
+- [ ] Explicit `RoomMember.role` ưu tiên hơn link role. Lock/capacity có thể hạ quyền thành `effectiveRole` thấp hơn.
+- [BE] Server quyết định `baseRole` và `effectiveRole` khi join dựa trên `RoomMember.role`, pending invite, `visibility`, lock state, và room capacity.
 - [BE] Tất cả HTTP/socket mutation phải check permission server-side; UI chỉ là lớp UX.
+- [BE] Non-owner gọi API/socket quản lý quyền phải bị reject dù UI bị ẩn.
+
+**Acceptance criteria:**
+
+- [ ] Owner mở manage-access modal, add email, đổi role, remove member thành công.
+- [ ] Editor/viewer không thấy action quản lý quyền hoặc thấy disabled; nếu gọi lén vẫn bị server reject.
+- [ ] Existing invited user vào room đúng role sau khi được add bằng email.
+- [ ] Pending invited email được claim khi user login/register cùng email.
+- [ ] Viewer không thấy toolbar edit và server reject `ELEMENT_UPDATE`.
+- [ ] Private room từ chối user không phải owner/member/invitee.
+- [ ] `link_view` cho người có link vào xem với `effectiveRole = 'viewer'`.
+- [ ] `link_edit` cho người có link vào edit nếu room không locked và editor slot còn.
+- [ ] Revoke link làm link cũ mất quyền truy cập.
 
 ### [P4-03] Room lock + admission control
 
@@ -679,14 +739,34 @@ Clone Repo chính thức tại: https://github.com/supabase/supabase/tree/master
 - [BE] Presence/session list phân biệt `baseRole` và `effectiveRole`.
 - [BE] Server reject `ELEMENT_UPDATE`, restore, import, delete khi `effectiveRole` không đủ quyền.
 
+**Acceptance criteria:**
+
+- [ ] Locked room cho editor/viewer xem realtime nhưng không mutate được.
+- [ ] Owner/admin vẫn mutate được trong locked room.
+- [ ] Khi `maxParticipants` đầy, user mới không join được và thấy thông báo rõ ràng.
+- [ ] Khi `maxEditors` đầy, user có base role editor vẫn join dưới `effectiveRole = 'viewer'`.
+- [ ] Presence/online-users UI thể hiện role hiệu lực để user hiểu vì sao toolbar bị ẩn.
+- [ ] Bản P4 đầu có thể yêu cầu rejoin/reload để nhận editor slot mới; auto-promote realtime là optional nếu chưa cần.
+
 ### [P4-04] Native file lifecycle: save/load `.vdt.json`
 
-- [ ] Export native `.vdt.json` gồm schema version, room metadata tối thiểu, camera, elements, và optional assets metadata.
-- [ ] Import `.vdt.json` vào room hiện tại hoặc tạo room mới.
+- [ ] Export native `.vdt.json` được cho cả local board và saved document.
+- [ ] `.vdt.json` gồm schema version, room metadata tối thiểu, camera, elements, và optional assets metadata.
+- [ ] Import `.vdt.json` vào local board nếu anonymous, hoặc vào saved document nếu authenticated và đủ quyền.
+- [ ] Import `.vdt.json` vào room hiện tại hoặc tạo room/document mới.
 - [ ] Import phải validate schema version; file lạ/thiếu field cần báo lỗi rõ ràng.
 - [ ] Load file không được ghi đè room đang mở nếu user chưa confirm.
 - [ ] Save/load native format phải round-trip được toàn bộ element types hiện có.
 - [BE] Import vào persisted room tạo batch mutation mới và tăng `documentClock`, không ghi DB bypass mutation pipeline.
+- [BE] Import vào persisted room phải check `effectiveRole` editor/owner trước khi mutate.
+
+**Acceptance criteria:**
+
+- [ ] Export rồi import lại `.vdt.json` giữ đủ element types, styles, zIndex, angle, group/frame metadata hiện có.
+- [ ] Anonymous import không tạo DB room nếu user chưa chọn login/save.
+- [ ] Authenticated import vào saved document bị reject nếu user là viewer.
+- [ ] Import invalid schema không crash và hiển thị lý do lỗi.
+- [ ] Load file vào board/document đang có data luôn có confirm trước khi thay thế hoặc merge.
 
 ### [P4-05] Cross-platform import/export
 
@@ -697,6 +777,13 @@ Clone Repo chính thức tại: https://github.com/supabase/supabase/tree/master
 - [ ] Unsupported styles/shapes phải degrade có kiểm soát, không crash.
 - [ ] Mỗi importer trả report: số object import được, số object bị bỏ qua, lý do chính.
 
+**Acceptance criteria:**
+
+- [ ] Export PNG/SVG từ viewport hoặc selection tạo file khớp nội dung người dùng thấy.
+- [ ] Excalidraw import tạo được rectangle/ellipse/line/arrow/text/image cơ bản nếu format hợp lệ.
+- [ ] draw.io import tạo được basic shapes/connectors/text ở mức best-effort.
+- [ ] Unsupported object không làm hỏng toàn bộ import; report nêu số object skipped và lý do chính.
+
 ### [P4-06] Asset metadata + storage adapter (pre-S3)
 
 - [ ] Image/file asset không nên chỉ nhúng base64 lâu dài; cần metadata để sau này chuyển sang object storage.
@@ -704,10 +791,18 @@ Clone Repo chính thức tại: https://github.com/supabase/supabase/tree/master
 - [BE] Storage adapter interface hỗ trợ ít nhất local/dev storage; để ngỏ S3-compatible backend (S3/R2/MinIO/Supabase Storage).
 - [BE] Backend check role trước khi cấp upload/read URL hoặc nhận upload.
 - [ ] Element `image.props.src` có thể trỏ tới asset URL hoặc data URL; native export cần giữ đủ thông tin để restore.
+- [ ] Local board vẫn có thể dùng data URL cho ảnh; chuyển sang saved document có thể migrate asset metadata sau.
+
+**Acceptance criteria:**
+
+- [ ] Viewer không lấy được upload URL hoặc ghi asset mới.
+- [ ] Editor/owner upload image asset và chèn vào document được.
+- [ ] Native export của document có asset metadata đủ để restore hoặc báo rõ asset missing.
+- [ ] Local/dev storage adapter không leak file giữa room/user khác nhau.
 
 ### [P4-07] Version history (snapshot) + owner restore
 
-**Prerequisite:** P3A (PostgreSQL + Prisma schema với `Room`, `Record`, `Tombstone` đã có). P4-03 khuyến nghị (permission/lock đã rõ).
+**Prerequisite:** P3A (PostgreSQL + Prisma schema với `Room`, `Record`, `Tombstone` đã có). P4-03 khuyến nghị (permission/lock đã rõ). Snapshot chỉ áp dụng cho saved document; local-only board không có server snapshot.
 
 **Schema bổ sung vào Prisma (P4-07):**
 
@@ -782,6 +877,18 @@ useElementsStore.getState().setElements(data.elements);
 - [BE] Snapshot được tạo tự động mỗi ≥30s khi có thay đổi.
 - [BE] Restore là atomic transaction — không có trạng thái partial.
 - [BE] Snapshot trước restore/import được lưu để có thể quay lại nếu cần.
+- [BE] Viewer/editor bị reject khi restore nếu không phải owner/admin.
+
+### Phase 4 Definition of Done
+
+- [ ] Mỗi slice có test tách riêng anonymous local board và authenticated saved document nếu cả hai path liên quan.
+- [ ] Mọi feature permission có server-side rejection test, không chỉ UI visibility test.
+- [ ] Runtime entrypoint/wiring được test hoặc có manual proof rõ ràng trước khi mark done.
+- [ ] UI visibility test render qua route/app surface thực tế khi khả thi, không chỉ test component rời.
+- [ ] Anonymous local-only path có test/proof rằng không tạo row DB.
+- [ ] Socket và HTTP mutation paths đều check permission cho saved document.
+- [ ] Không mark P4 task done nếu chỉ có module-level test mà chưa nối vào app runtime.
+- [ ] Validation tối thiểu trước khi bàn giao: typecheck, test, lint; format check nếu root tooling chạy được.
 
 ---
 

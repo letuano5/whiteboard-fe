@@ -35,6 +35,7 @@ export function createWhiteboardServer(ioServer: Server, deps: WhiteboardServerD
     ioServer.use(
       createSocketAuthMiddleware(deps.authVerifier, {
         appUserRepository: deps.appUserRepository,
+        allowAnonymous: true,
       }),
     );
   }

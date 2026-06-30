@@ -60,8 +60,12 @@ async function runMiddleware(
   authVerifier: AuthVerifier,
   socket: Socket,
   appUserRepository?: AppUserRepository,
+  allowAnonymous = false,
 ) {
-  const middleware = createSocketAuthMiddleware(authVerifier, { appUserRepository });
+  const middleware = createSocketAuthMiddleware(authVerifier, {
+    appUserRepository,
+    allowAnonymous,
+  });
   const next = vi.fn();
 
   await middleware(socket, next);
@@ -163,6 +167,17 @@ describe('createSocketAuthMiddleware', () => {
     const { next } = await runMiddleware(createVerifier(vi.fn().mockRejectedValue(error)), socket);
 
     expect(next).toHaveBeenCalledWith(error);
+  });
+
+  it('allows anonymous sockets without verifier calls when configured', async () => {
+    const verify = vi.fn();
+    const socket = createSocket({});
+
+    const { next } = await runMiddleware(createVerifier(verify), socket, undefined, true);
+
+    expect(verify).not.toHaveBeenCalled();
+    expect(next).toHaveBeenCalledWith();
+    expect(socket.data.auth).toBeUndefined();
   });
 });
 

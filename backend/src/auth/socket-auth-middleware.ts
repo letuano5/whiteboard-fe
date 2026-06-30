@@ -20,6 +20,7 @@ type SocketMiddlewareNext = (error?: Error) => void;
 
 export interface SocketAuthMiddlewareOptions {
   appUserRepository?: AppUserRepository;
+  allowAnonymous?: boolean;
 }
 
 export function createSocketAuthMiddleware(
@@ -28,8 +29,14 @@ export function createSocketAuthMiddleware(
 ) {
   return async (socket: Socket, next: SocketMiddlewareNext): Promise<void> => {
     try {
+      const bearerToken = readSocketAccessToken(socket);
+      if (!bearerToken && options.allowAnonymous) {
+        next();
+        return;
+      }
+
       const identity = await authVerifier.verify({
-        bearerToken: readSocketAccessToken(socket),
+        bearerToken,
       });
       const user = options.appUserRepository
         ? await options.appUserRepository.upsertFromIdentity(identity)

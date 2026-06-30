@@ -1,5 +1,6 @@
 import './config/load-root-env.js';
 import { createAppServer } from './app.js';
+import { createRuntimeAuthDeps } from './auth/index.js';
 import { createAutosaveManager } from './persistence/autosave.js';
 import { prisma } from './persistence/prisma.js';
 import { saveRoomElements } from './persistence/room-repository.js';
@@ -10,6 +11,7 @@ const PORT = process.env.PORT ?? 3001;
 
 const { httpServer, io } = createAppServer();
 const roomState = createRoomState();
+const authDeps = createRuntimeAuthDeps(prisma);
 
 const autosave = createAutosaveManager({
   getRoomElements: (roomId) => {
@@ -21,6 +23,6 @@ const autosave = createAutosaveManager({
     saveRoomElements(prisma, roomId, elements, targetDocumentClock),
 });
 
-createWhiteboardServer(io, { ...roomState, autosave });
+createWhiteboardServer(io, { ...roomState, autosave, ...authDeps });
 
 httpServer.listen(PORT, () => console.log(`Server running on :${PORT}`));
