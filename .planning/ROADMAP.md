@@ -11,10 +11,12 @@ project roadmap, phase order, and product scope remain canonical in `docs/SPECS.
 
 - Repo roadmap ID `P4-00` maps to GSD Phase `4.0`.
 - Repo roadmap ID `P4-01` maps to GSD Phase `4.1`.
-- The source of truth is `docs/SPECS.md` section `[P4-00]`.
+- Repo roadmap ID `P4-02` maps to GSD Phase `4.2`.
+- The source of truth is `docs/SPECS.md` Phase 4 feature sections.
 
 - [x] **Phase 4.0: P4-00 Anonymous local board + Login to save** - Anonymous local-only board can be converted into a private saved document after login.
 - [x] **Phase 4.1: P4-01 Workspace + document dashboard** - Authenticated users can list, search, create, open, rename, archive, and delete accessible saved documents.
+- [x] **Phase 4.2: P4-02 Sharing, public/private access, invited users** - Owners can share saved documents by link or invite while the server enforces effective room roles.
 
 ## Phase Details
 
@@ -58,12 +60,33 @@ Plans:
 
 - [x] 04.1-01: Implement document dashboard API, dashboard UI route, metadata schema, and AC tests.
 
+### Phase 4.2: P4-02 Sharing, public/private access, invited users
+
+**Goal**: Saved document owners can manage access by invite or share link while server-side join and mutation paths enforce `baseRole` and `effectiveRole`.
+**Depends on**: Phase 4.1
+**Source**: `docs/SPECS.md` `[P4-02]`
+**Canonical refs**: `docs/SPECS.md`, `specs/027-sharing-access-invites/acceptance.md`
+**Requirements**: [P4-02-AC-1, P4-02-AC-2, P4-02-AC-3, P4-02-AC-4, P4-02-AC-5, P4-02-AC-6, P4-02-AC-7, P4-02-AC-8, P4-02-AC-9]
+**Success Criteria** (what must be TRUE):
+
+1. Owners can create, change, copy, and revoke room share links and manage explicit invited users.
+2. Explicit membership or claimed invitation wins over link-derived access.
+3. Private rooms reject users without owner/member/invite access.
+4. Link view/edit modes assign the expected effective role and respect lock/capacity downgrades.
+5. Frontend edit and access-management controls reflect effective role while backend enforcement remains authoritative.
+   **Plans**: 1 plan
+
+Plans:
+
+- [x] 04.2-01: Implement sharing access modes, invitation management, effective roles, UI modal, and AC tests.
+
 ## Progress
 
 **Execution Order:**
-Follow `docs/SPECS.md`; this bootstrap tracks only active Phase 4.0.
+Follow `docs/SPECS.md`; this bootstrap tracks active Phase 4 feature slices.
 
 | Phase                                            | Plans Complete | Status   | Completed  |
 | ------------------------------------------------ | -------------- | -------- | ---------- |
 | 4.0. P4-00 Anonymous local board + Login to save | 1/1            | Complete | 2026-06-30 |
 | 4.1. P4-01 Workspace + document dashboard        | 1/1            | Complete | 2026-06-30 |
+| 4.2. P4-02 Sharing, public/private access        | 1/1            | Complete | 2026-06-30 |

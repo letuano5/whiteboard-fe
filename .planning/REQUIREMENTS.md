@@ -31,14 +31,25 @@
 - [ ] **P4-01-AC-6**: Rename, archive, and delete require owner/admin permission.
 - [ ] **P4-01-AC-7**: Opening a dashboard document records `lastOpenedAt` for Recent.
 
+### Sharing And Invites
+
+- [ ] **P4-02-AC-1**: Owners can manage access from a modal with invite, role-change, remove, and pending-invite revoke actions.
+- [ ] **P4-02-AC-2**: Non-owners cannot manage access through either visible UI or backend access-management calls.
+- [ ] **P4-02-AC-3**: Existing invited users join with the role assigned to their email invite.
+- [ ] **P4-02-AC-4**: Pending invites are claimed when a user logs in or registers with the invited email.
+- [ ] **P4-02-AC-5**: Viewers cannot edit in the UI and server-side element mutation rejects them.
+- [ ] **P4-02-AC-6**: Private rooms reject users without owner, membership, or claimable invite access.
+- [ ] **P4-02-AC-7**: `link_view` grants link visitors viewer effective access.
+- [ ] **P4-02-AC-8**: `link_edit` grants editor effective access only when lock/capacity rules allow it.
+- [ ] **P4-02-AC-9**: Revoked links no longer grant link-based room access.
+
 ## Out of Scope
 
-| Feature                                 | Reason                                                 |
-| --------------------------------------- | ------------------------------------------------------ |
-| Anonymous network rooms                 | Deferred to P4-02 link/public modes in `docs/SPECS.md` |
-| Workspace dashboard                     | Deferred to P4-01                                      |
-| Public/private invited-user enforcement | Deferred to P4-02                                      |
-| Import/export file lifecycle            | Deferred to P4-04/P4-05                                |
+| Feature                                  | Reason                  |
+| ---------------------------------------- | ----------------------- |
+| Admission queues and room lock UI polish | Deferred to P4-03       |
+| Import/export file lifecycle             | Deferred to P4-04/P4-05 |
+| Asset storage and version history        | Deferred to P4-06/P4-07 |
 
 ## Traceability
 
@@ -60,14 +71,23 @@
 | P4-01-AC-5  | Phase 4.1 | Complete |
 | P4-01-AC-6  | Phase 4.1 | Complete |
 | P4-01-AC-7  | Phase 4.1 | Complete |
+| P4-02-AC-1  | Phase 4.2 | Complete |
+| P4-02-AC-2  | Phase 4.2 | Complete |
+| P4-02-AC-3  | Phase 4.2 | Complete |
+| P4-02-AC-4  | Phase 4.2 | Complete |
+| P4-02-AC-5  | Phase 4.2 | Complete |
+| P4-02-AC-6  | Phase 4.2 | Complete |
+| P4-02-AC-7  | Phase 4.2 | Complete |
+| P4-02-AC-8  | Phase 4.2 | Complete |
+| P4-02-AC-9  | Phase 4.2 | Complete |
 
 **Coverage:**
 
-- v1 requirements: 16 total
-- Mapped to phases: 16
+- v1 requirements: 25 total
+- Mapped to phases: 25
 - Unmapped: 0
 
 ---
 
 _Requirements defined: 2026-06-30_
-_Last updated: 2026-06-30 after P4-01 verification_
+_Last updated: 2026-06-30 after P4-02 verification_

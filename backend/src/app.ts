@@ -5,6 +5,7 @@ import type { PrismaClient } from '@prisma/client';
 import type { AppUserRepository, AuthVerifier } from './auth/index.js';
 import { createDocumentDashboardRouter } from './documents/document-dashboard.js';
 import { createLocalBoardSaveRouter } from './rooms/local-board-save.js';
+import { createRoomSharingRouter } from './rooms/room-sharing.js';
 
 export interface AppServerOptions {
   authVerifier?: AuthVerifier;
@@ -24,6 +25,13 @@ export function createAppServer(options: AppServerOptions = {}) {
     );
     app.use(
       createLocalBoardSaveRouter({
+        authVerifier: options.authVerifier,
+        appUserRepository: options.appUserRepository,
+        db: options.db,
+      }),
+    );
+    app.use(
+      createRoomSharingRouter({
         authVerifier: options.authVerifier,
         appUserRepository: options.appUserRepository,
         db: options.db,

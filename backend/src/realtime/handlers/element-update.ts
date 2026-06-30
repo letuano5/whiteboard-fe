@@ -16,8 +16,8 @@ export async function handleElementUpdate(
   if (user) {
     try {
       const access = await resolveRoomAccess(db, roomId, user);
-      socket.data.roomRole = access.role;
-      if (!canMutateRoom(access.role)) {
+      socket.data.roomRole = access.effectiveRole;
+      if (!canMutateRoom(access.effectiveRole)) {
         socket.emit(WS_EVENTS.ROOM_ACCESS_ERROR, {
           code: 'room-access/forbidden',
           message: 'Viewers cannot mutate room elements.',
@@ -32,8 +32,12 @@ export async function handleElementUpdate(
       });
       return;
     }
-  } else if (socket.data) {
-    socket.data.roomRole = 'editor';
+  } else if (!canMutateRoom(socket.data?.roomRole ?? 'editor')) {
+    socket.emit(WS_EVENTS.ROOM_ACCESS_ERROR, {
+      code: 'room-access/forbidden',
+      message: 'Viewers cannot mutate room elements.',
+    });
+    return;
   }
 
   if (!elements.has(roomId)) {

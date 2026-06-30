@@ -80,6 +80,8 @@ export interface Presence {
 // ─── Room access (§P3B-02) ──────────────────────────────────────────────────
 
 export type RoomRole = 'owner' | 'editor' | 'viewer';
+export type EffectiveRoomRole = RoomRole | 'none';
+export type RoomAccessMode = 'private' | 'link_view' | 'link_edit' | 'public_view';
 
 export interface RoomMemberSummary {
   userId: string;
@@ -89,10 +91,22 @@ export interface RoomMemberSummary {
   role: RoomRole;
 }
 
+export interface RoomInvitationSummary {
+  id: string;
+  email: string;
+  role: Extract<RoomRole, 'editor' | 'viewer'>;
+  status: 'pending';
+}
+
 export interface RoomAccessPayload {
   roomId: string;
   role: RoomRole;
+  baseRole: EffectiveRoomRole;
+  effectiveRole: EffectiveRoomRole;
+  visibility: RoomAccessMode;
+  shareRevokedAt: string | null;
   members: RoomMemberSummary[];
+  invitations: RoomInvitationSummary[];
 }
 
 export interface RoomRoleUpdatePayload {
@@ -106,6 +120,7 @@ export interface RoomAccessErrorPayload {
     | 'room-access/unauthenticated'
     | 'room-access/forbidden'
     | 'room-access/member-not-found'
+    | 'room-access/invitation-not-found'
     | 'room-access/invalid-role';
   message: string;
 }

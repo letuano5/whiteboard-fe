@@ -11,21 +11,23 @@ datasource db {
 }
 
 model Room {
-  id                            String       @id @default(uuid())
-  name                          String       @default("Untitled")
+  id                            String           @id @default(uuid())
+  name                          String           @default("Untitled")
   workspaceId                   String?
   ownerId                       String?
-  owner                         AppUser?     @relation("OwnedRooms", fields: [ownerId], references: [id], onDelete: SetNull)
-  visibility                    String       @default("private")
-  locked                        Boolean      @default(false)
+  owner                         AppUser?         @relation("OwnedRooms", fields: [ownerId], references: [id], onDelete: SetNull)
+  visibility                    String           @default("private")
+  shareRevokedAt                DateTime?
+  locked                        Boolean          @default(false)
   archivedAt                    DateTime?
   lastOpenedAt                  DateTime?
   createdBy                     String?
-  documentClock                 BigInt       @default(0)
-  tombstoneHistoryStartsAtClock BigInt       @default(0)
-  createdAt                     DateTime     @default(now())
-  updatedAt                     DateTime     @updatedAt
+  documentClock                 BigInt           @default(0)
+  tombstoneHistoryStartsAtClock BigInt           @default(0)
+  createdAt                     DateTime         @default(now())
+  updatedAt                     DateTime         @updatedAt
   members                       RoomMember[]
+  invitations                   RoomInvitation[]
   records                       Record[]
   tombstones                    Tombstone[]
 }
@@ -42,17 +44,38 @@ model RoomMember {
   @@index([userId, lastOpenedAt])
 }
 
+model RoomInvitation {
+  id          String    @id @default(uuid())
+  roomId      String
+  email       String
+  role        String
+  invitedBy   String
+  claimedBy   String?
+  claimedAt   DateTime?
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  room        Room      @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  inviter     AppUser   @relation("SentRoomInvitations", fields: [invitedBy], references: [id], onDelete: Cascade)
+  claimedUser AppUser?  @relation("ClaimedRoomInvitations", fields: [claimedBy], references: [id], onDelete: SetNull)
+
+  @@unique([roomId, email])
+  @@index([email, revokedAt, claimedAt])
+}
+
 model AppUser {
-  id              String       @id @default(uuid())
-  provider        String
-  providerSubject String
-  email           String?
-  name            String?
-  avatarUrl       String?
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
-  ownedRooms      Room[]       @relation("OwnedRooms")
-  roomMemberships RoomMember[]
+  id                     String           @id @default(uuid())
+  provider               String
+  providerSubject        String
+  email                  String?
+  name                   String?
+  avatarUrl              String?
+  createdAt              DateTime         @default(now())
+  updatedAt              DateTime         @updatedAt
+  ownedRooms             Room[]           @relation("OwnedRooms")
+  roomMemberships        RoomMember[]
+  sentRoomInvitations    RoomInvitation[] @relation("SentRoomInvitations")
+  claimedRoomInvitations RoomInvitation[] @relation("ClaimedRoomInvitations")
 
   @@unique([provider, providerSubject])
 }

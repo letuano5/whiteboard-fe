@@ -1,9 +1,7 @@
 import type { Server, Socket } from 'socket.io';
 import { WS_EVENTS } from '@vdt/shared';
-import {
-  RoomAccessError,
-  updateRoomMemberRole,
-} from '../../rooms/room-roles.js';
+import { updateRoomMemberRole } from '../../rooms/room-access-management.js';
+import { RoomAccessError } from '../../rooms/room-roles.js';
 import type { ResolvedWhiteboardServerDeps, RoomRoleUpdatePayload } from '../types.js';
 
 export async function handleRoomRoleUpdate(

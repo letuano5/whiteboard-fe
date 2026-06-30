@@ -21,10 +21,16 @@ beforeEach(() => {
 
 describe('Whiteboard role permissions', () => {
   it('hides edit toolbar actions for viewers', () => {
+    // @covers AC-5
     useRoomAccessStore.getState().setRoomAccess({
       roomId: 'room-1',
       role: 'viewer',
+      baseRole: 'viewer',
+      effectiveRole: 'viewer',
+      visibility: 'private',
+      shareRevokedAt: null,
       members: [],
+      invitations: [],
     });
 
     render(<Whiteboard />);
@@ -38,7 +44,12 @@ describe('Whiteboard role permissions', () => {
     useRoomAccessStore.getState().setRoomAccess({
       roomId: 'room-1',
       role: 'editor',
+      baseRole: 'editor',
+      effectiveRole: 'editor',
+      visibility: 'private',
+      shareRevokedAt: null,
       members: [],
+      invitations: [],
     });
 
     render(<Whiteboard />);

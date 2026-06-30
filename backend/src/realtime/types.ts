@@ -1,5 +1,5 @@
 import type { PrismaClient } from '@prisma/client';
-import type { Element, Presence, RoomRole } from '@vdt/shared';
+import type { EffectiveRoomRole, Element, Presence, RoomRole } from '@vdt/shared';
 import type { AppUser, AppUserRepository, AuthVerifier, VerifiedIdentity } from '../auth/index.js';
 import type { AutosaveManager } from '../persistence/autosave.js';
 import type { RoomState } from './room-state.js';
@@ -67,6 +67,6 @@ declare module 'socket.io' {
       identity: VerifiedIdentity;
       user?: AppUser;
     };
-    roomRole?: RoomRole;
+    roomRole?: EffectiveRoomRole;
   }
 }

@@ -1,11 +1,7 @@
 import type { Server, Socket } from 'socket.io';
 import { WS_EVENTS } from '@vdt/shared';
-import {
-  getRoomClock,
-  getRoomDiff,
-  loadRoomElements,
-} from '../../persistence/room-repository.js';
-import { resolveRoomAccess } from '../../rooms/room-roles.js';
+import { getRoomClock, getRoomDiff, loadRoomElements } from '../../persistence/room-repository.js';
+import { resolveRoomAccess, RoomAccessError } from '../../rooms/room-roles.js';
 import type { JoinRoomPayload, ResolvedWhiteboardServerDeps } from '../types.js';
 
 export async function handleJoinRoom(
@@ -17,22 +13,44 @@ export async function handleJoinRoom(
   const { roomId, sessionId, name, color, lastServerClock } = payload;
   const { roomPresence: presence, roomElements: elements, roomClocks: clocks, db } = deps;
 
+  try {
+    const access = await resolveRoomAccess(db, roomId, socket.data?.auth?.user);
+    socket.data.roomRole = access.effectiveRole;
+    socket.emit(WS_EVENTS.ROOM_ACCESS, access);
+  } catch (err) {
+    if (err instanceof RoomAccessError) {
+      socket.emit(WS_EVENTS.ROOM_ACCESS_ERROR, {
+        code: err.code,
+        message: err.message,
+      });
+      return;
+    }
+
+    console.error('[room-access] DB error during join:', err);
+    if (!socket.data?.auth?.user) {
+      socket.data.roomRole = 'editor';
+      socket.emit(WS_EVENTS.ROOM_ACCESS, {
+        roomId,
+        role: 'editor',
+        baseRole: 'editor',
+        effectiveRole: 'editor',
+        visibility: 'link_edit',
+        shareRevokedAt: null,
+        members: [],
+        invitations: [],
+      });
+    } else {
+      socket.emit(WS_EVENTS.ROOM_ACCESS_ERROR, {
+        code: 'room-access/forbidden',
+        message: 'Could not resolve room access.',
+      });
+      return;
+    }
+  }
+
   socket.join(roomId);
   socket.data.sessionId = sessionId;
   socket.data.roomId = roomId;
-
-  try {
-    const access = await resolveRoomAccess(db, roomId, socket.data?.auth?.user);
-    socket.data.roomRole = access.role;
-    socket.emit(WS_EVENTS.ROOM_ACCESS, access);
-  } catch (err) {
-    console.error('[room-access] DB error during join:', err);
-    socket.data.roomRole = 'viewer';
-    socket.emit(WS_EVENTS.ROOM_ACCESS_ERROR, {
-      code: 'room-access/forbidden',
-      message: 'Could not resolve room access.',
-    });
-  }
 
   if (!presence.has(roomId)) {
     presence.set(roomId, new Map());

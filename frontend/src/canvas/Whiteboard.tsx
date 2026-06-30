@@ -28,7 +28,7 @@ export default function Whiteboard({ mode = 'saved' }: WhiteboardProps) {
   const draftElement = useInteractionStore((s) => s.draftElement);
   const editingId = useInteractionStore((s) => s.editingId);
   const selectedIds = useInteractionStore((s) => s.selectedIds);
-  const role = useRoomAccessStore((s) => s.role);
+  const role = useRoomAccessStore((s) => s.effectiveRole);
   const isLocalBoard = mode === 'local';
   const canEdit = isLocalBoard || canEditRoom(role);
   const activeTool = canEdit ? tool : 'select';

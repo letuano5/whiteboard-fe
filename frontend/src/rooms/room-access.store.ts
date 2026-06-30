@@ -1,12 +1,24 @@
 import { create } from 'zustand';
-import type { RoomAccessErrorPayload, RoomAccessPayload, RoomMemberSummary } from '../types/shared';
+import type {
+  EffectiveRoomRole,
+  RoomAccessErrorPayload,
+  RoomAccessMode,
+  RoomAccessPayload,
+  RoomInvitationSummary,
+  RoomMemberSummary,
+} from '../types/shared';
 
 interface RoomAccessState {
   roomId: string | null;
   role: RoomAccessPayload['role'];
+  baseRole: EffectiveRoomRole;
+  effectiveRole: EffectiveRoomRole;
+  visibility: RoomAccessMode;
+  shareRevokedAt: string | null;
   members: RoomMemberSummary[];
+  invitations: RoomInvitationSummary[];
   errorMessage: string | null;
-  setRoomAccess: (payload: RoomAccessPayload) => void;
+  setRoomAccess: (payload: RoomAccessInput) => void;
   setRoomAccessError: (payload: RoomAccessErrorPayload) => void;
   resetRoomAccess: () => void;
 }
@@ -14,25 +26,63 @@ interface RoomAccessState {
 export const useRoomAccessStore = create<RoomAccessState>((set) => ({
   roomId: null,
   role: 'editor',
+  baseRole: 'editor',
+  effectiveRole: 'editor',
+  visibility: 'private',
+  shareRevokedAt: null,
   members: [],
+  invitations: [],
   errorMessage: null,
-  setRoomAccess: (payload) =>
+  setRoomAccess: (payload) => {
+    const normalized = normalizeRoomAccess(payload);
     set({
-      roomId: payload.roomId,
-      role: payload.role,
-      members: payload.members,
+      roomId: normalized.roomId,
+      role: normalized.role,
+      baseRole: normalized.baseRole,
+      effectiveRole: normalized.effectiveRole,
+      visibility: normalized.visibility,
+      shareRevokedAt: normalized.shareRevokedAt,
+      members: normalized.members,
+      invitations: normalized.invitations,
       errorMessage: null,
-    }),
+    });
+  },
   setRoomAccessError: (payload) => set({ errorMessage: payload.message }),
   resetRoomAccess: () =>
     set({
       roomId: null,
       role: 'editor',
+      baseRole: 'editor',
+      effectiveRole: 'editor',
+      visibility: 'private',
+      shareRevokedAt: null,
       members: [],
+      invitations: [],
       errorMessage: null,
     }),
 }));
 
-export function canEditRoom(role: RoomAccessPayload['role']): boolean {
+export function canEditRoom(role: EffectiveRoomRole): boolean {
   return role === 'owner' || role === 'editor';
+}
+
+type RoomAccessInput = RoomAccessPayload | LegacyRoomAccessPayload;
+
+interface LegacyRoomAccessPayload {
+  roomId: string;
+  role: RoomAccessPayload['role'];
+  members: RoomMemberSummary[];
+}
+
+function normalizeRoomAccess(payload: RoomAccessInput): RoomAccessPayload {
+  if ('effectiveRole' in payload) return payload;
+
+  return {
+    ...payload,
+    baseRole: payload.role,
+    effectiveRole: payload.role,
+    visibility: 'private',
+    shareRevokedAt: null,
+    invitations: [],
+  };
 }
