@@ -82,6 +82,47 @@ describe('socket-client — 014/AC-1 (join-room payload)', () => {
   });
 });
 
+describe('socket-client — P3B-01d token attachment', () => {
+  it('passes auth.accessToken when the auth store has a session', async () => {
+    const { useAuthStore } = await import('../../auth/auth.store');
+    const { io } = await import('socket.io-client');
+    const ioMock = io as ReturnType<typeof vi.fn>;
+    ioMock.mockClear();
+    useAuthStore.setState({
+      session: {
+        accessToken: 'access-token-123',
+        expiresAt: 123456,
+        user: {
+          id: 'user-123',
+          email: 'player@example.com',
+          name: 'Tactical Player',
+          avatarUrl: null,
+        },
+      },
+      status: 'authenticated',
+      errorMessage: null,
+    });
+
+    const { initSocketClient } = await import('../socket-client');
+    initSocketClient('room-auth');
+
+    expect(ioMock).toHaveBeenCalledWith('http://localhost:3001', {
+      auth: { accessToken: 'access-token-123' },
+    });
+  });
+
+  it('omits auth token data when there is no session', async () => {
+    const { io } = await import('socket.io-client');
+    const ioMock = io as ReturnType<typeof vi.fn>;
+    ioMock.mockClear();
+
+    const { initSocketClient } = await import('../socket-client');
+    initSocketClient('room-anon');
+
+    expect(ioMock).toHaveBeenCalledWith('http://localhost:3001');
+  });
+});
+
 describe('socket-client — 014/AC-2 (element-update delivery)', () => {
   it('calls applyRemoteElements when element-update event arrives', async () => {
     const applyModule = await import('../apply-remote');
@@ -93,13 +134,27 @@ describe('socket-client — 014/AC-2 (element-update delivery)', () => {
     const fakeElement = {
       id: 'el-1',
       type: 'rectangle' as const,
-      x: 0, y: 0, width: 100, height: 100, angle: 0, zIndex: 1,
+      x: 0,
+      y: 0,
+      width: 100,
+      height: 100,
+      angle: 0,
+      zIndex: 1,
       props: {
-        strokeColor: '#000', fillColor: 'transparent',
-        strokeWidth: 1, strokeStyle: 'solid' as const, opacity: 1,
+        strokeColor: '#000',
+        fillColor: 'transparent',
+        strokeWidth: 1,
+        strokeStyle: 'solid' as const,
+        opacity: 1,
       },
-      version: 1, versionNonce: 42, updatedAt: Date.now(),
-      isDeleted: false, groupId: null, frameId: null, locked: false, createdBy: 'test',
+      version: 1,
+      versionNonce: 42,
+      updatedAt: Date.now(),
+      isDeleted: false,
+      groupId: null,
+      frameId: null,
+      locked: false,
+      createdBy: 'test',
     };
 
     const handler = _handlers[WS_EVENTS.ELEMENT_UPDATE];
@@ -121,22 +176,77 @@ describe('socket-client — 014/AC-4 (room isolation via roomId in emit)', () =>
     const fakeElement = {
       id: 'el-iso',
       type: 'rectangle' as const,
-      x: 0, y: 0, width: 50, height: 50, angle: 0, zIndex: 1,
+      x: 0,
+      y: 0,
+      width: 50,
+      height: 50,
+      angle: 0,
+      zIndex: 1,
       props: {
-        strokeColor: '#000', fillColor: 'transparent',
-        strokeWidth: 1, strokeStyle: 'solid' as const, opacity: 1,
+        strokeColor: '#000',
+        fillColor: 'transparent',
+        strokeWidth: 1,
+        strokeStyle: 'solid' as const,
+        opacity: 1,
       },
-      version: 1, versionNonce: 99, updatedAt: Date.now(),
-      isDeleted: false, groupId: null, frameId: null, locked: false, createdBy: 'test',
+      version: 1,
+      versionNonce: 99,
+      updatedAt: Date.now(),
+      isDeleted: false,
+      groupId: null,
+      frameId: null,
+      locked: false,
+      createdBy: 'test',
     };
 
     mockEmit.mockClear();
     dispatchMutationEvent({ type: 'update', elements: [fakeElement], before: [] });
 
-    expect(mockEmit).toHaveBeenCalledWith(
-      WS_EVENTS.ELEMENT_UPDATE,
-      { roomId: 'room-xyz', elements: [fakeElement] },
-    );
+    expect(mockEmit).toHaveBeenCalledWith(WS_EVENTS.ELEMENT_UPDATE, {
+      roomId: 'room-xyz',
+      elements: [fakeElement],
+    });
+  });
+});
+
+describe('socket-client — P3B-02 room access events', () => {
+  it('ROOM_ACCESS updates the room access store', async () => {
+    const { initSocketClient } = await import('../socket-client');
+    const { useRoomAccessStore } = await import('../../rooms/room-access.store');
+    initSocketClient('room-access');
+
+    const accessHandler = _handlers[WS_EVENTS.ROOM_ACCESS];
+    expect(accessHandler).toBeDefined();
+    accessHandler({
+      roomId: 'room-access',
+      role: 'viewer',
+      members: [
+        {
+          userId: 'user-1',
+          email: 'user@example.com',
+          name: 'User',
+          avatarUrl: null,
+          role: 'viewer',
+        },
+      ],
+    });
+
+    expect(useRoomAccessStore.getState().role).toBe('viewer');
+    expect(useRoomAccessStore.getState().members).toHaveLength(1);
+  });
+
+  it('updateRoomMemberRole emits ROOM_ROLE_UPDATE for the joined room', async () => {
+    const { initSocketClient, updateRoomMemberRole } = await import('../socket-client');
+    initSocketClient('room-access');
+    mockEmit.mockClear();
+
+    updateRoomMemberRole('member-user', 'viewer');
+
+    expect(mockEmit).toHaveBeenCalledWith(WS_EVENTS.ROOM_ROLE_UPDATE, {
+      roomId: 'room-access',
+      userId: 'member-user',
+      role: 'viewer',
+    });
   });
 });
 
@@ -145,7 +255,14 @@ describe('socket-client — 014/AC-4 (room isolation via roomId in emit)', () =>
 // so both the test and socket-client.ts share the same fresh store instance.
 
 function makePeer(sessionId: string): Presence {
-  return { sessionId, name: 'Red Bear', color: '#ef4444', cursor: null, selectedIds: [], status: 'active' };
+  return {
+    sessionId,
+    name: 'Red Bear',
+    color: '#ef4444',
+    cursor: null,
+    selectedIds: [],
+    status: 'active',
+  };
 }
 
 describe('socket-client — AC-1 (remote cursor added on CURSOR_MOVE)', () => {
@@ -197,7 +314,14 @@ describe('socket-client — AC-3 (own cursor NOT added to remoteCursors)', () =>
     const joinHandler = _handlers[WS_EVENTS.USER_JOIN];
     joinHandler({
       presences: [
-        { sessionId: 'local-session-id', name: 'Blue Fox', color: '#3b82f6', cursor: null, selectedIds: [], status: 'active' },
+        {
+          sessionId: 'local-session-id',
+          name: 'Blue Fox',
+          color: '#3b82f6',
+          cursor: null,
+          selectedIds: [],
+          status: 'active',
+        },
         makePeer('peer-1'),
       ],
     });
@@ -221,7 +345,11 @@ describe('socket-client — AC-4 (cursor-move emit includes roomId for server sc
       roomId: 'room-abc',
       sessionId: 'local-session-id',
       cursor: { x: 50, y: 75 },
-      viewport: expect.objectContaining({ x: expect.any(Number), y: expect.any(Number), zoom: expect.any(Number) }),
+      viewport: expect.objectContaining({
+        x: expect.any(Number),
+        y: expect.any(Number),
+        zoom: expect.any(Number),
+      }),
     });
   });
 });
@@ -257,11 +385,29 @@ describe('socket-client — ROOM_SNAPSHOT replaces elements on join', () => {
     expect(snapshotHandler).toBeDefined();
 
     const el = {
-      id: 'snap-1', type: 'rectangle' as const,
-      x: 0, y: 0, width: 50, height: 50, angle: 0, zIndex: 1,
-      props: { strokeColor: '#000', fillColor: 'transparent', strokeWidth: 1, strokeStyle: 'solid' as const, opacity: 1 },
-      version: 1, versionNonce: 1, updatedAt: Date.now(),
-      isDeleted: false, groupId: null, frameId: null, locked: false, createdBy: 'test',
+      id: 'snap-1',
+      type: 'rectangle' as const,
+      x: 0,
+      y: 0,
+      width: 50,
+      height: 50,
+      angle: 0,
+      zIndex: 1,
+      props: {
+        strokeColor: '#000',
+        fillColor: 'transparent',
+        strokeWidth: 1,
+        strokeStyle: 'solid' as const,
+        opacity: 1,
+      },
+      version: 1,
+      versionNonce: 1,
+      updatedAt: Date.now(),
+      isDeleted: false,
+      groupId: null,
+      frameId: null,
+      locked: false,
+      createdBy: 'test',
     };
 
     snapshotHandler({ elements: [el], documentClock: 0 });
@@ -285,11 +431,29 @@ describe('socket-client — P3A-02/AC-4 (T013) ROOM_SNAPSHOT with non-empty elem
     expect(snapshotHandler).toBeDefined();
 
     const el = {
-      id: 'p3a02-el-1', type: 'rectangle' as const,
-      x: 10, y: 20, width: 100, height: 50, angle: 0, zIndex: 1,
-      props: { strokeColor: '#000', fillColor: '#fff', strokeWidth: 1, strokeStyle: 'solid' as const, opacity: 1 },
-      version: 2, versionNonce: 99, updatedAt: Date.now(),
-      isDeleted: false, groupId: null, frameId: null, locked: false, createdBy: 'test',
+      id: 'p3a02-el-1',
+      type: 'rectangle' as const,
+      x: 10,
+      y: 20,
+      width: 100,
+      height: 50,
+      angle: 0,
+      zIndex: 1,
+      props: {
+        strokeColor: '#000',
+        fillColor: '#fff',
+        strokeWidth: 1,
+        strokeStyle: 'solid' as const,
+        opacity: 1,
+      },
+      version: 2,
+      versionNonce: 99,
+      updatedAt: Date.now(),
+      isDeleted: false,
+      groupId: null,
+      frameId: null,
+      locked: false,
+      createdBy: 'test',
     };
 
     snapshotHandler({ elements: [el], documentClock: 5 });
@@ -421,7 +585,11 @@ describe('socket-client — same-user camera sync across tabs', () => {
     initSocketClient('room-abc');
 
     const moveHandler = _handlers[WS_EVENTS.CURSOR_MOVE];
-    moveHandler({ sessionId: 'local-session-id', cursor: { x: 10, y: 20 }, viewport: { x: 0, y: 0, zoom: 1 } });
+    moveHandler({
+      sessionId: 'local-session-id',
+      cursor: { x: 10, y: 20 },
+      viewport: { x: 0, y: 0, zoom: 1 },
+    });
 
     expect(store.getState().remoteCursors.has('local-session-id')).toBe(false);
   });
@@ -520,11 +688,29 @@ describe('socket-client — 018/AC-6 (T017) emit element-draft when draftElement
     mockEmit.mockClear();
 
     const draftEl = {
-      id: 'draft-1', type: 'rectangle' as const,
-      x: 5, y: 5, width: 80, height: 40, angle: 0, zIndex: 1,
-      props: { strokeColor: '#000', fillColor: '#fff', strokeWidth: 1, strokeStyle: 'solid' as const, opacity: 1 },
-      version: 1, versionNonce: 1, updatedAt: Date.now(),
-      isDeleted: false, groupId: null, frameId: null, locked: false, createdBy: 'test',
+      id: 'draft-1',
+      type: 'rectangle' as const,
+      x: 5,
+      y: 5,
+      width: 80,
+      height: 40,
+      angle: 0,
+      zIndex: 1,
+      props: {
+        strokeColor: '#000',
+        fillColor: '#fff',
+        strokeWidth: 1,
+        strokeStyle: 'solid' as const,
+        opacity: 1,
+      },
+      version: 1,
+      versionNonce: 1,
+      updatedAt: Date.now(),
+      isDeleted: false,
+      groupId: null,
+      frameId: null,
+      locked: false,
+      createdBy: 'test',
     };
 
     store.getState().setDraftElements([draftEl]);
@@ -545,11 +731,29 @@ describe('socket-client — 018/AC-9 (T018) emit element-draft with elements:[] 
     initSocketClient('room-abc');
 
     const draftEl = {
-      id: 'draft-2', type: 'rectangle' as const,
-      x: 0, y: 0, width: 50, height: 50, angle: 0, zIndex: 1,
-      props: { strokeColor: '#000', fillColor: '#fff', strokeWidth: 1, strokeStyle: 'solid' as const, opacity: 1 },
-      version: 1, versionNonce: 1, updatedAt: Date.now(),
-      isDeleted: false, groupId: null, frameId: null, locked: false, createdBy: 'test',
+      id: 'draft-2',
+      type: 'rectangle' as const,
+      x: 0,
+      y: 0,
+      width: 50,
+      height: 50,
+      angle: 0,
+      zIndex: 1,
+      props: {
+        strokeColor: '#000',
+        fillColor: '#fff',
+        strokeWidth: 1,
+        strokeStyle: 'solid' as const,
+        opacity: 1,
+      },
+      version: 1,
+      versionNonce: 1,
+      updatedAt: Date.now(),
+      isDeleted: false,
+      groupId: null,
+      frameId: null,
+      locked: false,
+      createdBy: 'test',
     };
 
     store.getState().setDraftElements([draftEl]);
@@ -574,11 +778,29 @@ describe('socket-client — 018/AC-6 (T019) incoming element-draft sets remoteDr
     initSocketClient('room-abc');
 
     const draftEl = {
-      id: 'peer-draft-1', type: 'rectangle' as const,
-      x: 20, y: 20, width: 60, height: 30, angle: 0, zIndex: 1,
-      props: { strokeColor: '#000', fillColor: '#fff', strokeWidth: 1, strokeStyle: 'solid' as const, opacity: 1 },
-      version: 1, versionNonce: 1, updatedAt: Date.now(),
-      isDeleted: false, groupId: null, frameId: null, locked: false, createdBy: 'peer-4',
+      id: 'peer-draft-1',
+      type: 'rectangle' as const,
+      x: 20,
+      y: 20,
+      width: 60,
+      height: 30,
+      angle: 0,
+      zIndex: 1,
+      props: {
+        strokeColor: '#000',
+        fillColor: '#fff',
+        strokeWidth: 1,
+        strokeStyle: 'solid' as const,
+        opacity: 1,
+      },
+      version: 1,
+      versionNonce: 1,
+      updatedAt: Date.now(),
+      isDeleted: false,
+      groupId: null,
+      frameId: null,
+      locked: false,
+      createdBy: 'peer-4',
     };
 
     const draftHandler = _handlers[WS_EVENTS.ELEMENT_DRAFT];
@@ -597,11 +819,29 @@ describe('socket-client — 018/AC-9 (T020) incoming element-draft with elements
     initSocketClient('room-abc');
 
     const draftEl = {
-      id: 'peer-draft-2', type: 'rectangle' as const,
-      x: 0, y: 0, width: 50, height: 50, angle: 0, zIndex: 1,
-      props: { strokeColor: '#000', fillColor: '#fff', strokeWidth: 1, strokeStyle: 'solid' as const, opacity: 1 },
-      version: 1, versionNonce: 1, updatedAt: Date.now(),
-      isDeleted: false, groupId: null, frameId: null, locked: false, createdBy: 'peer-5',
+      id: 'peer-draft-2',
+      type: 'rectangle' as const,
+      x: 0,
+      y: 0,
+      width: 50,
+      height: 50,
+      angle: 0,
+      zIndex: 1,
+      props: {
+        strokeColor: '#000',
+        fillColor: '#fff',
+        strokeWidth: 1,
+        strokeStyle: 'solid' as const,
+        opacity: 1,
+      },
+      version: 1,
+      versionNonce: 1,
+      updatedAt: Date.now(),
+      isDeleted: false,
+      groupId: null,
+      frameId: null,
+      locked: false,
+      createdBy: 'peer-5',
     };
 
     const draftHandler = _handlers[WS_EVENTS.ELEMENT_DRAFT];
@@ -621,11 +861,29 @@ describe('socket-client — 018/AC-10 (T021) incoming element-update with sessio
     initSocketClient('room-abc');
 
     const draftEl = {
-      id: 'peer-commit-1', type: 'rectangle' as const,
-      x: 0, y: 0, width: 50, height: 50, angle: 0, zIndex: 1,
-      props: { strokeColor: '#000', fillColor: '#fff', strokeWidth: 1, strokeStyle: 'solid' as const, opacity: 1 },
-      version: 1, versionNonce: 1, updatedAt: Date.now(),
-      isDeleted: false, groupId: null, frameId: null, locked: false, createdBy: 'peer-6',
+      id: 'peer-commit-1',
+      type: 'rectangle' as const,
+      x: 0,
+      y: 0,
+      width: 50,
+      height: 50,
+      angle: 0,
+      zIndex: 1,
+      props: {
+        strokeColor: '#000',
+        fillColor: '#fff',
+        strokeWidth: 1,
+        strokeStyle: 'solid' as const,
+        opacity: 1,
+      },
+      version: 1,
+      versionNonce: 1,
+      updatedAt: Date.now(),
+      isDeleted: false,
+      groupId: null,
+      frameId: null,
+      locked: false,
+      createdBy: 'peer-6',
     };
 
     const draftHandler = _handlers[WS_EVENTS.ELEMENT_DRAFT];
@@ -648,11 +906,29 @@ describe('socket-client — 018/AC-5 (T022) USER_LEAVE also clears remoteDrafts'
     initSocketClient('room-abc');
 
     const draftEl = {
-      id: 'peer-leave-draft', type: 'rectangle' as const,
-      x: 0, y: 0, width: 50, height: 50, angle: 0, zIndex: 1,
-      props: { strokeColor: '#000', fillColor: '#fff', strokeWidth: 1, strokeStyle: 'solid' as const, opacity: 1 },
-      version: 1, versionNonce: 1, updatedAt: Date.now(),
-      isDeleted: false, groupId: null, frameId: null, locked: false, createdBy: 'peer-7',
+      id: 'peer-leave-draft',
+      type: 'rectangle' as const,
+      x: 0,
+      y: 0,
+      width: 50,
+      height: 50,
+      angle: 0,
+      zIndex: 1,
+      props: {
+        strokeColor: '#000',
+        fillColor: '#fff',
+        strokeWidth: 1,
+        strokeStyle: 'solid' as const,
+        opacity: 1,
+      },
+      version: 1,
+      versionNonce: 1,
+      updatedAt: Date.now(),
+      isDeleted: false,
+      groupId: null,
+      frameId: null,
+      locked: false,
+      createdBy: 'peer-7',
     };
 
     const draftHandler = _handlers[WS_EVENTS.ELEMENT_DRAFT];
@@ -670,11 +946,29 @@ describe('socket-client — 018/AC-5 (T022) USER_LEAVE also clears remoteDrafts'
 
 function makeFakeElement(id: string, version = 1) {
   return {
-    id, type: 'rectangle' as const,
-    x: 0, y: 0, width: 100, height: 100, angle: 0, zIndex: 1,
-    props: { strokeColor: '#000', fillColor: '#fff', strokeWidth: 1, strokeStyle: 'solid' as const, opacity: 1 },
-    version, versionNonce: 42, updatedAt: Date.now(),
-    isDeleted: false, groupId: null, frameId: null, locked: false, createdBy: 'test',
+    id,
+    type: 'rectangle' as const,
+    x: 0,
+    y: 0,
+    width: 100,
+    height: 100,
+    angle: 0,
+    zIndex: 1,
+    props: {
+      strokeColor: '#000',
+      fillColor: '#fff',
+      strokeWidth: 1,
+      strokeStyle: 'solid' as const,
+      opacity: 1,
+    },
+    version,
+    versionNonce: 42,
+    updatedAt: Date.now(),
+    isDeleted: false,
+    groupId: null,
+    frameId: null,
+    locked: false,
+    createdBy: 'test',
   };
 }
 

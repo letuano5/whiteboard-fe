@@ -5,6 +5,7 @@ import {
   getRoomDiff,
   loadRoomElements,
 } from '../../persistence/room-repository.js';
+import { resolveRoomAccess } from '../../rooms/room-roles.js';
 import type { JoinRoomPayload, ResolvedWhiteboardServerDeps } from '../types.js';
 
 export async function handleJoinRoom(
@@ -19,6 +20,19 @@ export async function handleJoinRoom(
   socket.join(roomId);
   socket.data.sessionId = sessionId;
   socket.data.roomId = roomId;
+
+  try {
+    const access = await resolveRoomAccess(db, roomId, socket.data?.auth?.user);
+    socket.data.roomRole = access.role;
+    socket.emit(WS_EVENTS.ROOM_ACCESS, access);
+  } catch (err) {
+    console.error('[room-access] DB error during join:', err);
+    socket.data.roomRole = 'viewer';
+    socket.emit(WS_EVENTS.ROOM_ACCESS_ERROR, {
+      code: 'room-access/forbidden',
+      message: 'Could not resolve room access.',
+    });
+  }
 
   if (!presence.has(roomId)) {
     presence.set(roomId, new Map());

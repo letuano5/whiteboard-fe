@@ -30,6 +30,7 @@ interface ContextMenuState {
 }
 
 interface UseWhiteboardPointerHandlersParams {
+  canEdit?: boolean;
   camera: Camera;
   elements: Element[];
   editingId: string | null;
@@ -38,6 +39,7 @@ interface UseWhiteboardPointerHandlersParams {
 }
 
 export function useWhiteboardPointerHandlers({
+  canEdit = true,
   camera,
   elements,
   editingId,
@@ -62,6 +64,8 @@ export function useWhiteboardPointerHandlers({
       event.stopPropagation();
       return;
     }
+
+    if (!canEdit) return;
 
     if (tool === 'laser') {
       event.currentTarget.setPointerCapture(event.pointerId);
@@ -104,15 +108,18 @@ export function useWhiteboardPointerHandlers({
     }
 
     if (tool === 'laser') {
+      if (!canEdit) return;
       onLaserPointerMove(svgWorldPoint(event, camera));
       return;
     }
 
     if (tool === 'select') {
+      if (!canEdit) return;
       onSelectPointerMove(svgWorldPoint(event, camera));
       return;
     }
 
+    if (!canEdit) return;
     if (!isShapeTool(tool)) return;
     onShapePointerMove(tool, svgWorldPoint(event, camera));
   }
@@ -123,6 +130,8 @@ export function useWhiteboardPointerHandlers({
       setIsPanning(false);
       return;
     }
+
+    if (!canEdit) return;
 
     if (tool === 'laser') return;
 
@@ -142,6 +151,8 @@ export function useWhiteboardPointerHandlers({
       return;
     }
 
+    if (!canEdit) return;
+
     if (tool === 'laser') {
       onLaserPointerLeave();
       return;
@@ -153,6 +164,11 @@ export function useWhiteboardPointerHandlers({
 
   function handleContextMenu(event: React.MouseEvent<SVGSVGElement>) {
     event.preventDefault();
+    if (!canEdit) {
+      setContextMenu(null);
+      return;
+    }
+
     const worldPoint = svgWorldPoint(event, camera);
     const visible = elements
       .filter((element) => !element.isDeleted)
@@ -171,6 +187,7 @@ export function useWhiteboardPointerHandlers({
   }
 
   function handleDoubleClick(event: React.MouseEvent<SVGSVGElement>) {
+    if (!canEdit) return;
     if (tool !== 'select') return;
     if (editingId) return;
 
@@ -181,6 +198,8 @@ export function useWhiteboardPointerHandlers({
   }
 
   function handleHandlePointerDown(handle: HandleId, event: React.PointerEvent<SVGCircleElement>) {
+    if (!canEdit) return;
+
     const svgElement = event.currentTarget.closest('svg') as SVGSVGElement | null;
     if (!svgElement) return;
 

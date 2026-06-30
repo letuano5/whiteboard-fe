@@ -4,8 +4,9 @@ import { isEditableKeyboardTarget } from '../keyboard-target';
 import { handleHistoryKeyboardShortcut } from '../shortcuts/history-shortcuts';
 import { handleSelectKeyboardShortcut } from '../shortcuts/select-shortcuts';
 
-export function useWhiteboardShortcuts(tool: ToolId) {
+export function useWhiteboardShortcuts(tool: ToolId, canEdit = true) {
   useEffect(() => {
+    if (!canEdit) return;
     if (tool !== 'select') return;
 
     function handleKeyDown(event: KeyboardEvent) {
@@ -15,9 +16,11 @@ export function useWhiteboardShortcuts(tool: ToolId) {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [tool]);
+  }, [canEdit, tool]);
 
   useEffect(() => {
+    if (!canEdit) return;
+
     function handleUndoRedo(event: KeyboardEvent) {
       if (isEditableKeyboardTarget(event.target)) return;
       handleHistoryKeyboardShortcut(event);
@@ -25,5 +28,5 @@ export function useWhiteboardShortcuts(tool: ToolId) {
 
     window.addEventListener('keydown', handleUndoRedo);
     return () => window.removeEventListener('keydown', handleUndoRedo);
-  }, []);
+  }, [canEdit]);
 }

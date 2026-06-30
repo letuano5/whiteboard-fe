@@ -17,6 +17,7 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.109.0",
     "@vdt/shared": "workspace:*",
     "lucide-react": "^1.18.0",
     "react": "^19.0.0",

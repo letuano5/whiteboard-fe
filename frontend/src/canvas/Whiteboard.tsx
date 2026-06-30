@@ -9,6 +9,8 @@ import DetailPanel from '../components/detail-panel/DetailPanel';
 import BackToContent from '../components/back-to-content/BackToContent';
 import ShareLinkButton from '../components/ShareLinkButton';
 import OnlineUsersPanel from '../components/ui/OnlineUsersPanel';
+import RoomMembersPanel from '../rooms/RoomMembersPanel';
+import { canEditRoom, useRoomAccessStore } from '../rooms/room-access.store';
 import { useSpacePanMode } from './hooks/use-space-pan-mode';
 import { useWheelPanZoom } from './hooks/use-wheel-pan-zoom';
 import { useWhiteboardPointerHandlers } from './hooks/use-whiteboard-pointer-handlers';
@@ -21,6 +23,9 @@ export default function Whiteboard() {
   const draftElement = useInteractionStore((s) => s.draftElement);
   const editingId = useInteractionStore((s) => s.editingId);
   const selectedIds = useInteractionStore((s) => s.selectedIds);
+  const role = useRoomAccessStore((s) => s.role);
+  const canEdit = canEditRoom(role);
+  const activeTool = canEdit ? tool : 'select';
   const editingElement = editingId
     ? (elements.find((el) => el.id === editingId && !el.isDeleted) ?? null)
     : null;
@@ -28,22 +33,23 @@ export default function Whiteboard() {
   const containerRef = useRef<HTMLDivElement>(null);
   const spaceDown = useSpacePanMode();
   useWheelPanZoom(containerRef);
-  useWhiteboardShortcuts(tool);
+  useWhiteboardShortcuts(activeTool, canEdit);
   const { contextMenu, isPanning, onCloseContextMenu, svgLayerHandlers } =
     useWhiteboardPointerHandlers({
+      canEdit,
       camera,
       elements,
       editingId,
       spaceDown,
-      tool,
+      tool: activeTool,
     });
 
   // T023: cursor style based on pan/zoom mode
   const cursor = isPanning
     ? 'grabbing'
-    : tool === 'hand' || spaceDown
+    : activeTool === 'hand' || spaceDown
       ? 'grab'
-      : tool === 'laser'
+      : activeTool === 'laser'
         ? 'crosshair'
         : undefined;
 
@@ -62,7 +68,7 @@ export default function Whiteboard() {
       {/* T015: CursorOverlay — sibling div after SvgLayer, pointer-events: none, zIndex: 10 */}
       <CursorOverlay />
       {/* T012: Context menu — rendered above all canvas elements */}
-      {contextMenu && (
+      {canEdit && contextMenu && (
         <ContextMenu
           x={contextMenu.x}
           y={contextMenu.y}
@@ -71,9 +77,9 @@ export default function Whiteboard() {
           onClose={onCloseContextMenu}
         />
       )}
-      {editingElement && <TextEditor element={editingElement} camera={camera} />}
-      <Toolbar />
-      <DetailPanel />
+      {canEdit && editingElement && <TextEditor element={editingElement} camera={camera} />}
+      {canEdit && <Toolbar />}
+      {canEdit && <DetailPanel />}
       <BackToContent containerRef={containerRef} />
       {/* T021: Online users panel + share button stacked in top-right */}
       <div
@@ -90,8 +96,9 @@ export default function Whiteboard() {
       >
         <ShareLinkButton />
         <OnlineUsersPanel />
+        <RoomMembersPanel />
       </div>
-      {tool === 'select' && (
+      {activeTool === 'select' && (
         <div
           style={{
             position: 'absolute',

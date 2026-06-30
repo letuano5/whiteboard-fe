@@ -1,8 +1,16 @@
 import { vi } from 'vitest';
+import type { AppUser, VerifiedIdentity } from '../auth/index.js';
 
 export interface FakeSocket {
   id: string;
-  data: { sessionId: string; roomId: string };
+  data: {
+    sessionId: string;
+    roomId: string;
+    auth?: {
+      identity: VerifiedIdentity;
+      user?: AppUser;
+    };
+  };
   join: ReturnType<typeof vi.fn>;
   emit: ReturnType<typeof vi.fn>;
   to: ReturnType<typeof vi.fn>;
@@ -36,6 +44,7 @@ export function makeFakeIo() {
         connectionHandler = handler;
       }
     }),
+    use: vi.fn(),
     to: vi.fn().mockReturnValue(toReturn),
   };
 

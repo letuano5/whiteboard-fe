@@ -1,6 +1,7 @@
 import type { Socket } from 'socket.io';
 import { WS_EVENTS } from '@vdt/shared';
 import { getRoomClock } from '../../persistence/room-repository.js';
+import { canMutateRoom, resolveRoomAccess } from '../../rooms/room-roles.js';
 import type { ElementUpdatePayload, ResolvedWhiteboardServerDeps } from '../types.js';
 
 export async function handleElementUpdate(
@@ -10,6 +11,30 @@ export async function handleElementUpdate(
 ): Promise<void> {
   const { roomId, elements: incoming, sessionId } = payload;
   const { roomElements: elements, roomClocks: clocks, autosave: save, db } = deps;
+
+  const user = socket.data?.auth?.user;
+  if (user) {
+    try {
+      const access = await resolveRoomAccess(db, roomId, user);
+      socket.data.roomRole = access.role;
+      if (!canMutateRoom(access.role)) {
+        socket.emit(WS_EVENTS.ROOM_ACCESS_ERROR, {
+          code: 'room-access/forbidden',
+          message: 'Viewers cannot mutate room elements.',
+        });
+        return;
+      }
+    } catch (err) {
+      console.error(`[room-access] Failed to authorize mutation for ${roomId}:`, err);
+      socket.emit(WS_EVENTS.ROOM_ACCESS_ERROR, {
+        code: 'room-access/forbidden',
+        message: 'Could not authorize room mutation.',
+      });
+      return;
+    }
+  } else if (socket.data) {
+    socket.data.roomRole = 'editor';
+  }
 
   if (!elements.has(roomId)) {
     elements.set(roomId, new Map());

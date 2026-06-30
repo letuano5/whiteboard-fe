@@ -14,6 +14,7 @@ model Room {
   id                          String       @id @default(uuid())
   name                        String       @default("Untitled")
   ownerId                     String?
+  owner                       AppUser?     @relation("OwnedRooms", fields: [ownerId], references: [id], onDelete: SetNull)
   documentClock               BigInt       @default(0)
   tombstoneHistoryStartsAtClock BigInt     @default(0)
   createdAt                   DateTime     @default(now())
@@ -28,8 +29,24 @@ model RoomMember {
   userId String
   role   String
   room   Room   @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user   AppUser @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([roomId, userId])
+}
+
+model AppUser {
+  id              String       @id @default(uuid())
+  provider        String
+  providerSubject String
+  email           String?
+  name            String?
+  avatarUrl       String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  ownedRooms      Room[]       @relation("OwnedRooms")
+  roomMemberships RoomMember[]
+
+  @@unique([provider, providerSubject])
 }
 
 model Record {

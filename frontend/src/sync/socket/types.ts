@@ -1,5 +1,5 @@
 import type { Socket } from 'socket.io-client';
-import type { Element } from '../../types/shared';
+import type { Element, RoomAccessErrorPayload, RoomAccessPayload } from '../../types/shared';
 
 export type WhiteboardSocket = Socket;
 
@@ -26,3 +26,5 @@ export interface CursorMovePayload {
   viewport?: { x: number; y: number; zoom: number };
   selectedIds?: string[];
 }
+
+export type { RoomAccessErrorPayload, RoomAccessPayload };

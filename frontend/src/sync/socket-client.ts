@@ -3,4 +3,5 @@ export {
   getLastServerClock,
   initSocketClient,
   stopSocketClient,
+  updateRoomMemberRole,
 } from './socket/client';

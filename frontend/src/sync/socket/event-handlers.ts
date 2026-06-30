@@ -3,6 +3,7 @@ import type { Element, Presence } from '../../types/shared';
 import { useCameraStore } from '../../store/camera.store';
 import { useElementsStore } from '../../store/elements.store';
 import { useInteractionStore } from '../../store/interaction.store';
+import { useRoomAccessStore } from '../../rooms/room-access.store';
 import { applyRemoteElements } from '../apply-remote';
 import { saveCamera } from '../camera-persistence';
 import { LOCAL_PRESENCE } from '../presence';
@@ -11,6 +12,8 @@ import { getSocketState, setLastServerClock } from './state';
 import type {
   CursorMovePayload,
   ElementUpdatePayload,
+  RoomAccessErrorPayload,
+  RoomAccessPayload,
   RoomDiffPayload,
   RoomSnapshotPayload,
 } from './types';
@@ -55,6 +58,14 @@ export function registerSocketEventHandlers(): void {
     useElementsStore.getState().removeElements(data.deleted.map((d) => d.id));
     current.reconnectPending = false;
     replayPendingQueue();
+  });
+
+  state.socket.on(WS_EVENTS.ROOM_ACCESS, (data: RoomAccessPayload) => {
+    useRoomAccessStore.getState().setRoomAccess(data);
+  });
+
+  state.socket.on(WS_EVENTS.ROOM_ACCESS_ERROR, (data: RoomAccessErrorPayload) => {
+    useRoomAccessStore.getState().setRoomAccessError(data);
   });
 
   state.socket.on(WS_EVENTS.ELEMENT_UPDATE, (data: ElementUpdatePayload) => {

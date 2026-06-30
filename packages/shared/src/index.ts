@@ -77,6 +77,39 @@ export interface Presence {
   viewport?: { x: number; y: number; zoom: number };
 }
 
+// ─── Room access (§P3B-02) ──────────────────────────────────────────────────
+
+export type RoomRole = 'owner' | 'editor' | 'viewer';
+
+export interface RoomMemberSummary {
+  userId: string;
+  email: string | null;
+  name: string | null;
+  avatarUrl: string | null;
+  role: RoomRole;
+}
+
+export interface RoomAccessPayload {
+  roomId: string;
+  role: RoomRole;
+  members: RoomMemberSummary[];
+}
+
+export interface RoomRoleUpdatePayload {
+  roomId: string;
+  userId: string;
+  role: Extract<RoomRole, 'editor' | 'viewer'>;
+}
+
+export interface RoomAccessErrorPayload {
+  code:
+    | 'room-access/unauthenticated'
+    | 'room-access/forbidden'
+    | 'room-access/member-not-found'
+    | 'room-access/invalid-role';
+  message: string;
+}
+
 // ─── WebSocket event constants ────────────────────────────────────────────────
 
 export const WS_EVENTS = {
@@ -92,6 +125,9 @@ export const WS_EVENTS = {
   ROOM_DIFF: 'room-diff', // AC-12: distinct WS event for reconnect incremental diff (P3A-03)
   ROOM_SNAPSHOT: 'room-snapshot',
   ROOM_RESYNC: 'room-resync',
+  ROOM_ACCESS: 'room-access',
+  ROOM_ROLE_UPDATE: 'room-role-update',
+  ROOM_ACCESS_ERROR: 'room-access-error',
 } as const;
 
 export type WsEvent = (typeof WS_EVENTS)[keyof typeof WS_EVENTS];

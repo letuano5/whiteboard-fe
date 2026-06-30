@@ -1,5 +1,6 @@
 import type { PrismaClient } from '@prisma/client';
-import type { Element, Presence } from '@vdt/shared';
+import type { Element, Presence, RoomRole } from '@vdt/shared';
+import type { AppUser, AppUserRepository, AuthVerifier, VerifiedIdentity } from '../auth/index.js';
 import type { AutosaveManager } from '../persistence/autosave.js';
 import type { RoomState } from './room-state.js';
 
@@ -12,6 +13,8 @@ export interface WhiteboardServerDeps extends Partial<RoomState> {
   roomElements: RoomElementStore;
   autosave: AutosaveManager;
   db?: PrismaClient;
+  authVerifier?: AuthVerifier;
+  appUserRepository?: AppUserRepository;
 }
 
 export interface ResolvedWhiteboardServerDeps {
@@ -36,6 +39,12 @@ export interface ElementUpdatePayload {
   sessionId?: string;
 }
 
+export interface RoomRoleUpdatePayload {
+  roomId: string;
+  userId: string;
+  role: Extract<RoomRole, 'editor' | 'viewer'>;
+}
+
 export interface ElementDraftPayload {
   roomId: string;
   sessionId: string;
@@ -54,5 +63,10 @@ declare module 'socket.io' {
   interface SocketData {
     sessionId: string;
     roomId: string;
+    auth?: {
+      identity: VerifiedIdentity;
+      user?: AppUser;
+    };
+    roomRole?: RoomRole;
   }
 }
