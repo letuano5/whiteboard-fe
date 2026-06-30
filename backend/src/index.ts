@@ -1,4 +1,4 @@
-import 'dotenv/config';
+import './config/load-root-env.js';
 import { createAppServer } from './app.js';
 import { createAutosaveManager } from './persistence/autosave.js';
 import { prisma } from './persistence/prisma.js';
