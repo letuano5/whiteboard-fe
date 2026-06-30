@@ -80,9 +80,6 @@ If the client has been offline long enough that the server's deletion history (t
 - **FR-009**: The client MUST queue any element mutations that occur while the socket is disconnected, and clear that queue after successfully replaying it on reconnect.
 - **FR-010**: The `ROOM_DIFF` response MUST be a new WebSocket event distinct from `ROOM_SNAPSHOT` so clients can dispatch to the correct handler.
 - **FR-011**: The new `ROOM_DIFF` WS event constant MUST be added to `WS_EVENTS` in `@vdt/shared`.
-- **FR-012**: The server MUST apply the same whole-element LWW comparator as the client before accepting replayed `ELEMENT_UPDATE` payloads: higher `version` wins; when versions tie, lower `versionNonce` wins.
-- **FR-013**: The shared LWW comparator MUST live in `@vdt/shared` and be reused by both frontend `applyRemoteElements` and backend `ELEMENT_UPDATE` handling.
-- **FR-014**: `documentClock` MUST remain a room-level sync cursor. The server only increments it when at least one incoming element is accepted by the shared LWW comparator; discarded batches MUST NOT advance the clock or be broadcast.
 
 ### Key Entities
 
@@ -107,5 +104,5 @@ If the client has been offline long enough that the server's deletion history (t
 - The DB schema from P3A-01 already stores `recordClock` on `Record` rows and `deletedClock` on `Tombstone` rows — these are the fields used to compute diffs.
 - Tombstone history is unlimited in P3A-03 (no pruning); the wipe-all path is a safety guard for cases where future pruning or server restarts create gaps. In practice the wipe-all path will be rare.
 - "Pending local changes" are element mutations from the mutation pipeline that the client attempted to emit via `ELEMENT_UPDATE` while the socket was disconnected (Socket.IO buffers these internally but they may need explicit management to ensure correct ordering after diff application).
-- LWW conflict resolution (`version + versionNonce`) is implemented via a shared comparator in `@vdt/shared`; `applyRemoteElements` and backend `ELEMENT_UPDATE` handling must use the same helper so replayed pending changes cannot be accepted by the server after losing the client-side comparator.
+- LWW conflict resolution (`version + versionNonce`) is already implemented in `applyRemoteElements` and handles the case where a server diff element conflicts with a pending local change.
 - The diff is computed from the DB (autosaved state); in-memory elements not yet autosaved will be included if the server merges in-memory hot state on top of the DB query. The server implementation MUST ensure the diff is authoritative at the moment of reconnect.

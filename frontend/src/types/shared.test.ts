@@ -1,34 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { WS_EVENTS, doesIncomingElementWin, type Element } from './shared';
-
-function makeElement(overrides: Partial<Element> = {}): Element {
-  return {
-    id: 'el-1',
-    type: 'rectangle',
-    x: 0,
-    y: 0,
-    width: 100,
-    height: 50,
-    angle: 0,
-    zIndex: 0,
-    props: {
-      strokeColor: '#000000',
-      fillColor: '#ffffff',
-      strokeWidth: 2,
-      strokeStyle: 'solid',
-      opacity: 1,
-    },
-    version: 1,
-    versionNonce: 500,
-    updatedAt: 0,
-    isDeleted: false,
-    groupId: null,
-    frameId: null,
-    locked: false,
-    createdBy: 'test',
-    ...overrides,
-  };
-}
+import { WS_EVENTS } from './shared';
 
 describe('WS_EVENTS', () => {
   it('uses kebab-case string values', () => {
@@ -69,24 +40,5 @@ describe('WS_EVENTS', () => {
     const values = Object.values(WS_EVENTS);
     expect(values).toHaveLength(12);
     expect(new Set(values).size).toBe(12);
-  });
-});
-
-describe('doesIncomingElementWin', () => {
-  it('uses the shared whole-element LWW rule', () => {
-    const current = makeElement({ version: 5, versionNonce: 500 });
-
-    expect(doesIncomingElementWin(makeElement({ version: 6, versionNonce: 900 }), current)).toBe(
-      true,
-    );
-    expect(doesIncomingElementWin(makeElement({ version: 4, versionNonce: 100 }), current)).toBe(
-      false,
-    );
-    expect(doesIncomingElementWin(makeElement({ version: 5, versionNonce: 100 }), current)).toBe(
-      true,
-    );
-    expect(doesIncomingElementWin(makeElement({ version: 5, versionNonce: 900 }), current)).toBe(
-      false,
-    );
   });
 });

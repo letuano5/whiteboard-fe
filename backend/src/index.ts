@@ -2,7 +2,7 @@ import 'dotenv/config';
 import express from 'express';
 import { createServer } from 'http';
 import { Server, type Socket } from 'socket.io';
-import { WS_EVENTS, doesIncomingElementWin } from '@vdt/shared';
+import { WS_EVENTS } from '@vdt/shared';
 import type { Element, Presence } from '@vdt/shared';
 import { prisma } from './persistence/prisma.js';
 import {
@@ -173,23 +173,13 @@ export function createWhiteboardServer(
       async (payload: { roomId: string; elements: Element[]; sessionId?: string }) => {
         const { roomId, elements: incoming, sessionId } = payload;
 
-        // FR-002/P3A-03: Update in-memory hot path with the shared whole-element LWW rule.
+        // FR-002: Update in-memory hot path first (last-write-wins by element id)
         if (!elements.has(roomId)) {
           elements.set(roomId, new Map());
         }
         const elMap = elements.get(roomId)!;
-        const accepted: Element[] = [];
         for (const el of incoming) {
-          const current = elMap.get(el.id);
-          if (!current || doesIncomingElementWin(el, current)) {
-            elMap.set(el.id, el);
-            accepted.push(el);
-          }
-        }
-
-        // Nothing changed in authoritative hot state, so do not advance the room clock.
-        if (accepted.length === 0) {
-          return;
+          elMap.set(el.id, el);
         }
 
         if (!clocks.has(roomId)) {
@@ -209,7 +199,7 @@ export function createWhiteboardServer(
 
         // Broadcast to peers — runs synchronously after in-memory update (AC-8)
         socket.to(roomId).emit(WS_EVENTS.ELEMENT_UPDATE, {
-          elements: accepted,
+          elements: incoming,
           sessionId,
           documentClock: newClock,
         });

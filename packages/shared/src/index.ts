@@ -56,21 +56,6 @@ export interface Element {
   createdBy: string;
 }
 
-// ─── Element conflict resolution (§1.1, §3.2) ────────────────────────────────
-
-/**
- * Returns true when `incoming` should replace `current` under whole-element LWW.
- *
- * Rule: higher version wins; when versions tie, the lower versionNonce wins so
- * concurrent same-version edits converge deterministically across clients/server.
- */
-export function doesIncomingElementWin(incoming: Element, current: Element): boolean {
-  return (
-    incoming.version > current.version ||
-    (incoming.version === current.version && incoming.versionNonce < current.versionNonce)
-  );
-}
-
 // ─── Camera (§2.2) ───────────────────────────────────────────────────────────
 
 export interface Camera {
