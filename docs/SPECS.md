@@ -307,6 +307,7 @@ applyRemoteElements(incoming: Element[])  // LWW theo version/versionNonce; bỏ
 **FR:** Tạo text, đặt size/font/align (auto-bbox để P1B).
 
 - [ ] Đổi `fontSize/fontFamily/textAlign` cập nhật render.
+- [ ] Đổi `fontFamily` phải nới bbox nếu font mới làm text rộng/cao hơn bbox hiện tại.
 
 ### [P1A-06] Zoom + Pan + Infinite canvas
 
@@ -358,6 +359,7 @@ applyRemoteElements(incoming: Element[])  // LWW theo version/versionNonce; bỏ
 
 - [ ] Double-click mở ô chỉnh tại chỗ (contenteditable trong layer transform).
 - [ ] Blur/Esc commit vào `props.text` (qua `patchElement`); bbox co theo nội dung.
+- [ ] Auto-bbox cũng áp dụng cho đổi font trong detail panel: text không được tràn khỏi bbox sau khi đổi `fontFamily`.
 
 ### [P1B-04] Laser pointer (local, transient)
 
@@ -452,6 +454,7 @@ applyRemoteElements(incoming: Element[])  // LWW theo version/versionNonce; bỏ
 
 - [ ] `selectedIds` trong presence; shape người khác đang chọn hiện viền màu của họ.
 - [ ] Khi user khác thay đổi element trên canvas/document, client hiện tại phải thấy được thay đổi realtime đó. Thay đổi realtime có thể là draft/pending change, chưa cần coi là thay đổi đã commit vào document. Chưa cần xử lý conflict phức tạp; mục tiêu chính là hiển thị được selection và preview thay đổi của người khác.
+- [ ] Nếu element đang selected có remote draft cùng id, bbox selection phải bám draft thay vì committed element; bbox remote draft/selection phải xoay theo `angle`.
 
 ### [P2.5-05] Point-based model cho linear elements (arrow, line, freehand)
 

@@ -130,6 +130,21 @@ describe('SvgLayer — SelectionOverlay', () => {
     expect(shapeRects[0].parentElement).toHaveAttribute('opacity', '1');
   });
 
+  it('keeps the local selection overlay attached to a remote draft for the same selected element', () => {
+    const el = makeElement({ id: 'shared-el', x: 10, y: 10 });
+    const remoteDraft = { ...el, x: 80, y: 60 };
+    useInteractionStore.getState().setSelectedIds([el.id]);
+    useInteractionStore.setState({
+      remoteDrafts: new Map([['peer-a', [remoteDraft]]]),
+    });
+
+    const { container } = render(<SvgLayer elements={[el]} camera={camera} />);
+
+    const overlay = container.querySelector('rect[stroke="#3b82f6"]');
+    expect(overlay).toHaveAttribute('x', '80');
+    expect(overlay).toHaveAttribute('y', '60');
+  });
+
   it('still renders a new draft whose id is not in the committed element list', () => {
     const el = makeElement({ id: 'el-1' });
     const draft = makeElement({ id: '__draft__', x: 200, y: 150 });
@@ -246,9 +261,7 @@ describe('SvgLayer — 018/US1 Remote Selection Highlight', () => {
   // @covers AC-1
   it('T009: renders a solid colored rect border for a single remote selection (AC-1)', () => {
     const el = makeElement({ id: 'el-1' });
-    const peers = new Map([
-      ['peer-a', makePeerPresence('peer-a', '#ef4444', ['el-1'])],
-    ]);
+    const peers = new Map([['peer-a', makePeerPresence('peer-a', '#ef4444', ['el-1'])]]);
     useInteractionStore.setState({ remoteCursors: peers, remoteDrafts: new Map() });
 
     const { container } = render(<SvgLayer elements={[el]} camera={camera} />);
@@ -263,12 +276,10 @@ describe('SvgLayer — 018/US1 Remote Selection Highlight', () => {
   });
 
   // @covers AC-2
-  it('T010: renders colored borders for each of a peer\'s multiple selected elements (AC-2)', () => {
+  it("T010: renders colored borders for each of a peer's multiple selected elements (AC-2)", () => {
     const el1 = makeElement({ id: 'el-A', x: 0, y: 0 });
     const el2 = makeElement({ id: 'el-B', x: 200, y: 200 });
-    const peers = new Map([
-      ['peer-b', makePeerPresence('peer-b', '#10b981', ['el-A', 'el-B'])],
-    ]);
+    const peers = new Map([['peer-b', makePeerPresence('peer-b', '#10b981', ['el-A', 'el-B'])]]);
     useInteractionStore.setState({ remoteCursors: peers, remoteDrafts: new Map() });
 
     const { container } = render(<SvgLayer elements={[el1, el2]} camera={camera} />);
@@ -304,9 +315,7 @@ describe('SvgLayer — 018/US1 Remote Selection Highlight', () => {
   // @covers AC-4
   it('T012: no remote highlight rect when peer selectedIds is empty (AC-4)', () => {
     const el = makeElement({ id: 'el-Z' });
-    const peers = new Map([
-      ['peer-e', makePeerPresence('peer-e', '#ef4444', [])],
-    ]);
+    const peers = new Map([['peer-e', makePeerPresence('peer-e', '#ef4444', [])]]);
     useInteractionStore.setState({ remoteCursors: peers, remoteDrafts: new Map() });
 
     const { container } = render(<SvgLayer elements={[el]} camera={camera} />);
@@ -336,9 +345,7 @@ describe('SvgLayer — 018/US1 Remote Selection Highlight', () => {
 
   it('T016 edge: skips highlight for remote selectedId that no longer exists in elements', () => {
     const el = makeElement({ id: 'el-exists' });
-    const peers = new Map([
-      ['peer-f', makePeerPresence('peer-f', '#ef4444', ['el-deleted'])],
-    ]);
+    const peers = new Map([['peer-f', makePeerPresence('peer-f', '#ef4444', ['el-deleted'])]]);
     useInteractionStore.setState({ remoteCursors: peers, remoteDrafts: new Map() });
 
     const { container } = render(<SvgLayer elements={[el]} camera={camera} />);
@@ -348,6 +355,17 @@ describe('SvgLayer — 018/US1 Remote Selection Highlight', () => {
     );
     expect(remoteHighlights.length).toBe(0);
   });
+
+  it('rotates remote selection border with the selected element angle', () => {
+    const el = makeElement({ id: 'rotated-el', angle: Math.PI / 2 });
+    const peers = new Map([['peer-r', makePeerPresence('peer-r', '#ec4899', [el.id])]]);
+    useInteractionStore.setState({ remoteCursors: peers, remoteDrafts: new Map() });
+
+    const { container } = render(<SvgLayer elements={[el]} camera={camera} />);
+
+    const remoteHighlight = container.querySelector('rect[stroke="#ec4899"]');
+    expect(remoteHighlight).toHaveAttribute('transform', 'rotate(90 60 35)');
+  });
 });
 
 describe('SvgLayer — 018/US2 Remote Draft Ghost', () => {
@@ -355,11 +373,27 @@ describe('SvgLayer — 018/US2 Remote Draft Ghost', () => {
     return {
       id,
       type: 'rectangle',
-      x: 50, y: 50, width: 120, height: 60,
-      angle: 0, zIndex: 2,
-      props: { strokeColor: '#000', fillColor: '#aaa', strokeWidth: 1, strokeStyle: 'solid', opacity: 1 },
-      version: 2, versionNonce: 99, updatedAt: Date.now(),
-      isDeleted: false, groupId: null, frameId: null, locked: false, createdBy: 'peer-g',
+      x: 50,
+      y: 50,
+      width: 120,
+      height: 60,
+      angle: 0,
+      zIndex: 2,
+      props: {
+        strokeColor: '#000',
+        fillColor: '#aaa',
+        strokeWidth: 1,
+        strokeStyle: 'solid',
+        opacity: 1,
+      },
+      version: 2,
+      versionNonce: 99,
+      updatedAt: Date.now(),
+      isDeleted: false,
+      groupId: null,
+      frameId: null,
+      locked: false,
+      createdBy: 'peer-g',
     };
   }
 
@@ -368,7 +402,17 @@ describe('SvgLayer — 018/US2 Remote Draft Ghost', () => {
     const draftEl = makeDraftEl('peer-draft-el');
     const remoteDrafts = new Map([['peer-g', [draftEl]]]);
     const peers = new Map([
-      ['peer-g', { sessionId: 'peer-g', name: 'G', color: '#22c55e', cursor: null, selectedIds: [], status: 'active' as const }],
+      [
+        'peer-g',
+        {
+          sessionId: 'peer-g',
+          name: 'G',
+          color: '#22c55e',
+          cursor: null,
+          selectedIds: [],
+          status: 'active' as const,
+        },
+      ],
     ]);
     useInteractionStore.setState({ remoteCursors: peers, remoteDrafts });
 
@@ -383,11 +427,24 @@ describe('SvgLayer — 018/US2 Remote Draft Ghost', () => {
   it('T024: when remoteDrafts[sessionId] is removed, ghost elements disappear (AC-7/AC-10)', () => {
     const draftEl = makeDraftEl('peer-draft-el-2');
     const peers = new Map([
-      ['peer-h', { sessionId: 'peer-h', name: 'H', color: '#f97316', cursor: null, selectedIds: [], status: 'active' as const }],
+      [
+        'peer-h',
+        {
+          sessionId: 'peer-h',
+          name: 'H',
+          color: '#f97316',
+          cursor: null,
+          selectedIds: [],
+          status: 'active' as const,
+        },
+      ],
     ]);
 
     // First render with a draft
-    useInteractionStore.setState({ remoteCursors: peers, remoteDrafts: new Map([['peer-h', [draftEl]]]) });
+    useInteractionStore.setState({
+      remoteCursors: peers,
+      remoteDrafts: new Map([['peer-h', [draftEl]]]),
+    });
     const { container, rerender } = render(<SvgLayer elements={[]} camera={camera} />);
     const ghostGroupsBefore = Array.from(container.querySelectorAll('g[opacity="0.5"]'));
     expect(ghostGroupsBefore.length).toBeGreaterThanOrEqual(1);
@@ -407,6 +464,31 @@ describe('SvgLayer — 018/US2 Remote Draft Ghost', () => {
 
     const ghostGroups = Array.from(container.querySelectorAll('g[opacity="0.5"]'));
     expect(ghostGroups.length).toBe(0);
+  });
+
+  it('rotates the remote draft bbox border with the draft element angle', () => {
+    const draftEl = makeDraftEl('peer-rotated-draft');
+    const rotatedDraft = { ...draftEl, angle: Math.PI / 4 };
+    const remoteDrafts = new Map([['peer-i', [rotatedDraft]]]);
+    const peers = new Map([
+      [
+        'peer-i',
+        {
+          sessionId: 'peer-i',
+          name: 'I',
+          color: '#06b6d4',
+          cursor: null,
+          selectedIds: [],
+          status: 'active' as const,
+        },
+      ],
+    ]);
+    useInteractionStore.setState({ remoteCursors: peers, remoteDrafts });
+
+    const { container } = render(<SvgLayer elements={[]} camera={camera} />);
+
+    const draftOutline = container.querySelector('rect[stroke="#06b6d4"]');
+    expect(draftOutline).toHaveAttribute('transform', 'rotate(45 110 80)');
   });
 });
 

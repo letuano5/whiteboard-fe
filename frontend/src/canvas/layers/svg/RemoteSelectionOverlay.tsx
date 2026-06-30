@@ -1,5 +1,6 @@
 import type React from 'react';
 import type { Element, Presence } from '../../../types/shared';
+import ElementOutline from './ElementOutline';
 
 interface RemoteSelectionOverlayProps {
   elements: Element[];
@@ -15,13 +16,13 @@ export default function RemoteSelectionOverlay({
   return (
     <>
       {Array.from(remoteCursors.values()).flatMap((peer) => {
-        const peerDraftIds = new Set((remoteDrafts.get(peer.sessionId) ?? []).map((el) => el.id));
+        const peerDrafts = remoteDrafts.get(peer.sessionId) ?? [];
 
         return peer.selectedIds
           .map((elementId) => {
-            if (peerDraftIds.has(elementId)) return null;
-
-            const element = elements.find((el) => el.id === elementId && !el.isDeleted);
+            const element =
+              peerDrafts.find((draftEl) => draftEl.id === elementId && !draftEl.isDeleted) ??
+              elements.find((el) => el.id === elementId && !el.isDeleted);
             if (!element) return null;
 
             return (
@@ -44,16 +45,5 @@ interface RemoteSelectionRectProps {
 }
 
 function RemoteSelectionRect({ element, peerColor }: RemoteSelectionRectProps) {
-  return (
-    <rect
-      x={element.x}
-      y={element.y}
-      width={element.width}
-      height={element.height}
-      fill="none"
-      stroke={peerColor}
-      strokeWidth={1.5}
-      style={{ pointerEvents: 'none' }}
-    />
-  );
+  return <ElementOutline element={element} stroke={peerColor} strokeWidth={1.5} />;
 }

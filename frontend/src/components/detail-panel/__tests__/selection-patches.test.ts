@@ -4,6 +4,7 @@ import {
   buildAnglePatchFromDegrees,
   buildMultiPropsPatches,
   buildPropsPatch,
+  buildTextFontFamilyPatch,
   buildTextFontSizePatch,
 } from '../selection-patches';
 
@@ -90,5 +91,25 @@ describe('detail panel selection patch helpers', () => {
       width: 10,
       height: 2,
     });
+  });
+
+  it('expands text bounds when changing to a wider font family', () => {
+    const element = makeElement({
+      type: 'text',
+      width: 1,
+      height: 1,
+      props: {
+        ...makeElement().props,
+        fontSize: 16,
+        fontFamily: 'sans-serif',
+        text: 'WWWWWW',
+      },
+    });
+
+    const patch = buildTextFontFamilyPatch(element, 'monospace');
+
+    expect(patch.props).toEqual({ ...element.props, fontFamily: 'monospace' });
+    expect(patch.width).toBeGreaterThan(element.width);
+    expect(patch.height).toBeGreaterThan(element.height);
   });
 });

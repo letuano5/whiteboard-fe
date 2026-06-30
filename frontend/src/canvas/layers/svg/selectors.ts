@@ -30,13 +30,21 @@ export function getSelectedOverlayElement(
   elements: Element[],
   selectedIds: string[],
   draftElement: Element | null | undefined,
+  remoteDrafts: Map<string, Element[]> = new Map(),
 ) {
   if (selectedIds.length !== 1) return null;
 
   const selectedElement = elements.find((el) => el.id === selectedIds[0] && !el.isDeleted);
   if (!selectedElement) return null;
 
-  return draftElement?.id === selectedElement.id ? draftElement : selectedElement;
+  if (draftElement?.id === selectedElement.id) return draftElement;
+
+  for (const draftEls of remoteDrafts.values()) {
+    const remoteDraft = draftEls.find((el) => el.id === selectedElement.id && !el.isDeleted);
+    if (remoteDraft) return remoteDraft;
+  }
+
+  return selectedElement;
 }
 
 export function isExistingDraftElement(

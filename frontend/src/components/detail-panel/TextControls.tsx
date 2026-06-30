@@ -14,10 +14,16 @@ const TEXT_ALIGNMENTS = ['left', 'center', 'right'] as const;
 interface TextControlsProps {
   props: ElementProps;
   onFontSizeChange: (fontSize: number) => void;
+  onFontFamilyChange: (fontFamily: string) => void;
   onPatchProps: (partial: Partial<ElementProps>) => void;
 }
 
-export function TextControls({ props, onFontSizeChange, onPatchProps }: TextControlsProps) {
+export function TextControls({
+  props,
+  onFontSizeChange,
+  onFontFamilyChange,
+  onPatchProps,
+}: TextControlsProps) {
   return (
     <>
       <SectionTitle withSpacing>Text</SectionTitle>
@@ -33,7 +39,7 @@ export function TextControls({ props, onFontSizeChange, onPatchProps }: TextCont
         label="Font family"
         value={props.fontFamily ?? 'sans-serif'}
         options={FONT_FAMILY_OPTIONS}
-        onChange={(fontFamily) => onPatchProps({ fontFamily })}
+        onChange={onFontFamilyChange}
       />
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

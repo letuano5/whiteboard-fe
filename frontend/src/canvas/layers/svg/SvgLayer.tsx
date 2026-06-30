@@ -39,7 +39,12 @@ export default function SvgLayer({
   const tool = useInteractionStore((s) => s.tool);
 
   const visibleElements = getVisibleElements(elements, draftElement, draftElements, remoteDrafts);
-  const overlayElement = getSelectedOverlayElement(elements, selectedIds, draftElement);
+  const overlayElement = getSelectedOverlayElement(
+    elements,
+    selectedIds,
+    draftElement,
+    remoteDrafts,
+  );
   const isEditingExistingElement = isExistingDraftElement(elements, draftElement);
   const multiSelectBounds = getMultiSelectBounds(elements, selectedIds);
   const snapIndicatorPoints = getSnapIndicatorPoints(tool, draftElement, elements);

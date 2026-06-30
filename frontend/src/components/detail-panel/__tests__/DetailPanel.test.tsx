@@ -174,7 +174,10 @@ describe('AC-7: changes go through patchElement (mutation pipeline)', () => {
 // @covers AC-6 (005-detail-panel-toolbar)
 describe('AC-8: style values reflect current element props', () => {
   it('displays current strokeColor value from store', () => {
-    const el = makeElement({ id: 'el-1', props: { ...makeElement().props, strokeColor: '#ff0000' } });
+    const el = makeElement({
+      id: 'el-1',
+      props: { ...makeElement().props, strokeColor: '#ff0000' },
+    });
     useElementsStore.setState({ elements: [el] });
     useInteractionStore.getState().setSelectedIds(['el-1']);
     render(<DetailPanel />);
@@ -239,23 +242,35 @@ describe('AC-11: fontSize change updates text element', () => {
     fireEvent.change(screen.getByLabelText(/font size/i), { target: { value: '32' } });
     expect(patchSpy).toHaveBeenCalledWith('el-1', {
       props: { ...TEXT_PROPS, fontSize: 32 },
-      width: 200,   // 100 * (32/16)
-      height: 100,  // 50 * (32/16)
+      width: 200, // 100 * (32/16)
+      height: 100, // 50 * (32/16)
     });
   });
 });
 
 // @covers AC-12
 describe('AC-12: fontFamily change updates text element', () => {
-  it('calls patchElement with new fontFamily', () => {
-    const el = makeElement({ id: 'el-1', type: 'text', props: TEXT_PROPS });
+  it('calls patchElement with new fontFamily and fitted bbox', () => {
+    const el = makeElement({
+      id: 'el-1',
+      type: 'text',
+      width: 1,
+      height: 1,
+      props: { ...TEXT_PROPS, text: 'WWWWWW' },
+    });
     useElementsStore.setState({ elements: [el] });
     useInteractionStore.getState().setSelectedIds(['el-1']);
     render(<DetailPanel />);
     fireEvent.change(screen.getByLabelText(/font family/i), { target: { value: 'serif' } });
-    expect(patchSpy).toHaveBeenCalledWith('el-1', {
-      props: { ...TEXT_PROPS, fontFamily: 'serif' },
-    });
+    const patch = patchSpy.mock.calls[0][1];
+    expect(patchSpy).toHaveBeenCalledWith(
+      'el-1',
+      expect.objectContaining({
+        props: { ...TEXT_PROPS, text: 'WWWWWW', fontFamily: 'serif' },
+      }),
+    );
+    expect(patch.width).toBeGreaterThan(el.width);
+    expect(patch.height).toBeGreaterThan(el.height);
   });
 });
 
@@ -366,8 +381,8 @@ describe('text: fontSize change scales bbox proportionally', () => {
       'txt-1',
       expect.objectContaining({
         props: expect.objectContaining({ fontSize: 32 }),
-        width: 400,   // 200 * (32/16)
-        height: 80,   // 40 * (32/16)
+        width: 400, // 200 * (32/16)
+        height: 80, // 40 * (32/16)
       }),
     );
   });
@@ -384,8 +399,8 @@ describe('text: fontSize change scales bbox proportionally', () => {
       'txt-2',
       expect.objectContaining({
         props: expect.objectContaining({ fontSize: 8 }),
-        width: 100,   // 200 * (8/16)
-        height: 20,   // 40 * (8/16)
+        width: 100, // 200 * (8/16)
+        height: 20, // 40 * (8/16)
       }),
     );
   });

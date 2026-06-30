@@ -11,6 +11,7 @@ import {
   buildAnglePatchFromDegrees,
   buildMultiPropsPatches,
   buildPropsPatch,
+  buildTextFontFamilyPatch,
   buildTextFontSizePatch,
 } from './selection-patches';
 
@@ -83,6 +84,9 @@ export default function DetailPanel() {
           props={selectedElement.props}
           onFontSizeChange={(fontSize) =>
             patchElement(selectedElement.id, buildTextFontSizePatch(selectedElement, fontSize))
+          }
+          onFontFamilyChange={(fontFamily) =>
+            patchElement(selectedElement.id, buildTextFontFamilyPatch(selectedElement, fontFamily))
           }
           onPatchProps={patchProps}
         />

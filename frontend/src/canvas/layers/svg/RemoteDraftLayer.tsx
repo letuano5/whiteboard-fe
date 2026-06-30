@@ -1,5 +1,6 @@
 import type { Element, Presence } from '../../../types/shared';
 import { getShapeUtil } from '../../shapes';
+import ElementOutline from './ElementOutline';
 
 interface RemoteDraftLayerProps {
   remoteDrafts: Map<string, Element[]>;
@@ -37,16 +38,7 @@ function RemoteDraftElement({ element, peerColor }: RemoteDraftElementProps) {
   return (
     <g opacity={0.5} style={{ pointerEvents: 'none' }}>
       {util.render(element)}
-      <rect
-        x={element.x}
-        y={element.y}
-        width={element.width}
-        height={element.height}
-        fill="none"
-        stroke={peerColor}
-        strokeWidth={1}
-        style={{ pointerEvents: 'none' }}
-      />
+      <ElementOutline element={element} stroke={peerColor} strokeWidth={1} />
     </g>
   );
 }
