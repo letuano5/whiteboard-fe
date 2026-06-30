@@ -109,6 +109,14 @@ Both frontend and backend import from `@vdt/shared` via workspace link.
 - Folder `index.ts` files are public API barrels for code outside that folder. Files inside the
   same folder must import each other directly (for example `./room-state`), not through their own
   folder barrel.
+- Reusable logic must have a single implementation. Before writing a new helper, selector, parser,
+  geometry function, socket utility, or persistence helper, search the codebase for an existing
+  equivalent and reuse or extend it.
+- Do not copy-paste shared behavior into multiple modules. If the same behavior is needed in two
+  places, extract it to the nearest sensible owner: feature-local first, package-level second,
+  `@vdt/shared` only for frontend/backend contracts.
+- Keep reusable functions pure when practical and cover extracted shared behavior with focused
+  tests near its owning module.
 - Avoid broad files named `helpers.ts`, `utils.ts`, or `misc.ts` unless every export is tightly
   tied to one domain. Prefer names that state the responsibility, such as `join-room.ts`,
   `room-state.ts`, `SelectionOverlay.tsx`, or `SnapIndicators.tsx`.
