@@ -14,7 +14,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { createWhiteboardServer } from '../index.js';
+import { createWhiteboardServer } from '../realtime/whiteboard-server.js';
 import { createAutosaveManager } from './autosave.js';
 import type { Element, Presence } from '@vdt/shared';
 import { WS_EVENTS } from '@vdt/shared';
