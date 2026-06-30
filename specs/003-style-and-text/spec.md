@@ -8,7 +8,7 @@
 
 **Input**: User description: "P1A-04 Style cơ bản và P1A-05 Text cơ bản"
 
-## User Scenarios & Testing *(mandatory)*
+## User Scenarios & Testing _(mandatory)_
 
 ### User Story 1 - Edit Shape Style (Priority: P1)
 
@@ -69,7 +69,7 @@ Style changes made via the detail panel persist across selections — when a use
 - What if multiple shapes are selected? (Out of scope for P1A; detail panel only handles single selection.)
 - What does "text align" mean for a text element with a single word? The alignment affects the anchor point of the text within the element's bounding box.
 
-## Requirements *(mandatory)*
+## Requirements _(mandatory)_
 
 ### Functional Requirements
 
@@ -87,7 +87,7 @@ Style changes made via the detail panel persist across selections — when a use
 - **FR-012**: Text property changes (fontSize, fontFamily, textAlign) MUST be committed via `patchElement` immediately.
 - **FR-013**: Style changes MUST NOT bypass the mutation pipeline (no direct store writes).
 - **FR-014**: Newly created text elements MUST have visible default content (`"Text"`) until the later in-place text editor can collect user-entered content.
-- **FR-015**: When a text element's `fontFamily` changes, the system MUST recompute the text's natural dimensions and expand `width` and/or `height` as needed so the rendered glyphs still fit inside the bbox.
+- **FR-015**: When a text element's `fontFamily` changes, the system MUST recompute the text's natural dimensions and set `width` and `height` to fit those dimensions, expanding for wider fonts and shrinking for narrower fonts.
 
 ### Key Entities
 
@@ -95,7 +95,7 @@ Style changes made via the detail panel persist across selections — when a use
 - **ElementProps**: The subset of element data holding all visual/style attributes.
 - **DetailPanel**: The UI component that reads the selected element's current props and dispatches `patchElement` on user input.
 
-## Success Criteria *(mandatory)*
+## Success Criteria _(mandatory)_
 
 ### Measurable Outcomes
 
@@ -109,7 +109,7 @@ Style changes made via the detail panel persist across selections — when a use
 
 - Multi-selection style editing is out of scope for P1A; the detail panel handles exactly one selected element at a time.
 - `strokeStyle` (solid/dashed/dotted) control is not required for P1A-04 (it is part of P1A and may be added if straightforward, but is not a blocker).
-- Full auto-sizing of text content edits is deferred to P1B-03; however, detail-panel font changes must keep the bbox fitted so property edits do not make text overflow.
+- Full auto-sizing of text content edits is deferred to P1B-03; however, detail-panel font changes must keep the bbox fitted to the measured or estimated text dimensions.
 - In-place editing text content is out of scope for P1A-05 (deferred to P1B-03); the creation tool uses visible default content so the new element can be seen and selected.
 - Font families offered in the selector are a fixed short list: `sans-serif`, `serif`, `monospace` (expandable later).
 - The detail panel is a floating/side panel rendered inside the Whiteboard component; its exact layout is determined in the plan.

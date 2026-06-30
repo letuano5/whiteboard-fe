@@ -80,7 +80,7 @@ A user double-clicks on a rectangle, ellipse, or other non-text element. No inli
 - **FR-010**: The inline editor MUST support multi-line text; the Enter key inserts a newline (natural `contenteditable` behavior).
 - **FR-012**: When the user resizes a text element with any resize handle (corner or edge), `props.fontSize` MUST adapt to the size change. Text resize behaves as uniform scaling: derive a scale from the dragged bbox ratio, update `fontSize = max(1, originalFontSize × scale)`, then adjust both bbox dimensions to the same scale so the bbox always fits the rendered text. Edge handles (top, bottom, left, right) MUST scale the font too; the non-dragged bbox dimension is expanded or shrunk as needed to keep the bbox proportional to the font.
 - **FR-013**: When the user changes `fontSize` via the detail panel, the element's `width` and `height` MUST scale by the same ratio (`newSize / oldSize`) so the bounding box stays proportional to the new font size.
-- **FR-014**: When the user changes `fontFamily` via the detail panel, the element's natural text dimensions MUST be measured or estimated for the new font and the bbox MUST expand as needed so the rendered text remains contained.
+- **FR-014**: When the user changes `fontFamily` via the detail panel, the element's natural text dimensions MUST be measured or estimated for the new font and the bbox MUST fit those dimensions, expanding for wider fonts and shrinking for narrower fonts.
 
 ### Key Entities
 
@@ -98,7 +98,7 @@ A user double-clicks on a rectangle, ellipse, or other non-text element. No inli
 - **SC-005**: Double-clicking a non-text element never opens the inline editor.
 - **SC-006**: Resizing a text element to 2× in either width or height results in `fontSize` exactly doubling and the other bbox dimension also doubling so the bbox stays fitted to the text.
 - **SC-007**: Changing `fontSize` from 16 to 32 in the detail panel causes the element's `width` and `height` to also double.
-- **SC-008**: Changing a text element from a narrower font to a wider font leaves no glyph overflow outside the selection bbox.
+- **SC-008**: Changing a text element from a narrower font to a wider font leaves no glyph overflow outside the selection bbox, and changing to a narrower font shrinks the bbox to the fitted text dimensions.
 
 ## Assumptions
 

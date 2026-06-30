@@ -112,4 +112,26 @@ describe('detail panel selection patch helpers', () => {
     expect(patch.width).toBeGreaterThan(element.width);
     expect(patch.height).toBeGreaterThan(element.height);
   });
+
+  it('shrinks text bounds when changing to a narrower font family', () => {
+    const element = makeElement({
+      type: 'text',
+      width: 200,
+      height: 80,
+      props: {
+        ...makeElement().props,
+        fontSize: 16,
+        fontFamily: 'monospace',
+        text: 'WWW',
+      },
+    });
+
+    const patch = buildTextFontFamilyPatch(element, 'serif');
+
+    expect(patch.props).toEqual({ ...element.props, fontFamily: 'serif' });
+    expect(patch.width).toBeCloseTo(31.84);
+    expect(patch.height).toBeCloseTo(23.2);
+    expect(patch.width).toBeLessThan(element.width);
+    expect(patch.height).toBeLessThan(element.height);
+  });
 });

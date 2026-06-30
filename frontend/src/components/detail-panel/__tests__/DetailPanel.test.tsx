@@ -272,6 +272,31 @@ describe('AC-12: fontFamily change updates text element', () => {
     expect(patch.width).toBeGreaterThan(el.width);
     expect(patch.height).toBeGreaterThan(el.height);
   });
+
+  // @covers AC-22 (003-style-and-text)
+  // @covers AC-10 (009-inline-text-edit)
+  it('calls patchElement with shrunken bbox when the new font is narrower', () => {
+    const el = makeElement({
+      id: 'el-1',
+      type: 'text',
+      width: 200,
+      height: 80,
+      props: { ...TEXT_PROPS, fontFamily: 'monospace', text: 'WWW' },
+    });
+    useElementsStore.setState({ elements: [el] });
+    useInteractionStore.getState().setSelectedIds(['el-1']);
+    render(<DetailPanel />);
+    fireEvent.change(screen.getByLabelText(/font family/i), { target: { value: 'serif' } });
+    const patch = patchSpy.mock.calls[0][1];
+    expect(patchSpy).toHaveBeenCalledWith(
+      'el-1',
+      expect.objectContaining({
+        props: { ...TEXT_PROPS, fontFamily: 'serif', text: 'WWW' },
+      }),
+    );
+    expect(patch.width).toBeLessThan(el.width);
+    expect(patch.height).toBeLessThan(el.height);
+  });
 });
 
 // @covers AC-16

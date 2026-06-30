@@ -307,7 +307,7 @@ applyRemoteElements(incoming: Element[])  // LWW theo version/versionNonce; bỏ
 **FR:** Tạo text, đặt size/font/align (auto-bbox để P1B).
 
 - [ ] Đổi `fontSize/fontFamily/textAlign` cập nhật render.
-- [ ] Đổi `fontFamily` phải nới bbox nếu font mới làm text rộng/cao hơn bbox hiện tại.
+- [ ] Đổi `fontFamily` phải đo lại text và cập nhật bbox khít theo font mới, bao gồm cả nới ra khi font rộng hơn và co lại khi font hẹp hơn.
 
 ### [P1A-06] Zoom + Pan + Infinite canvas
 
@@ -339,7 +339,7 @@ applyRemoteElements(incoming: Element[])  // LWW theo version/versionNonce; bỏ
 - [ ] Cải thiện zoom bằng trackpad: giảm sensitivity để zoom chậm và mượt hơn, không bị phóng quá nhanh.
 - [ ] Hỗ trợ pan bằng trackpad: khi scroll/lăn 2 chiều thì canvas di chuyển theo deltaX / deltaY; còn pinch hoặc Ctrl/Cmd + wheel thì vẫn xử lý là zoom.
 - [ ] Khi ở chế độ Select, hiển thị hint nhỏ: “Click chuột giữa để scroll canvas”.
- 
+
 ---
 
 ## 6. Phase 1B — Local editor polish
@@ -359,7 +359,7 @@ applyRemoteElements(incoming: Element[])  // LWW theo version/versionNonce; bỏ
 
 - [ ] Double-click mở ô chỉnh tại chỗ (contenteditable trong layer transform).
 - [ ] Blur/Esc commit vào `props.text` (qua `patchElement`); bbox co theo nội dung.
-- [ ] Auto-bbox cũng áp dụng cho đổi font trong detail panel: text không được tràn khỏi bbox sau khi đổi `fontFamily`.
+- [ ] Auto-bbox cũng áp dụng cho đổi font trong detail panel: bbox phải khít lại theo kích thước text sau khi đổi `fontFamily`, không để tràn và không giữ bbox cũ quá rộng.
 
 ### [P1B-04] Laser pointer (local, transient)
 

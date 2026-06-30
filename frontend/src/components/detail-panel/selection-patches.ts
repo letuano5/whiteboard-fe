@@ -61,8 +61,8 @@ export function buildTextFontFamilyPatch(
 
   return {
     props,
-    width: Math.max(1, element.width, measured.width),
-    height: Math.max(1, element.height, measured.height),
+    width: Math.max(1, measured.width),
+    height: Math.max(1, measured.height),
   };
 }
 
