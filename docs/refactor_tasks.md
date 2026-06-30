@@ -219,7 +219,7 @@ Parallel lane: E
 
 Goal: reduce `DetailPanel.tsx` by extracting repeated controls and selection patch logic.
 
-- [ ] E1. Create `frontend/src/components/detail-panel/` subcomponents.
+- [x] E1. Create `frontend/src/components/detail-panel/` subcomponents.
   - Target files:
     - `PanelShell.tsx`
     - `SectionTitle.tsx`
@@ -231,15 +231,15 @@ Goal: reduce `DetailPanel.tsx` by extracting repeated controls and selection pat
     - `StyleControls.tsx`
     - `TextControls.tsx`
 
-- [ ] E2. Extract selection patch helpers.
+- [x] E2. Extract selection patch helpers.
   - Target file:
     - `frontend/src/components/detail-panel/selection-patches.ts`
   - Expected result: single-select and multi-select patching are clear and tested.
 
-- [ ] E3. Keep `DetailPanel.tsx` as composition only.
+- [x] E3. Keep `DetailPanel.tsx` as composition only.
   - Expected result: component selects state, derives selected elements, and composes sections.
 
-- [ ] E4. Validate detail panel behavior.
+- [x] E4. Validate detail panel behavior.
   - Commands:
     - `pnpm --filter whiteboard-fe test -- DetailPanel`
     - `pnpm --filter whiteboard-fe typecheck`
