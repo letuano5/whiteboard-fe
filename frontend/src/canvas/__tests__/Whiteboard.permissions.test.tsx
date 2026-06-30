@@ -4,6 +4,7 @@ import Whiteboard from '../Whiteboard';
 import { useElementsStore } from '../../store/elements.store';
 import { useInteractionStore } from '../../store/interaction.store';
 import { useRoomAccessStore } from '../../rooms/room-access.store';
+import { useAuthStore } from '../../auth/auth.store';
 
 vi.mock('../layers/SvgLayer', () => ({
   default: () => <svg data-testid="svg-layer" />,
@@ -17,6 +18,12 @@ beforeEach(() => {
   useElementsStore.setState({ elements: [] });
   useInteractionStore.getState().reset();
   useRoomAccessStore.getState().resetRoomAccess();
+  useAuthStore.setState({
+    session: null,
+    status: 'anonymous',
+    errorMessage: null,
+    noticeMessage: null,
+  });
 });
 
 describe('Whiteboard role permissions', () => {
@@ -56,5 +63,23 @@ describe('Whiteboard role permissions', () => {
 
     expect(screen.getByTitle('Rectangle')).toBeInTheDocument();
     expect(screen.getByTitle('Text')).toBeInTheDocument();
+  });
+
+  it('shows account controls beside Share on saved boards', () => {
+    useRoomAccessStore.getState().setRoomAccess({
+      roomId: 'room-1',
+      role: 'owner',
+      baseRole: 'owner',
+      effectiveRole: 'owner',
+      visibility: 'private',
+      shareRevokedAt: null,
+      members: [],
+      invitations: [],
+    });
+
+    render(<Whiteboard mode="saved" />);
+
+    expect(screen.getByRole('button', { name: /share/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /login/i })).toBeInTheDocument();
   });
 });

@@ -81,7 +81,7 @@ export interface Presence {
 
 export type RoomRole = 'owner' | 'editor' | 'viewer';
 export type EffectiveRoomRole = RoomRole | 'none';
-export type RoomAccessMode = 'private' | 'link_view' | 'link_edit' | 'public_view';
+export type RoomAccessMode = 'private' | 'link_view' | 'link_edit';
 
 export interface RoomMemberSummary {
   userId: string;
@@ -119,6 +119,7 @@ export interface RoomAccessErrorPayload {
   code:
     | 'room-access/unauthenticated'
     | 'room-access/forbidden'
+    | 'room-access/user-not-found'
     | 'room-access/member-not-found'
     | 'room-access/invitation-not-found'
     | 'room-access/invalid-role';

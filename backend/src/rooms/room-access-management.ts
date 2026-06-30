@@ -88,30 +88,18 @@ export async function inviteRoomUser(
     select: { id: true },
   });
 
-  if (existingUser) {
-    await db.roomMember.upsert({
-      where: { roomId_userId: { roomId, userId: existingUser.id } },
-      create: { roomId, userId: existingUser.id, role },
-      update: { role },
-    });
-  } else {
-    await db.roomInvitation.upsert({
-      where: { roomId_email: { roomId, email: normalizedEmail } },
-      create: {
-        roomId,
-        email: normalizedEmail,
-        role,
-        invitedBy: actor.id,
-      },
-      update: {
-        role,
-        invitedBy: actor.id,
-        revokedAt: null,
-        claimedBy: null,
-        claimedAt: null,
-      },
-    });
+  if (!existingUser) {
+    throw new RoomAccessError(
+      'room-access/user-not-found',
+      'No user with that email exists in this workspace.',
+    );
   }
+
+  await db.roomMember.upsert({
+    where: { roomId_userId: { roomId, userId: existingUser.id } },
+    create: { roomId, userId: existingUser.id, role },
+    update: { role },
+  });
 
   return resolveRoomAccess(db, roomId, actor);
 }

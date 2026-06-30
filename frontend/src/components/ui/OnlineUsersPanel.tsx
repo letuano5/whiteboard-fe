@@ -1,9 +1,12 @@
 import { useInteractionStore } from '../../store/interaction.store';
 import { LOCAL_PRESENCE } from '../../sync/presence';
+import { useRoomAccessStore } from '../../rooms/room-access.store';
 
 export default function OnlineUsersPanel() {
   const remoteCursors = useInteractionStore((s) => s.remoteCursors);
+  const role = useRoomAccessStore((s) => s.effectiveRole);
   const peers = [...remoteCursors.values()];
+  const selfName = role === 'owner' ? 'Owner' : LOCAL_PRESENCE.name;
 
   return (
     <div
@@ -16,7 +19,7 @@ export default function OnlineUsersPanel() {
       }}
     >
       {/* Local user — always shown first */}
-      <UserBadge name={LOCAL_PRESENCE.name} color={LOCAL_PRESENCE.color} isSelf />
+      <UserBadge name={selfName} color={LOCAL_PRESENCE.color} isSelf />
       {/* Remote peers */}
       {peers.map((p) => (
         <UserBadge key={p.sessionId} name={p.name} color={p.color} />
@@ -25,15 +28,7 @@ export default function OnlineUsersPanel() {
   );
 }
 
-function UserBadge({
-  name,
-  color,
-  isSelf,
-}: {
-  name: string;
-  color: string;
-  isSelf?: boolean;
-}) {
+function UserBadge({ name, color, isSelf }: { name: string; color: string; isSelf?: boolean }) {
   return (
     <div
       style={{
@@ -59,9 +54,7 @@ function UserBadge({
       />
       <span style={{ color: '#333', fontWeight: isSelf ? 600 : 400 }}>
         {name}
-        {isSelf && (
-          <span style={{ color: '#999', fontWeight: 400, marginLeft: 4 }}>(you)</span>
-        )}
+        {isSelf && <span style={{ color: '#999', fontWeight: 400, marginLeft: 4 }}>(you)</span>}
       </span>
     </div>
   );

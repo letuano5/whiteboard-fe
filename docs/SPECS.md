@@ -701,30 +701,30 @@ Clone Repo chính thức tại: https://github.com/supabase/supabase/tree/master
 ### [P4-02] Sharing, public/private access, invited users
 
 - [ ] Room hỗ trợ access mode:
-  - `private`: chỉ owner và invited members được vào.
-  - `link_view`: ai có link vào được với quyền viewer.
-  - `link_edit`: ai có link vào được với quyền editor, trừ khi room bị locked hoặc editor slots đã đầy.
-  - `public_view`: room có thể xem công khai, mutation vẫn cần role editor/owner.
-- [ ] Owner có UI bật/tắt share link, copy link, đổi link mode, và revoke link.
-- [ ] Owner có nút `Manage access`; bấm vào mở modal quản lý quyền với backdrop tối nền phía sau.
-- [ ] Modal quản lý quyền hiển thị members hiện tại, role owner/editor/viewer, trạng thái pending invite nếu có.
-- [ ] Owner mời user theo email với role `editor` hoặc `viewer`.
-- [ ] Owner đổi role member giữa `editor` và `viewer`, remove member, và revoke pending invite.
+  - `private`: chỉ owner và added members được vào.
+  - `link_view`: public viewer — ai có link vào được với quyền viewer.
+  - `link_edit`: public editor — ai có link vào được với quyền editor, trừ khi room bị locked hoặc editor slots đã đầy.
+- [ ] Owner có một nút `Share`; bấm vào mở modal với backdrop tối nền phía sau.
+- [ ] Modal Share có 2 nhóm: add email + set role cho user, và link access (`private`, `link_view`, `link_edit`) kèm copy link.
+- [ ] Modal Share hiển thị members hiện tại và role owner/editor/viewer.
+- [ ] Owner add user đã tồn tại theo email với role `editor` hoặc `viewer`; email chưa có account phải bị reject rõ ràng, không tạo pending invite.
+- [ ] Owner đổi role member giữa `editor` và `viewer`, remove member.
 - [ ] Bản P4 đầu không hỗ trợ transfer owner; không cho owner tự hạ role hoặc remove chính mình.
-- [ ] Nếu email chưa có account, tạo pending invitation theo email; khi user đăng ký/login bằng email đó thì claim invite.
 - [ ] Explicit `RoomMember.role` ưu tiên hơn link role. Lock/capacity có thể hạ quyền thành `effectiveRole` thấp hơn.
-- [BE] Server quyết định `baseRole` và `effectiveRole` khi join dựa trên `RoomMember.role`, pending invite, `visibility`, lock state, và room capacity.
+- [BE] Server quyết định `baseRole` và `effectiveRole` khi join dựa trên `RoomMember.role`, `visibility`, lock state, và room capacity.
 - [BE] Tất cả HTTP/socket mutation phải check permission server-side; UI chỉ là lớp UX.
 - [BE] Non-owner gọi API/socket quản lý quyền phải bị reject dù UI bị ẩn.
 
 **Acceptance criteria:**
 
-- [ ] Owner mở manage-access modal, add email, đổi role, remove member thành công.
+- [ ] Owner mở Share modal, add email của user tồn tại, đổi role, remove member thành công.
+- [ ] Add email chưa tồn tại bị reject và không tạo pending invitation.
+- [ ] Mở link room private nhưng không có quyền phải thấy lỗi rõ ràng; app không được render như local/new empty board.
+- [ ] Chưa login thì góc phải hiện `Login`; đã login thì hiện avatar tròn, bấm avatar có ít nhất action `Sign out`, nằm bên phải nút `Share`.
 - [ ] Editor/viewer không thấy action quản lý quyền hoặc thấy disabled; nếu gọi lén vẫn bị server reject.
-- [ ] Existing invited user vào room đúng role sau khi được add bằng email.
-- [ ] Pending invited email được claim khi user login/register cùng email.
+- [ ] Existing user vào room đúng role sau khi được add bằng email.
 - [ ] Viewer không thấy toolbar edit và server reject `ELEMENT_UPDATE`.
-- [ ] Private room từ chối user không phải owner/member/invitee.
+- [ ] Private room từ chối user không phải owner/member.
 - [ ] `link_view` cho người có link vào xem với `effectiveRole = 'viewer'`.
 - [ ] `link_edit` cho người có link vào edit nếu room không locked và editor slot còn.
 - [ ] Revoke link làm link cũ mất quyền truy cập.

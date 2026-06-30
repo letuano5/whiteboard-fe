@@ -29,6 +29,7 @@ interface RoomAccessHttpError {
     code:
       | 'room-access/unauthenticated'
       | 'room-access/forbidden'
+      | 'room-access/user-not-found'
       | 'room-access/member-not-found'
       | 'room-access/invitation-not-found'
       | 'room-access/invalid-role'

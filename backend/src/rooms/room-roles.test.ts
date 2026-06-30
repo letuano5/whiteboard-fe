@@ -13,7 +13,7 @@ const editor = makeUser('editor', 'editor@example.com');
 const outsider = makeUser('outsider', 'outsider@example.com');
 
 describe('resolveRoomAccess', () => {
-  it('rejects private rooms for users without membership or a claimable invite', async () => {
+  it('rejects private rooms for users without membership', async () => {
     // @covers AC-6
     const db = makeDb([makeRoom({ visibility: 'private' })]);
 
@@ -47,7 +47,7 @@ describe('resolveRoomAccess', () => {
     });
   });
 
-  it('claims a pending invite when the authenticated user email matches', async () => {
+  it('does not claim legacy pending invitations while resolving private access', async () => {
     // @covers AC-4
     const db = makeDb([
       makeRoom({
@@ -67,25 +67,11 @@ describe('resolveRoomAccess', () => {
           },
         ],
       }),
-      makeRoom({
-        visibility: 'private',
-        members: [makeMember(owner, 'owner'), makeMember(outsider, 'editor')],
-      }),
     ]);
 
-    await expect(resolveRoomAccess(db, 'room-1', outsider)).resolves.toMatchObject({
-      baseRole: 'editor',
-      effectiveRole: 'editor',
-    });
-    expect(db.roomMember.upsert).toHaveBeenCalledWith({
-      where: { roomId_userId: { roomId: 'room-1', userId: outsider.id } },
-      create: { roomId: 'room-1', userId: outsider.id, role: 'editor' },
-      update: { role: 'editor' },
-    });
-    expect(db.roomInvitation.update).toHaveBeenCalledWith({
-      where: { id: 'invite-1' },
-      data: { claimedBy: outsider.id, claimedAt: expect.any(Date) },
-    });
+    await expect(resolveRoomAccess(db, 'room-1', outsider)).rejects.toThrow('Room access denied.');
+    expect(db.roomMember.upsert).not.toHaveBeenCalled();
+    expect(db.roomInvitation.update).not.toHaveBeenCalled();
   });
 });
 
@@ -106,6 +92,19 @@ describe('room access management', () => {
       create: { roomId: 'room-1', userId: editor.id, role: 'viewer' },
       update: { role: 'viewer' },
     });
+  });
+
+  it('rejects adding an email that is not an existing user', async () => {
+    // @covers AC-1
+    const db = makeDb([makeRoom({ members: [makeMember(owner, 'owner')] })]);
+    db.appUser.findFirst = vi.fn().mockResolvedValue(null);
+
+    await expect(
+      inviteRoomUser(db, 'room-1', owner, 'missing@example.com', 'viewer'),
+    ).rejects.toThrow('No user with that email exists in this workspace.');
+
+    expect(db.roomMember.upsert).not.toHaveBeenCalled();
+    expect(db.roomInvitation.upsert).not.toHaveBeenCalled();
   });
 
   it('rejects access management from non-owners', async () => {

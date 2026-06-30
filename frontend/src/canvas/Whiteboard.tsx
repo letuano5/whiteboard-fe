@@ -9,7 +9,7 @@ import DetailPanel from '../components/detail-panel/DetailPanel';
 import BackToContent from '../components/back-to-content/BackToContent';
 import ShareLinkButton from '../components/ShareLinkButton';
 import OnlineUsersPanel from '../components/ui/OnlineUsersPanel';
-import RoomMembersPanel from '../rooms/RoomMembersPanel';
+import { AuthMenu } from '../auth/AuthMenu';
 import { LoginToSave } from '../local-board/LoginToSave';
 import { canEditRoom, useRoomAccessStore } from '../rooms/room-access.store';
 import { useSpacePanMode } from './hooks/use-space-pan-mode';
@@ -104,9 +104,11 @@ export default function Whiteboard({ mode = 'saved' }: WhiteboardProps) {
           <LoginToSave />
         ) : (
           <>
-            <ShareLinkButton />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <ShareLinkButton />
+              <AuthMenu />
+            </div>
             <OnlineUsersPanel />
-            <RoomMembersPanel />
           </>
         )}
       </div>

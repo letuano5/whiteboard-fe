@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import App from '../App';
+import { useAuthStore } from '../../auth/auth.store';
+import { useRoomAccessStore } from '../../rooms/room-access.store';
 
 // Mock heavy canvas components to keep routing tests fast
 vi.mock('../../canvas/Whiteboard', () => ({
@@ -31,6 +33,13 @@ function setLocation(pathname: string, search: string) {
 
 beforeEach(() => {
   setLocation('/', '');
+  useAuthStore.setState({
+    session: null,
+    status: 'anonymous',
+    errorMessage: null,
+    noticeMessage: null,
+  });
+  useRoomAccessStore.getState().resetRoomAccess();
 });
 
 describe('App routing — AC-1', () => {
@@ -48,6 +57,20 @@ describe('App routing — AC-3', () => {
     setLocation('/', '?room=test-room-id');
     render(<App />);
     expect(screen.getByTestId('whiteboard')).toHaveAttribute('data-mode', 'saved');
+  });
+
+  it('shows an access error instead of a saved canvas when a private room rejects the user', () => {
+    setLocation('/', '?room=private-room-id');
+    useRoomAccessStore.getState().setRoomAccessError({
+      code: 'room-access/forbidden',
+      message: 'Room access denied.',
+    });
+
+    render(<App />);
+
+    expect(screen.queryByTestId('whiteboard')).not.toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent('Room access denied.');
+    expect(screen.getByRole('button', { name: /login/i })).toBeInTheDocument();
   });
 });
 

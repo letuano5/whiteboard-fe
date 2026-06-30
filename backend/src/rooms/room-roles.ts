@@ -12,7 +12,6 @@ import {
   hasSharingDelegate,
   loadRoomWithAccess,
   makeLegacyEphemeralRoom,
-  normalizeEmail,
   type RoomAccessRecord,
   type RoomInvitationRecord,
 } from './room-access-records.js';
@@ -22,9 +21,7 @@ export function isRoomRole(value: string): value is RoomRole {
 }
 
 export function isRoomAccessMode(value: string): value is RoomAccessMode {
-  return (
-    value === 'private' || value === 'link_view' || value === 'link_edit' || value === 'public_view'
-  );
+  return value === 'private' || value === 'link_view' || value === 'link_edit';
 }
 
 export function canMutateRoom(role: EffectiveRoomRole): boolean {
@@ -40,14 +37,7 @@ export async function resolveRoomAccess(
     return toAccessPayload(makeLegacyEphemeralRoom(roomId), 'editor', 'editor');
   }
 
-  let room = await loadRoomWithAccess(db, roomId);
-
-  if (user) {
-    const claimed = await claimPendingInvitation(db, room, user);
-    if (claimed) {
-      room = await loadRoomWithAccess(db, roomId);
-    }
-  }
+  const room = await loadRoomWithAccess(db, roomId);
 
   const { baseRole, fromLink } = resolveBaseRole(room, user);
   if (baseRole === 'none') {
@@ -74,6 +64,7 @@ export class RoomAccessError extends Error {
     public readonly code:
       | 'room-access/unauthenticated'
       | 'room-access/forbidden'
+      | 'room-access/user-not-found'
       | 'room-access/member-not-found'
       | 'room-access/invitation-not-found'
       | 'room-access/invalid-role',
@@ -82,33 +73,6 @@ export class RoomAccessError extends Error {
     super(message);
     this.name = 'RoomAccessError';
   }
-}
-
-async function claimPendingInvitation(
-  db: PrismaClient,
-  room: RoomAccessRecord,
-  user: AppUser,
-): Promise<boolean> {
-  const email = normalizeEmail(user.email);
-  if (!email) return false;
-
-  const invitation = room.invitations.find((item) => item.email === email);
-  if (!invitation) return false;
-
-  await db.roomMember.upsert({
-    where: { roomId_userId: { roomId: room.id, userId: user.id } },
-    create: { roomId: room.id, userId: user.id, role: normalizeEditableRole(invitation.role) },
-    update: { role: normalizeEditableRole(invitation.role) },
-  });
-  await db.roomInvitation.update({
-    where: { id: invitation.id },
-    data: {
-      claimedBy: user.id,
-      claimedAt: new Date(),
-    },
-  });
-
-  return true;
 }
 
 function resolveBaseRole(
@@ -127,7 +91,7 @@ function resolveBaseRole(
   }
 
   const visibility = normalizeVisibility(room.visibility);
-  if (visibility === 'link_view' || visibility === 'public_view') {
+  if (visibility === 'link_view') {
     return { baseRole: 'viewer', fromLink: true };
   }
   if (visibility === 'link_edit') {

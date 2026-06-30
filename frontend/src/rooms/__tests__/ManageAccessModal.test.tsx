@@ -5,14 +5,14 @@ import { useRoomAccessStore } from '../room-access.store';
 import {
   inviteRoomUser,
   removeRoomMember,
-  revokeRoomInvitation,
+  setRoomShareMode,
   updateRoomMemberRole,
 } from '../room-access-api';
 
 vi.mock('../room-access-api', () => ({
   inviteRoomUser: vi.fn(),
   removeRoomMember: vi.fn(),
-  revokeRoomInvitation: vi.fn(),
+  setRoomShareMode: vi.fn(),
   updateRoomMemberRole: vi.fn(),
 }));
 
@@ -39,14 +39,7 @@ const ownerAccess = {
       role: 'editor' as const,
     },
   ],
-  invitations: [
-    {
-      id: 'invite-1',
-      email: 'pending@example.com',
-      role: 'viewer' as const,
-      status: 'pending' as const,
-    },
-  ],
+  invitations: [],
 };
 
 beforeEach(() => {
@@ -56,37 +49,39 @@ beforeEach(() => {
   vi.mocked(inviteRoomUser).mockResolvedValue(ownerAccess);
   vi.mocked(updateRoomMemberRole).mockResolvedValue(ownerAccess);
   vi.mocked(removeRoomMember).mockResolvedValue(ownerAccess);
-  vi.mocked(revokeRoomInvitation).mockResolvedValue(ownerAccess);
+  vi.mocked(setRoomShareMode).mockResolvedValue(ownerAccess);
 });
 
 describe('ManageAccessModal', () => {
-  it('renders a modal over a dark backdrop with member and pending invite controls', () => {
+  it('renders a Share modal with member controls and three link access modes', () => {
     // @covers AC-1
     render(<ManageAccessModal roomId="room-1" onClose={vi.fn()} />);
 
-    expect(screen.getByRole('dialog', { name: /manage access/i })).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: /share/i })).toBeInTheDocument();
     expect(screen.getByText('Member')).toBeInTheDocument();
-    expect(screen.getByText('pending@example.com')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Private' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Public viewer' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Public editor' })).toBeInTheDocument();
   });
 
-  it('invites email, changes role, removes member, and revokes pending invite', async () => {
+  it('adds email, changes role, removes member, and updates link access', async () => {
     // @covers AC-1
     render(<ManageAccessModal roomId="room-1" onClose={vi.fn()} />);
 
-    fireEvent.change(screen.getByLabelText('Invite email'), {
+    fireEvent.change(screen.getByLabelText('Add email'), {
       target: { value: 'new@example.com' },
     });
     fireEvent.change(screen.getByLabelText('Invite role'), { target: { value: 'editor' } });
-    fireEvent.submit(screen.getByRole('button', { name: 'Invite' }).closest('form')!);
+    fireEvent.submit(screen.getByRole('button', { name: 'Add' }).closest('form')!);
     fireEvent.change(screen.getByLabelText('Role for Member'), { target: { value: 'viewer' } });
     fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Revoke' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Public editor' }));
 
     await waitFor(() => {
       expect(inviteRoomUser).toHaveBeenCalledWith('room-1', 'new@example.com', 'editor');
       expect(updateRoomMemberRole).toHaveBeenCalledWith('room-1', 'member-1', 'viewer');
       expect(removeRoomMember).toHaveBeenCalledWith('room-1', 'member-1');
-      expect(revokeRoomInvitation).toHaveBeenCalledWith('room-1', 'invite-1');
+      expect(setRoomShareMode).toHaveBeenCalledWith('room-1', 'link_edit');
     });
   });
 });

@@ -17,6 +17,7 @@ interface RoomAccessState {
   shareRevokedAt: string | null;
   members: RoomMemberSummary[];
   invitations: RoomInvitationSummary[];
+  errorCode: RoomAccessErrorPayload['code'] | null;
   errorMessage: string | null;
   setRoomAccess: (payload: RoomAccessInput) => void;
   setRoomAccessError: (payload: RoomAccessErrorPayload) => void;
@@ -32,6 +33,7 @@ export const useRoomAccessStore = create<RoomAccessState>((set) => ({
   shareRevokedAt: null,
   members: [],
   invitations: [],
+  errorCode: null,
   errorMessage: null,
   setRoomAccess: (payload) => {
     const normalized = normalizeRoomAccess(payload);
@@ -44,10 +46,11 @@ export const useRoomAccessStore = create<RoomAccessState>((set) => ({
       shareRevokedAt: normalized.shareRevokedAt,
       members: normalized.members,
       invitations: normalized.invitations,
+      errorCode: null,
       errorMessage: null,
     });
   },
-  setRoomAccessError: (payload) => set({ errorMessage: payload.message }),
+  setRoomAccessError: (payload) => set({ errorCode: payload.code, errorMessage: payload.message }),
   resetRoomAccess: () =>
     set({
       roomId: null,
@@ -58,6 +61,7 @@ export const useRoomAccessStore = create<RoomAccessState>((set) => ({
       shareRevokedAt: null,
       members: [],
       invitations: [],
+      errorCode: null,
       errorMessage: null,
     }),
 }));
