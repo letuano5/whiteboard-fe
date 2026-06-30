@@ -531,7 +531,13 @@ applyRemoteElements(incoming: Element[])  // LWW theo version/versionNonce; bỏ
 
 ### [P3A-04] Delta push theo clock
 
-- [BE] Sau mỗi `ELEMENT_UPDATE` nhận vào: tăng `documentClock` một lần cho cả batch, gán `recordClock = documentClock`; persist throttled vào DB.
+- [BE] `ELEMENT_UPDATE` vào server phải merge bằng cùng comparator LWW dùng ở client:
+  `version` cao hơn thắng; nếu bằng thì `versionNonce` nhỏ hơn thắng. Helper comparator nằm trong
+  `@vdt/shared` để FE/BE không lệch luật.
+- [BE] Chỉ các element thắng comparator mới được ghi vào in-memory `roomElements`, broadcast cho
+  peers, và persist throttled vào DB. Nếu toàn batch bị discard, không tăng `documentClock`.
+- [BE] Sau mỗi `ELEMENT_UPDATE` có ít nhất một element được accept: tăng `documentClock` một lần
+  cho cả batch accepted, gán `recordClock = documentClock`; persist throttled vào DB.
 - [ ] Client không cần track `version đã gửi` per element — clock trên server quản lý.
 - [ ] `lastServerClock` client cập nhật mỗi khi nhận ack hoặc patch từ server.
 - [BE] Bỏ full-resync định kỳ — clock-based diff đã đủ. Nếu phát hiện drift, thêm lại ở P5-01a.

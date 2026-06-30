@@ -1,4 +1,4 @@
-import type { Element } from '../types/shared';
+import { doesIncomingElementWin, type Element } from '../types/shared';
 import { useElementsStore } from '../store/elements.store';
 import { useInteractionStore } from '../store/interaction.store';
 import { dispatchMutationEvent } from '../store/mutation-pipeline';
@@ -34,10 +34,7 @@ export function applyRemoteElements(incoming: Element[]): void {
     if (!current) {
       toApply.push(el);
     } else {
-      const wins =
-        el.version > current.version ||
-        (el.version === current.version && el.versionNonce < current.versionNonce);
-      if (wins) {
+      if (doesIncomingElementWin(el, current)) {
         toApply.push(el);
         before.push(current);
       }

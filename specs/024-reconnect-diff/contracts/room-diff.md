@@ -24,6 +24,10 @@ server determines its tombstone history is sufficient for an incremental diff.
 3. Update `_lastServerClock = documentClock`.
 4. Emit one `ELEMENT_UPDATE` for the contents of `_pendingQueue` if non-empty, then clear the queue.
 
+The server MUST handle that replayed `ELEMENT_UPDATE` with the shared whole-element LWW comparator
+from `@vdt/shared`. Only accepted elements are broadcast/persisted; fully discarded batches do not
+advance `documentClock`.
+
 ---
 
 ## Extended Event: `join-room` (existing)

@@ -87,9 +87,9 @@ is applied, then no `ELEMENT_UPDATE` event is emitted from B.
 **Criterion**: Given client B's pending changes and the server diff both modify the same element
 (same element ID), when B's pending changes are re-emitted after the diff, then Last-Write-Wins
 via `version + versionNonce` determines the final state, and the result is consistent across all
-clients.
+clients and the server hot state. The frontend and backend use the same shared comparator.
 
-**Tags**: `frontend`, `P1`
+**Tags**: `frontend`, `backend`, `P1`
 
 ---
 

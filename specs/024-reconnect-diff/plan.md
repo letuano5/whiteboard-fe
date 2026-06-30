@@ -42,7 +42,7 @@ joins (lastServerClock = 0). Must not block the socket event loop for reconnect 
 | # | Principle | Status | Notes |
 |---|-----------|--------|-------|
 | I | Unified Element Store — renderer holds no state | ✅ | No renderer changes; diff applied via existing store actions |
-| II | Element Versioning | ✅ | Diff carries full Element objects; LWW already implemented |
+| II | Element Versioning | ✅ | Diff carries full Element objects; FE/BE reuse the shared LWW comparator |
 | III | Shared Camera Transform | ✅ | No camera changes |
 | IV | ShapeUtil Strategy | ✅ | No shape-type logic |
 | V | Sync Data Not Renderer — only `Element[]` crosses boundaries | ✅ | ROOM_DIFF carries `Element[]` + id list only |
@@ -136,9 +136,21 @@ the DB changed set (to capture not-yet-autosaved mutations).
 
 **Rationale**: Per-element clock (`recordClock`, `deletedClock`) is only available in the DB.
 In-memory elements have no individual timestamps. The overlay step conservatively adds any
-element that is in memory but not covered by the DB diff; LWW on the client handles duplicates.
-The autosave runs every 5 s; brief reconnects (< 5 s) may produce a non-empty overlay; longer
-reconnects will have a near-empty overlay.
+element that is in memory but not covered by the DB diff; the shared LWW comparator handles
+duplicates on both client and server. The autosave runs every 5 s; brief reconnects (< 5 s) may
+produce a non-empty overlay; longer reconnects will have a near-empty overlay.
+
+### R-05 — Shared LWW comparator on replay
+
+**Decision**: Put the whole-element comparator in `@vdt/shared` and use it from both
+`applyRemoteElements` and the backend `ELEMENT_UPDATE` hot path. The server accepts only elements
+that are new or beat the current hot-state element by `(version, versionNonce)`, then broadcasts
+and persists only those accepted elements.
+
+**Rationale**: Replayed pending changes can arrive after a reconnect diff has already delivered a
+competing same-version edit. If the backend accepts replayed payloads by arrival order, server/DB
+state can diverge from clients that applied the LWW comparator. Sharing the comparator keeps
+`documentClock` as a sync cursor, not a conflict-resolution tie-breaker.
 
 **Alternatives considered**:
 - Flush (autosave) before computing diff: adds latency to every reconnect; complicates

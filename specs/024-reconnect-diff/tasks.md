@@ -18,6 +18,9 @@
 **Purpose**: Extend the shared type contract so both packages can compile against the new event constant.
 
 - [x] T001 Add `ROOM_DIFF: 'room-diff'` to the `WS_EVENTS` object in `packages/shared/src/index.ts`; keep it alphabetically ordered with existing constants.
+- [x] T001a Add a shared whole-element LWW comparator to `packages/shared/src/index.ts`: higher
+  `version` wins; when versions tie, lower `versionNonce` wins. Frontend and backend must import
+  this helper rather than duplicating comparator logic.
 
 **Checkpoint**: `pnpm typecheck` passes from root (no new import errors in backend or frontend).
 
@@ -161,7 +164,15 @@
   - After `ROOM_DIFF` applied → `ELEMENT_UPDATE` emitted with queued elements; queue cleared (AC-5).
   - After wipe-all `ROOM_SNAPSHOT` while reconnecting → queue cleared; no `ELEMENT_UPDATE` emitted (spec FR-008).
   - No pending changes → `ROOM_DIFF` handled without any `ELEMENT_UPDATE` emitted (AC-6).
-  - AC-7 (LWW conflict): Simulate ROOM_DIFF carrying element X at version 5; `_pendingQueue` contains element X at version 7 (higher). After diff applied, replay emits version 7; both versions coexist via LWW (server will apply the higher one). Verify that no queue item is silently dropped.
+  - AC-7 (LWW conflict): Simulate ROOM_DIFF carrying element X at version 5; `_pendingQueue` contains element X at version 7 (higher). After diff applied, replay emits version 7. Backend `ELEMENT_UPDATE` handling applies the same shared comparator and commits only elements that beat current hot state. Verify that no queue item is silently dropped by the client.
+
+- [x] T014a Update backend `ELEMENT_UPDATE` handling in `backend/src/index.ts` to import the
+  shared comparator and accept only new/winning elements into `roomElements`; broadcast only the
+  accepted subset; if the accepted subset is empty, do not advance `documentClock` and do not mark
+  the room dirty.
+
+- [x] T014b Add backend tests proving same-version lower nonce wins, same-version higher nonce is
+  discarded without clock advancement, and mixed batches broadcast only accepted elements.
 
 **Checkpoint**: All tests green. Manual Scenario 2 in `quickstart.md` validated.
 

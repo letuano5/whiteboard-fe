@@ -74,7 +74,9 @@ function makeFakeIo() {
   }
 
   function getHandler(socket: FakeSocket, event: string) {
-    const onCalls = (socket.on as ReturnType<typeof vi.fn>).mock.calls as Array<[string, (...args: unknown[]) => unknown]>;
+    const onCalls = (socket.on as ReturnType<typeof vi.fn>).mock.calls as Array<
+      [string, (...args: unknown[]) => unknown]
+    >;
     const entry = onCalls.find((c) => c[0] === event);
     if (!entry) throw new Error(`No handler registered for '${event}'`);
     return entry[1];
@@ -205,6 +207,7 @@ describe('AC-8: hot path — element-update does not block on persistence', () =
     const handler = getHandler(socket, WS_EVENTS.ELEMENT_UPDATE) as (payload: {
       roomId: string;
       elements: Element[];
+      sessionId?: string;
     }) => void;
 
     const v1 = makeElement({ id: 'el-X', version: 1 });
@@ -215,5 +218,128 @@ describe('AC-8: hot path — element-update does not block on persistence', () =
 
     // Latest version must win (last-write-wins)
     expect(roomElements.get(roomId)?.get('el-X')).toEqual(v2);
+  });
+
+  it('uses the shared LWW nonce tie-breaker for same-version updates', () => {
+    const autosave = createAutosaveManager({
+      delayMs: 60000,
+      getRoomElements: (id) => {
+        const m = roomElements.get(id);
+        return m ? [...m.values()] : [];
+      },
+      saveRoomElements: vi.fn().mockResolvedValue({}),
+    });
+
+    const { ioServer, makeSocket, connect, getHandler } = makeFakeIo();
+    const roomId = 'room-lww-nonce';
+    roomClocks.set(roomId, 0);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    createWhiteboardServer(ioServer as any, { roomPresence, roomElements, roomClocks, autosave });
+
+    const socket = makeSocket(roomId);
+    connect(socket);
+
+    const handler = getHandler(socket, WS_EVENTS.ELEMENT_UPDATE) as (payload: {
+      roomId: string;
+      elements: Element[];
+      sessionId?: string;
+    }) => void;
+
+    const current = makeElement({ id: 'el-LWW', version: 2, versionNonce: 700, x: 10 });
+    const winner = makeElement({ id: 'el-LWW', version: 2, versionNonce: 100, x: 99 });
+
+    handler({ roomId, elements: [current] });
+    handler({ roomId, elements: [winner] });
+
+    expect(roomElements.get(roomId)?.get('el-LWW')).toEqual(winner);
+  });
+
+  it('ignores same-version updates with a higher nonce and does not advance documentClock', () => {
+    const autosave = createAutosaveManager({
+      delayMs: 60000,
+      getRoomElements: (id) => {
+        const m = roomElements.get(id);
+        return m ? [...m.values()] : [];
+      },
+      saveRoomElements: vi.fn().mockResolvedValue({}),
+    });
+
+    const { ioServer, makeSocket, connect, getHandler } = makeFakeIo();
+    const roomId = 'room-lww-discard';
+    roomClocks.set(roomId, 5);
+    roomElements.set(
+      roomId,
+      new Map([
+        ['el-discard', makeElement({ id: 'el-discard', version: 4, versionNonce: 100, x: 10 })],
+      ]),
+    );
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    createWhiteboardServer(ioServer as any, { roomPresence, roomElements, roomClocks, autosave });
+
+    const socket = makeSocket(roomId);
+    connect(socket);
+
+    const handler = getHandler(socket, WS_EVENTS.ELEMENT_UPDATE) as (payload: {
+      roomId: string;
+      elements: Element[];
+    }) => void;
+
+    const loser = makeElement({ id: 'el-discard', version: 4, versionNonce: 900, x: 999 });
+    handler({ roomId, elements: [loser] });
+
+    expect(roomElements.get(roomId)?.get('el-discard')?.x).toBe(10);
+    expect(roomClocks.get(roomId)).toBe(5);
+
+    const emitCalls = (socket.to(roomId).emit as ReturnType<typeof vi.fn>).mock.calls as Array<
+      [string, unknown]
+    >;
+    expect(emitCalls.find((c) => c[0] === WS_EVENTS.ELEMENT_UPDATE)).toBeUndefined();
+  });
+
+  it('broadcasts only accepted elements from a mixed LWW batch', () => {
+    const autosave = createAutosaveManager({
+      delayMs: 60000,
+      getRoomElements: (id) => {
+        const m = roomElements.get(id);
+        return m ? [...m.values()] : [];
+      },
+      saveRoomElements: vi.fn().mockResolvedValue({}),
+    });
+
+    const { ioServer, makeSocket, connect, getHandler } = makeFakeIo();
+    const roomId = 'room-lww-mixed';
+    roomClocks.set(roomId, 0);
+    roomElements.set(
+      roomId,
+      new Map([
+        ['accepted', makeElement({ id: 'accepted', version: 1, versionNonce: 500, x: 0 })],
+        ['rejected', makeElement({ id: 'rejected', version: 3, versionNonce: 100, x: 0 })],
+      ]),
+    );
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    createWhiteboardServer(ioServer as any, { roomPresence, roomElements, roomClocks, autosave });
+
+    const socket = makeSocket(roomId);
+    connect(socket);
+
+    const handler = getHandler(socket, WS_EVENTS.ELEMENT_UPDATE) as (payload: {
+      roomId: string;
+      elements: Element[];
+      sessionId?: string;
+    }) => void;
+
+    const accepted = makeElement({ id: 'accepted', version: 2, versionNonce: 900, x: 50 });
+    const rejected = makeElement({ id: 'rejected', version: 3, versionNonce: 900, x: 999 });
+    handler({ roomId, elements: [accepted, rejected], sessionId: 'session-1' });
+
+    expect(roomElements.get(roomId)?.get('accepted')).toEqual(accepted);
+    expect(roomElements.get(roomId)?.get('rejected')?.x).toBe(0);
+
+    const emitCalls = (socket.to(roomId).emit as ReturnType<typeof vi.fn>).mock.calls as Array<
+      [string, unknown]
+    >;
+    const updateCall = emitCalls.find((c) => c[0] === WS_EVENTS.ELEMENT_UPDATE);
+    expect(updateCall).toBeDefined();
+    expect((updateCall![1] as { elements: Element[] }).elements).toEqual([accepted]);
   });
 });
