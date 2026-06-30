@@ -547,13 +547,36 @@ applyRemoteElements(incoming: Element[])  // LWW theo version/versionNonce; bỏ
 
 ### [P3B-00] Supabase Auth integration foundation
 
-- [ ] Chọn Supabase self-hosted làm auth provider đầu tiên, nhưng backend phải đi qua abstraction kiểu `AuthVerifier`/provider adapter; domain code không phụ thuộc trực tiếp vào Supabase SDK/API.
+P3B-00 là một cụm foundation lớn, triển khai theo các slice độc lập dưới đây thay vì làm
+một lần. Mục tiêu chung: chọn Supabase self-hosted làm auth provider đầu tiên, nhưng backend
+vẫn đi qua abstraction kiểu `AuthVerifier`/provider adapter để domain code không phụ thuộc trực
+tiếp vào Supabase SDK/API.
+
+#### [P3B-00a] Supabase local compose foundation
+
+Clone Repo chính thức tại: https://github.com/supabase/supabase/tree/master/docker. Sử dụng docker-compose.yml làm đối tượng chính.
+
 - [ ] Sparse-clone/copy nguyên thư mục `docker/` chính thức của Supabase để giữ đủ init files (`volumes/db/*.sql`), rồi tạo compose tối giản cho project.
 - [ ] P3B mặc định giữ Supabase `db` + `auth` + `kong` để frontend dùng `@supabase/supabase-js` theo URL chuẩn (`/auth/v1`) và giảm code auth tự viết.
-- [ ] Dùng `supabase/postgres:17.6.1.136` thay cho `postgres:latest`; pin image auth theo compose chính thức đang dùng.
-- [ ] Được phép rebuild toàn bộ DB local/dev hiện tại từ Supabase Postgres sạch: bỏ physical data dir cũ (`.data/postgres`), tạo volume/data dir mới, rồi chạy lại Prisma migrations.
-- [ ] Không modify trực tiếp bảng `auth.users`; nếu app cần thông tin user/profiles, tạo bảng app riêng trong schema `public` và sync/upsert bằng backend/Prisma sau khi verify token.
+- [ ] Dùng `supabase/postgres:17.6.1.136` thay cho `postgres:latest`.
+- [ ] Pin image `auth` theo compose chính thức được copy vào repo.
+- [ ] Cập nhật env mẫu cho Supabase local (`SUPABASE_PUBLIC_URL`, anon/service keys, JWT secret, DB URL qua Supabase Postgres).
+- [ ] Không xóa hoặc rebuild data dir trong slice này.
+
+#### [P3B-00b] Backend auth abstraction skeleton
+
+- [ ] Tạo contract backend cho `AuthVerifier` và identity chuẩn hóa (`provider`, `providerSubject`, `email`, `name`, `avatarUrl`).
+- [ ] Tạo provider adapter/stub để các middleware/handler sau này gọi qua abstraction, không gọi trực tiếp Supabase SDK/API trong domain code.
+- [ ] Không attach auth vào socket/HTTP request thực tế trong slice này; phần đó thuộc [P3B-01].
+- [ ] Thêm test tập trung cho verifier contract hoặc stub behavior.
 - [ ] JWT chỉ chứng minh identity; room authorization vẫn dùng dữ liệu app (`RoomMember.role`) làm nguồn sự thật.
+
+#### [P3B-00c] Local DB reset and app-user boundary docs
+
+- [ ] Ghi rõ quy trình rebuild toàn bộ DB local/dev từ Supabase Postgres sạch: bỏ physical data dir cũ (`.data/postgres`), tạo volume/data dir mới, rồi chạy lại Prisma migrations.
+- [ ] Không tự động chạy lệnh phá dữ liệu trong code/scripts nếu chưa có xác nhận rõ ràng từ người phát triển.
+- [ ] Không modify trực tiếp bảng `auth.users`; nếu app cần thông tin user/profiles, tạo bảng app riêng trong schema `public` và sync/upsert bằng backend/Prisma sau khi verify token.
+- [ ] Room authorization không đọc trực tiếp từ JWT; role được resolve từ dữ liệu app (`RoomMember.role`).
 
 ### [P3B-01] Auth đăng nhập
 
