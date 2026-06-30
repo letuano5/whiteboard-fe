@@ -11,27 +11,35 @@ datasource db {
 }
 
 model Room {
-  id                          String       @id @default(uuid())
-  name                        String       @default("Untitled")
-  ownerId                     String?
-  owner                       AppUser?     @relation("OwnedRooms", fields: [ownerId], references: [id], onDelete: SetNull)
-  documentClock               BigInt       @default(0)
-  tombstoneHistoryStartsAtClock BigInt     @default(0)
-  createdAt                   DateTime     @default(now())
-  updatedAt                   DateTime     @updatedAt
-  members                     RoomMember[]
-  records                     Record[]
-  tombstones                  Tombstone[]
+  id                            String       @id @default(uuid())
+  name                          String       @default("Untitled")
+  workspaceId                   String?
+  ownerId                       String?
+  owner                         AppUser?     @relation("OwnedRooms", fields: [ownerId], references: [id], onDelete: SetNull)
+  visibility                    String       @default("private")
+  locked                        Boolean      @default(false)
+  archivedAt                    DateTime?
+  lastOpenedAt                  DateTime?
+  createdBy                     String?
+  documentClock                 BigInt       @default(0)
+  tombstoneHistoryStartsAtClock BigInt       @default(0)
+  createdAt                     DateTime     @default(now())
+  updatedAt                     DateTime     @updatedAt
+  members                       RoomMember[]
+  records                       Record[]
+  tombstones                    Tombstone[]
 }
 
 model RoomMember {
-  roomId String
-  userId String
-  role   String
-  room   Room   @relation(fields: [roomId], references: [id], onDelete: Cascade)
-  user   AppUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  roomId       String
+  userId       String
+  role         String
+  lastOpenedAt DateTime?
+  room         Room      @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user         AppUser   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([roomId, userId])
+  @@index([userId, lastOpenedAt])
 }
 
 model AppUser {

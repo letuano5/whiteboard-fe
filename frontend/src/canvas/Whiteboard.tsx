@@ -10,13 +10,18 @@ import BackToContent from '../components/back-to-content/BackToContent';
 import ShareLinkButton from '../components/ShareLinkButton';
 import OnlineUsersPanel from '../components/ui/OnlineUsersPanel';
 import RoomMembersPanel from '../rooms/RoomMembersPanel';
+import { LoginToSave } from '../local-board/LoginToSave';
 import { canEditRoom, useRoomAccessStore } from '../rooms/room-access.store';
 import { useSpacePanMode } from './hooks/use-space-pan-mode';
 import { useWheelPanZoom } from './hooks/use-wheel-pan-zoom';
 import { useWhiteboardPointerHandlers } from './hooks/use-whiteboard-pointer-handlers';
 import { useWhiteboardShortcuts } from './hooks/use-whiteboard-shortcuts';
 
-export default function Whiteboard() {
+interface WhiteboardProps {
+  mode?: 'local' | 'saved';
+}
+
+export default function Whiteboard({ mode = 'saved' }: WhiteboardProps) {
   const elements = useElementsStore((s) => s.elements);
   const camera = useCameraStore((s) => s.camera);
   const tool = useInteractionStore((s) => s.tool);
@@ -24,7 +29,8 @@ export default function Whiteboard() {
   const editingId = useInteractionStore((s) => s.editingId);
   const selectedIds = useInteractionStore((s) => s.selectedIds);
   const role = useRoomAccessStore((s) => s.role);
-  const canEdit = canEditRoom(role);
+  const isLocalBoard = mode === 'local';
+  const canEdit = isLocalBoard || canEditRoom(role);
   const activeTool = canEdit ? tool : 'select';
   const editingElement = editingId
     ? (elements.find((el) => el.id === editingId && !el.isDeleted) ?? null)
@@ -94,9 +100,15 @@ export default function Whiteboard() {
           gap: 6,
         }}
       >
-        <ShareLinkButton />
-        <OnlineUsersPanel />
-        <RoomMembersPanel />
+        {isLocalBoard ? (
+          <LoginToSave />
+        ) : (
+          <>
+            <ShareLinkButton />
+            <OnlineUsersPanel />
+            <RoomMembersPanel />
+          </>
+        )}
       </div>
       {activeTool === 'select' && (
         <div

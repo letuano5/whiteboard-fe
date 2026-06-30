@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import Whiteboard from '../canvas/Whiteboard';
-import HomePage from './HomePage';
+import { DocumentDashboard } from '../documents/DocumentDashboard';
 import { registerMutationHook } from '../store/mutation-pipeline';
 import { createArrowBindingHook } from '../sync/arrow-binding-hook';
 
@@ -12,14 +12,15 @@ export default function App() {
   }, []);
 
   const roomId = new URLSearchParams(window.location.search).get('room');
+  const boardMode = roomId ? 'saved' : 'local';
 
-  if (roomId) {
-    return (
-      <div style={{ width: '100vw', height: '100vh' }}>
-        <Whiteboard />
-      </div>
-    );
+  if (window.location.pathname === '/dashboard') {
+    return <DocumentDashboard />;
   }
 
-  return <HomePage />;
+  return (
+    <div style={{ width: '100vw', height: '100vh' }}>
+      <Whiteboard mode={boardMode} />
+    </div>
+  );
 }

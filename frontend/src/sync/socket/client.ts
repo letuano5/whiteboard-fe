@@ -10,7 +10,7 @@ import { getLastServerClockState, getSocketState, resetReconnectState } from './
 import { clearSocketSubscriptions, registerSocketSubscriptions } from './subscriptions';
 import { LOCAL_PRESENCE } from '../presence';
 
-const SERVER_URL = import.meta.env?.VITE_BACKEND_URL ?? 'http://localhost:3001';
+const SERVER_URL = import.meta.env?.VITE_BACKEND_URL ?? undefined;
 
 export function getLastServerClock(): number {
   return getLastServerClockState();

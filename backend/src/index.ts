@@ -9,9 +9,9 @@ import { createWhiteboardServer } from './realtime/whiteboard-server.js';
 
 const PORT = process.env.PORT ?? 3001;
 
-const { httpServer, io } = createAppServer();
 const roomState = createRoomState();
 const authDeps = createRuntimeAuthDeps(prisma);
+const { httpServer, io } = createAppServer({ ...authDeps, db: prisma });
 
 const autosave = createAutosaveManager({
   getRoomElements: (roomId) => {

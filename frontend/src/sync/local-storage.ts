@@ -17,11 +17,7 @@ function isValidScene(value: unknown): value is PersistedScene {
   if (!Array.isArray(v.elements)) return false;
   if (typeof v.camera !== 'object' || v.camera === null) return false;
   const cam = v.camera as Record<string, unknown>;
-  return (
-    typeof cam.x === 'number' &&
-    typeof cam.y === 'number' &&
-    typeof cam.zoom === 'number'
-  );
+  return typeof cam.x === 'number' && typeof cam.y === 'number' && typeof cam.zoom === 'number';
 }
 
 function readScene(): PersistedScene | null {
@@ -44,10 +40,6 @@ function writeScene(scene: PersistedScene): void {
   }
 }
 
-/**
- * @deprecated P2+: backend is the source of truth for elements. Replaced by ROOM_SNAPSHOT on join.
- * File kept for reference; do not call this function.
- */
 export function initLocalStoragePersistence(): void {
   const scene = readScene();
   if (!scene) return;
@@ -55,10 +47,6 @@ export function initLocalStoragePersistence(): void {
   useCameraStore.getState().setCamera(scene.camera);
 }
 
-/**
- * @deprecated P2+: backend is the source of truth for elements. Replaced by ROOM_SNAPSHOT on join.
- * File kept for reference; do not call this function.
- */
 export function startLocalStoragePersistence(): () => void {
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 

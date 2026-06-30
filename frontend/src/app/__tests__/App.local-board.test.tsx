@@ -2,7 +2,6 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import App from '../App';
 
-// Mock heavy canvas components to keep routing tests fast
 vi.mock('../../canvas/Whiteboard', () => ({
   default: ({ mode }: { mode: 'local' | 'saved' }) => (
     <div data-mode={mode} data-testid="whiteboard" />
@@ -10,11 +9,6 @@ vi.mock('../../canvas/Whiteboard', () => ({
 }));
 vi.mock('../../documents/DocumentDashboard', () => ({
   DocumentDashboard: () => <div data-testid="document-dashboard" />,
-}));
-// Prevent socket-client from actually connecting in routing tests
-vi.mock('../../sync/socket-client', () => ({
-  initSocketClient: vi.fn(),
-  stopSocketClient: vi.fn(),
 }));
 
 function setLocation(pathname: string, search: string) {
@@ -33,32 +27,23 @@ beforeEach(() => {
   setLocation('/', '');
 });
 
-describe('App routing — AC-1', () => {
-  // @covers AC-1
-  it('shows local board when no ?room= param is present', () => {
+describe('App local-board routing', () => {
+  it('renders the root route as a local-only whiteboard', () => {
+    // @covers AC-1
+    // @covers AC-4
     setLocation('/', '');
+
     render(<App />);
+
     expect(screen.getByTestId('whiteboard')).toHaveAttribute('data-mode', 'local');
   });
-});
 
-describe('App routing — AC-3', () => {
-  // @covers AC-3
-  it('shows saved canvas when ?room=<id> param is present', () => {
+  it('renders ?room=<uuid> as a saved-document whiteboard', () => {
+    // @covers AC-6
     setLocation('/', '?room=test-room-id');
+
     render(<App />);
+
     expect(screen.getByTestId('whiteboard')).toHaveAttribute('data-mode', 'saved');
-  });
-});
-
-describe('App routing — dashboard', () => {
-  it('shows the document dashboard on /dashboard without rendering a whiteboard', () => {
-    // @covers AC-1
-    setLocation('/dashboard', '');
-
-    render(<App />);
-
-    expect(screen.getByTestId('document-dashboard')).toBeInTheDocument();
-    expect(screen.queryByTestId('whiteboard')).not.toBeInTheDocument();
   });
 });

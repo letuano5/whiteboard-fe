@@ -106,7 +106,7 @@ describe('socket-client — P3B-01d token attachment', () => {
     const { initSocketClient } = await import('../socket-client');
     initSocketClient('room-auth');
 
-    expect(ioMock).toHaveBeenCalledWith('http://localhost:3001', {
+    expect(ioMock).toHaveBeenCalledWith(undefined, {
       auth: { accessToken: 'access-token-123' },
     });
   });
@@ -119,7 +119,7 @@ describe('socket-client — P3B-01d token attachment', () => {
     const { initSocketClient } = await import('../socket-client');
     initSocketClient('room-anon');
 
-    expect(ioMock).toHaveBeenCalledWith('http://localhost:3001');
+    expect(ioMock).toHaveBeenCalledWith(undefined);
   });
 });
 

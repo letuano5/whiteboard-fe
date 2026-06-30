@@ -11,10 +11,6 @@ interface BCMessage {
 let _channel: BroadcastChannel | null = null;
 let _unregisterHook: (() => void) | null = null;
 
-/**
- * @deprecated P2+: cross-tab sync is handled by Socket.IO via the backend. Superseded by socket-client.ts.
- * File kept for reference; do not call this function.
- */
 export function initBroadcastChannel(): void {
   if (typeof BroadcastChannel === 'undefined') return;
 
@@ -31,7 +27,6 @@ export function initBroadcastChannel(): void {
   });
 }
 
-/** @deprecated See {@link initBroadcastChannel}. */
 export function stopBroadcastChannel(): void {
   _unregisterHook?.();
   _unregisterHook = null;
