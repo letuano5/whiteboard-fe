@@ -9,6 +9,9 @@ export function isApplyingRemote(): boolean {
   return _isApplyingRemote;
 }
 
+// Legacy whole-element LWW merge helper. It remains authoritative only for local
+// board/cross-tab sync and pre-P5 network compatibility until P5-11 replaces
+// saved-room reconciliation with slot-aware server truth.
 export function applyRemoteElements(incoming: Element[]): void {
   if (incoming.length === 0) return;
 

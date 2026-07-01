@@ -1,7 +1,7 @@
 import type { Socket } from 'socket.io';
 import { WS_EVENTS } from '@vdt/shared';
-import { getRoomClock } from '../../persistence/room-repository.js';
 import { canMutateRoom, resolveRoomAccess } from '../../rooms/room-roles.js';
+import { executeSyncCommand, type LegacyElementUpdateResult } from '../../sync/index.js';
 import type { ElementUpdatePayload, ResolvedWhiteboardServerDeps } from '../types.js';
 
 export async function handleElementUpdate(
@@ -9,8 +9,8 @@ export async function handleElementUpdate(
   deps: ResolvedWhiteboardServerDeps,
   payload: ElementUpdatePayload,
 ): Promise<void> {
-  const { roomId, elements: incoming, sessionId } = payload;
-  const { roomElements: elements, roomClocks: clocks, autosave: save, db } = deps;
+  const { roomId, elements, sessionId } = payload;
+  const { db } = deps;
 
   const user = socket.data?.auth?.user;
   if (user) {
@@ -44,31 +44,40 @@ export async function handleElementUpdate(
     return;
   }
 
-  if (!elements.has(roomId)) {
-    elements.set(roomId, new Map());
+  const result = executeSyncCommand(
+    {
+      kind: 'legacy-element-update',
+      roomId,
+      elements,
+      sessionId,
+    },
+    {
+      actorId: user?.id ?? null,
+      db,
+      roomElements: deps.roomElements,
+      roomClocks: deps.roomClocks,
+      autosave: deps.autosave,
+    },
+  );
+
+  if (isPromise(result)) {
+    emitCommittedElementUpdate(socket, await result);
+    return;
   }
-  const elMap = elements.get(roomId)!;
-  for (const el of incoming) {
-    elMap.set(el.id, el);
-  }
 
-  if (!clocks.has(roomId)) {
-    try {
-      clocks.set(roomId, await getRoomClock(db, roomId));
-    } catch (err) {
-      console.error(`[delta-clock] Failed to load room clock for ${roomId}:`, err);
-      clocks.set(roomId, 0);
-    }
-  }
+  emitCommittedElementUpdate(socket, result);
+}
 
-  const newClock = (clocks.get(roomId) ?? 0) + 1;
-  clocks.set(roomId, newClock);
-
-  save.markDirty(roomId);
-
-  socket.to(roomId).emit(WS_EVENTS.ELEMENT_UPDATE, {
-    elements: incoming,
-    sessionId,
-    documentClock: newClock,
+function emitCommittedElementUpdate(socket: Socket, result: LegacyElementUpdateResult): void {
+  // Compatibility broadcast for the pre-P5 client contract. The authoritative
+  // saved-room mutation has already been executed by the sync module.
+  socket.to(result.roomId).emit(WS_EVENTS.ELEMENT_UPDATE, {
+    elements: result.elements,
+    sessionId: result.sessionId,
+    documentClock: result.documentClock,
   });
+}
+
+function isPromise<T>(value: T | Promise<T>): value is Promise<T> {
+  return typeof (value as Promise<T>).then === 'function';
 }

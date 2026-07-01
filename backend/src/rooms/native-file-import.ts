@@ -13,7 +13,7 @@ import {
   type AppUserRepository,
   type AuthenticatedRequest,
 } from '../auth/index.js';
-import { saveRoomElements } from '../persistence/room-repository.js';
+import { executeSyncCommand } from '../sync/index.js';
 import { canMutateRoom, resolveRoomAccess, RoomAccessError } from './room-roles.js';
 
 interface NativeFileImportDeps {
@@ -82,10 +82,21 @@ export async function importNativeFileIntoRoom(
     );
   }
 
-  const result = await saveRoomElements(db, roomId, document.elements);
+  const result = await executeSyncCommand(
+    {
+      kind: 'native-file-import',
+      roomId,
+      elements: document.elements,
+    },
+    {
+      actorId: user.id,
+      db,
+    },
+  );
+
   return {
-    importedElementCount: document.elements.length,
-    documentClock: result?.documentClock.toString() ?? null,
+    importedElementCount: result.importedElementCount,
+    documentClock: result.documentClock,
   };
 }
 

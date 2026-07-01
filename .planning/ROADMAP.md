@@ -14,13 +14,15 @@ project roadmap, phase order, and product scope remain canonical in `docs/SPECS.
 - Repo roadmap ID `P4-02` maps to GSD Phase `4.2`.
 - Repo roadmap ID `P4-03` maps to GSD Phase `4.3`.
 - Repo roadmap ID `P4-04` maps to GSD Phase `4.4`.
-- The source of truth is `docs/SPECS.md` Phase 4 feature sections.
+- Repo roadmap ID `P5-01` maps to GSD Phase `5.1`.
+- The source of truth is `docs/SPECS.md` feature sections.
 
 - [x] **Phase 4.0: P4-00 Anonymous local board + Login to save** - Anonymous local-only board can be converted into a private saved document after login.
 - [x] **Phase 4.1: P4-01 Workspace + document dashboard** - Authenticated users can list, search, create, open, rename, archive, and delete accessible saved documents.
 - [x] **Phase 4.2: P4-02 Sharing, public/private access, invited users** - Owners can share saved documents by link or invite while the server enforces effective room roles.
 - [x] **Phase 4.3: P4-03 Room lock + admission control** - Owners can lock saved rooms and the server enforces participant/editor capacity through effective roles.
 - [x] **Phase 4.4: P4-04 Native file lifecycle: save/load `.vdt.json`** - Users can export and import the native backup format for local boards and permitted saved documents.
+- [x] **Phase 5.1: P5-01 Module boundary & legacy removal** - Saved-room writes are routed through a backend sync module entrypoint instead of socket/import handlers mutating document state directly.
 
 ## Phase Details
 
@@ -128,6 +130,24 @@ Plans:
 
 - [x] 04.4-01: Implement native file export/import contract, local/saved import flows, UI, and AC tests.
 
+### Phase 5.1: P5-01 Module boundary & legacy removal
+
+**Goal**: Establish the backend sync module boundary and remove saved-room document mutation logic from legacy socket/import handlers.
+**Depends on**: Phase 4.4
+**Source**: `docs/SPECS.md` `[P5-01]`
+**Canonical refs**: `docs/SPECS.md`, `specs/030-p5-01-module-boundary-legacy-removal/acceptance.md`
+**Requirements**: [P5-01-AC-1, P5-01-AC-2, P5-01-AC-3]
+**Success Criteria** (what must be TRUE):
+
+1. Saved-room realtime element updates enter the backend sync module through a single entrypoint.
+2. Saved-room native-file import writes enter the same backend sync module entrypoint.
+3. Legacy whole-element sync remains documented as a compatibility adapter, not the long-term saved-room authoritative model.
+   **Plans**: 1 plan
+
+Plans:
+
+- [x] 05.1-01: Create backend sync module boundary, route legacy adapters through it, and cover AC tests.
+
 ## Progress
 
 **Execution Order:**
@@ -140,3 +160,4 @@ Follow `docs/SPECS.md`; this bootstrap tracks active Phase 4 feature slices.
 | 4.2. P4-02 Sharing, public/private access        | 1/1            | Complete | 2026-06-30 |
 | 4.3. P4-03 Room lock + admission control         | 1/1            | Complete | 2026-07-01 |
 | 4.4. P4-04 Native file lifecycle                 | 1/1            | Complete | 2026-07-01 |
+| 5.1. P5-01 Module boundary & legacy removal      | 1/1            | Complete | 2026-07-02 |

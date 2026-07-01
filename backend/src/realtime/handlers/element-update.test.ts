@@ -1,11 +1,16 @@
 import type { PrismaClient } from '@prisma/client';
 import type { Socket } from 'socket.io';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { WS_EVENTS, type Element, type Presence } from '@vdt/shared';
 import type { AppUser } from '../../auth/index.js';
 import { createAutosaveManager } from '../../persistence/autosave.js';
+import { executeSyncCommand } from '../../sync/index.js';
 import { makeElement } from '../../test/element-fixtures.js';
 import { handleElementUpdate } from './element-update.js';
+
+vi.mock('../../sync/index.js', () => ({
+  executeSyncCommand: vi.fn(),
+}));
 
 const viewerUser = makeUser('viewer-user');
 const editorUser = makeUser('editor-user');
@@ -13,6 +18,7 @@ const ownerUser = makeUser('owner-user');
 
 describe('handleElementUpdate room role authorization', () => {
   it('rejects viewer mutations before changing state or broadcasting', async () => {
+    // @covers AC-1
     const emit = vi.fn();
     const peerEmit = vi.fn();
     const socket = makeSocket(viewerUser, emit, peerEmit);
@@ -37,6 +43,7 @@ describe('handleElementUpdate room role authorization', () => {
     );
 
     expect(roomElements.get('room-1')).toBeUndefined();
+    expect(executeSyncCommand).not.toHaveBeenCalled();
     expect(peerEmit).not.toHaveBeenCalled();
     expect(emit).toHaveBeenCalledWith(WS_EVENTS.ROOM_ACCESS_ERROR, {
       code: 'room-access/forbidden',
@@ -45,7 +52,7 @@ describe('handleElementUpdate room role authorization', () => {
   });
 
   it('rejects mutations from an editor socket admitted as viewer by capacity', async () => {
-    // @covers AC-4
+    // @covers AC-1
     const emit = vi.fn();
     const peerEmit = vi.fn();
     const socket = makeSocket(editorUser, emit, peerEmit);
@@ -72,6 +79,7 @@ describe('handleElementUpdate room role authorization', () => {
     );
 
     expect(roomElements.get('room-1')).toBeUndefined();
+    expect(executeSyncCommand).not.toHaveBeenCalled();
     expect(peerEmit).not.toHaveBeenCalled();
     expect(emit).toHaveBeenCalledWith(WS_EVENTS.ROOM_ACCESS_ERROR, {
       code: 'room-access/forbidden',
@@ -80,6 +88,8 @@ describe('handleElementUpdate room role authorization', () => {
   });
 
   it('allows editor mutations and broadcasts the committed update', async () => {
+    // @covers AC-1
+    // @covers AC-2
     const emit = vi.fn();
     const peerEmit = vi.fn();
     const socket = makeSocket(editorUser, emit, peerEmit);
@@ -93,6 +103,13 @@ describe('handleElementUpdate room role authorization', () => {
     autosave.markDirty = markDirty;
     const roomElements = new Map<string, Map<string, Element>>();
     const element = makeElement({ id: 'allowed-el' });
+    executeSyncCommandMock().mockReturnValue({
+      kind: 'legacy-element-update',
+      roomId: 'room-1',
+      elements: [element],
+      sessionId: 'session-1',
+      documentClock: 5,
+    });
 
     await handleElementUpdate(
       socket,
@@ -106,8 +123,23 @@ describe('handleElementUpdate room role authorization', () => {
       { roomId: 'room-1', elements: [element], sessionId: 'session-1' },
     );
 
-    expect(roomElements.get('room-1')?.get('allowed-el')).toEqual(element);
-    expect(markDirty).toHaveBeenCalledWith('room-1');
+    expect(roomElements.get('room-1')).toBeUndefined();
+    expect(markDirty).not.toHaveBeenCalled();
+    expect(executeSyncCommandMock()).toHaveBeenCalledWith(
+      {
+        kind: 'legacy-element-update',
+        roomId: 'room-1',
+        elements: [element],
+        sessionId: 'session-1',
+      },
+      {
+        actorId: editorUser.id,
+        db,
+        roomElements,
+        roomClocks: expect.any(Map),
+        autosave,
+      },
+    );
     expect(peerEmit).toHaveBeenCalledWith(WS_EVENTS.ELEMENT_UPDATE, {
       elements: [element],
       sessionId: 'session-1',
@@ -115,6 +147,14 @@ describe('handleElementUpdate room role authorization', () => {
     });
   });
 });
+
+beforeEach(() => {
+  executeSyncCommandMock().mockReset();
+});
+
+function executeSyncCommandMock(): ReturnType<typeof vi.fn> {
+  return executeSyncCommand as unknown as ReturnType<typeof vi.fn>;
+}
 
 function makeSocket(
   user: AppUser,

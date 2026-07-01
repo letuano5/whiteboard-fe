@@ -2,10 +2,10 @@
 gsd_state_version: '1.0'
 status: planning
 progress:
-  total_phases: 5
-  completed_phases: 5
-  total_plans: 5
-  completed_plans: 5
+  total_phases: 6
+  completed_phases: 6
+  total_plans: 6
+  completed_plans: 6
   percent: 100
 ---
 
@@ -16,14 +16,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-30)
 
 **Core value:** Users can create tactical whiteboards without losing work, then collaborate or persist documents when the workflow calls for it.
-**Current focus:** Phase 4.4: P4-04 Native file lifecycle
+**Current focus:** Phase 5.1: P5-01 Module boundary & legacy removal
 
 ## Current Position
 
-Phase: 4.4 of active GSD bootstrap (P4-04 Native file lifecycle: save/load `.vdt.json`)
+Phase: 5.1 of active GSD bootstrap (P5-01 Module boundary & legacy removal)
 Plan: 1 of 1 in current phase
 Status: Phase complete
-Last activity: 2026-07-01 - Implemented and verified P4-04 native `.vdt.json` export/import lifecycle.
+Last activity: 2026-07-02 - Implemented and verified P5-01 backend sync module boundary and legacy removal.
 
 Progress: [##########] 100%
 
@@ -39,6 +39,7 @@ Progress: [##########] 100%
 - [Phase 4.2]: Server computes both `baseRole` and `effectiveRole`; frontend role controls are only UX.
 - [Phase 4.3]: Realtime auto-promotion after editor leave is optional; rejoin/reload may claim a newly available editor slot.
 - [Phase 4.4]: Native `.vdt.json` is the only P4-04 file format; Excalidraw/draw.io/PNG/SVG belong to P4-05.
+- [Phase 5.1]: P5-01 establishes a backend sync module boundary first; P5-02 owns shared sync contracts, so this phase keeps legacy `ELEMENT_UPDATE` as a compatibility adapter while moving saved-room mutation execution behind `executeSyncCommand`.
 
 ### Pending Todos
 
@@ -48,10 +49,13 @@ Progress: [##########] 100%
 - P4-02 sharing access modes, invite claim, and backend permission enforcement are implemented and verified.
 - P4-03 room lock, participant capacity, editor capacity, and effective-role presence are implemented and verified.
 - P4-04 native file export/import implemented and verified.
+- P5-01 must route realtime saved-room element update and native-file import writes through the backend sync module entrypoint, with legacy helper scope comments and AC-tagged tests.
+- P5-01 backend sync module boundary implemented and verified.
 
 ### Blockers/Concerns
 
 - The working tree had pre-existing backend/auth and `docs/SPECS.md` edits before this workflow.
+- P5-01 intentionally does not define final shared P5 sync contracts; those belong to P5-02.
 
 ## Session Continuity
 
