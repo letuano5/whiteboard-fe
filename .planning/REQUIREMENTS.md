@@ -43,6 +43,19 @@
 - [ ] **P4-02-AC-8**: `link_edit` grants editor effective access only when lock/capacity rules allow it.
 - [ ] **P4-02-AC-9**: Revoked links no longer grant link-based room access.
 
+### Native File Lifecycle
+
+- [ ] **P4-04-AC-1**: Export then import of `.vdt.json` preserves existing element types,
+      styling, zIndex, angle, group/frame metadata, camera, and room metadata.
+- [ ] **P4-04-AC-2**: Anonymous import applies to the local board only and does not create a
+      persisted database room unless the user later chooses login/save.
+- [ ] **P4-04-AC-3**: Authenticated import into a saved document is rejected for viewers and
+      permitted only for owner/editor effective roles.
+- [ ] **P4-04-AC-4**: Invalid or unsupported native schemas do not crash the app and show a clear
+      validation error.
+- [ ] **P4-04-AC-5**: Loading a native file into a board/document that already has data requires
+      explicit confirmation before replacing or merging.
+
 ## Out of Scope
 
 | Feature                                  | Reason                  |
@@ -80,14 +93,19 @@
 | P4-02-AC-7  | Phase 4.2 | Complete |
 | P4-02-AC-8  | Phase 4.2 | Complete |
 | P4-02-AC-9  | Phase 4.2 | Complete |
+| P4-04-AC-1  | Phase 4.4 | Complete |
+| P4-04-AC-2  | Phase 4.4 | Complete |
+| P4-04-AC-3  | Phase 4.4 | Complete |
+| P4-04-AC-4  | Phase 4.4 | Complete |
+| P4-04-AC-5  | Phase 4.4 | Complete |
 
 **Coverage:**
 
-- v1 requirements: 25 total
-- Mapped to phases: 25
+- v1 requirements: 30 total
+- Mapped to phases: 30
 - Unmapped: 0
 
 ---
 
 _Requirements defined: 2026-06-30_
-_Last updated: 2026-06-30 after P4-02 verification_
+_Last updated: 2026-07-01 after P4-04 verification_

@@ -2,10 +2,10 @@
 gsd_state_version: '1.0'
 status: planning
 progress:
-  total_phases: 4
-  completed_phases: 4
-  total_plans: 4
-  completed_plans: 4
+  total_phases: 5
+  completed_phases: 5
+  total_plans: 5
+  completed_plans: 5
   percent: 100
 ---
 
@@ -16,14 +16,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-30)
 
 **Core value:** Users can create tactical whiteboards without losing work, then collaborate or persist documents when the workflow calls for it.
-**Current focus:** Phase 4.3: P4-03 Room lock + admission control
+**Current focus:** Phase 4.4: P4-04 Native file lifecycle
 
 ## Current Position
 
-Phase: 4.3 of active GSD bootstrap (P4-03 Room lock + admission control)
+Phase: 4.4 of active GSD bootstrap (P4-04 Native file lifecycle: save/load `.vdt.json`)
 Plan: 1 of 1 in current phase
 Status: Phase complete
-Last activity: 2026-07-01 - Implemented and verified P4-03 room lock, admission limits, and effective-role presence.
+Last activity: 2026-07-01 - Implemented and verified P4-04 native `.vdt.json` export/import lifecycle.
 
 Progress: [##########] 100%
 
@@ -38,6 +38,7 @@ Progress: [##########] 100%
 - [Phase 4.2]: Explicit membership or claimed invitation takes precedence over link-derived access.
 - [Phase 4.2]: Server computes both `baseRole` and `effectiveRole`; frontend role controls are only UX.
 - [Phase 4.3]: Realtime auto-promotion after editor leave is optional; rejoin/reload may claim a newly available editor slot.
+- [Phase 4.4]: Native `.vdt.json` is the only P4-04 file format; Excalidraw/draw.io/PNG/SVG belong to P4-05.
 
 ### Pending Todos
 
@@ -46,6 +47,7 @@ Progress: [##########] 100%
 - P4-01 dashboard API/UI and document metadata fields implemented and verified.
 - P4-02 sharing access modes, invite claim, and backend permission enforcement are implemented and verified.
 - P4-03 room lock, participant capacity, editor capacity, and effective-role presence are implemented and verified.
+- P4-04 native file export/import implemented and verified.
 
 ### Blockers/Concerns
 
@@ -54,5 +56,5 @@ Progress: [##########] 100%
 ## Session Continuity
 
 Last session: 2026-07-01
-Stopped at: P4-03 implemented and verified
+Stopped at: P4-04 implemented and verified
 Resume file: None

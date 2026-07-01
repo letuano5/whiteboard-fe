@@ -24,11 +24,12 @@ when the workflow calls for it.
 - [x] Authenticated users can convert local board content into a saved document.
 - [x] Saved rooms remain accessed through the existing `/?room=<uuid>` query-string pattern.
 - [x] Saved room owners can manage sharing, lock state, participant limits, and editor limits.
+- [x] Local and saved boards can export/import the native `.vdt.json` backup format.
 
 ### Out of Scope
 
-- File import/export, asset storage, and version history are deferred to later P4 feature IDs in
-  `docs/SPECS.md`.
+- Cross-platform import/export, asset storage, and version history are deferred to later P4 feature
+  IDs in `docs/SPECS.md`.
 - Anonymous network realtime for saved rooms is deferred to P4-02.
 
 ## Context
@@ -48,10 +49,12 @@ when the workflow calls for it.
 
 ## Key Decisions
 
-| Decision | Rationale | Outcome |
-| --- | --- | --- |
-| Use `/?room=<uuid>` only for saved documents | Existing architectural decision in `AGENTS.md` | Pending |
+| Decision                                                           | Rationale                                                                  | Outcome |
+| ------------------------------------------------------------------ | -------------------------------------------------------------------------- | ------- |
+| Use `/?room=<uuid>` only for saved documents                       | Existing architectural decision in `AGENTS.md`                             | Pending |
 | Root path without `room` is the local-only board surface for P4-00 | Prevents anonymous local work from accidentally joining/creating a DB room | Pending |
+| Native `.vdt.json` is the only P4-04 file format                   | Cross-platform import/export belongs to P4-05                              | Pending |
 
 ---
-*Last updated: 2026-07-01 after P4-03 implementation*
+
+_Last updated: 2026-07-01 after P4-04 implementation_

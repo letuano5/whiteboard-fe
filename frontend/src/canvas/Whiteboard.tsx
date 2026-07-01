@@ -11,6 +11,7 @@ import ShareLinkButton from '../components/ShareLinkButton';
 import OnlineUsersPanel from '../components/ui/OnlineUsersPanel';
 import { AuthMenu } from '../auth/AuthMenu';
 import { LoginToSave } from '../local-board/LoginToSave';
+import { NativeFileControls } from '../files/NativeFileControls';
 import { canEditRoom, useRoomAccessStore } from '../rooms/room-access.store';
 import { useSpacePanMode } from './hooks/use-space-pan-mode';
 import { useWheelPanZoom } from './hooks/use-wheel-pan-zoom';
@@ -31,6 +32,7 @@ export default function Whiteboard({ mode = 'saved' }: WhiteboardProps) {
   const role = useRoomAccessStore((s) => s.effectiveRole);
   const isLocalBoard = mode === 'local';
   const canEdit = isLocalBoard || canEditRoom(role);
+  const roomId = new URLSearchParams(window.location.search).get('room');
   const activeTool = canEdit ? tool : 'select';
   const editingElement = editingId
     ? (elements.find((el) => el.id === editingId && !el.isDeleted) ?? null)
@@ -101,10 +103,14 @@ export default function Whiteboard({ mode = 'saved' }: WhiteboardProps) {
         }}
       >
         {isLocalBoard ? (
-          <LoginToSave />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <NativeFileControls mode="local" roomId={null} canImport={canEdit} />
+            <LoginToSave />
+          </div>
         ) : (
           <>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <NativeFileControls mode="saved" roomId={roomId} canImport={canEdit} />
               <ShareLinkButton />
               <AuthMenu />
             </div>

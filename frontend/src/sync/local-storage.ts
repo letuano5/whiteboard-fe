@@ -40,6 +40,10 @@ function writeScene(scene: PersistedScene): void {
   }
 }
 
+export function writeLocalScene(scene: PersistedScene): void {
+  writeScene(scene);
+}
+
 export function initLocalStoragePersistence(): void {
   const scene = readScene();
   if (!scene) return;
