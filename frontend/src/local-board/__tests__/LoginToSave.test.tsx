@@ -7,6 +7,7 @@ import { useElementsStore } from '../../store/elements.store';
 import type { Element } from '../../types/shared';
 import { saveLocalBoard } from '../local-board-save';
 import { saveCamera } from '../../sync/camera-persistence';
+import { STORAGE_KEY } from '../../sync/local-storage';
 
 vi.mock('../local-board-save', () => ({
   saveLocalBoard: vi.fn(),
@@ -22,6 +23,32 @@ vi.mock('../../auth/AuthPanel', () => ({
 
 const mockPushState = vi.fn();
 const mockReload = vi.fn();
+
+function makeLocalStorageMock() {
+  let store: Record<string, string> = {};
+  return {
+    getItem: (key: string) => store[key] ?? null,
+    setItem: (key: string, value: string) => {
+      store[key] = String(value);
+    },
+    removeItem: (key: string) => {
+      delete store[key];
+    },
+    clear: () => {
+      store = {};
+    },
+    get length() {
+      return Object.keys(store).length;
+    },
+    key: (index: number) => Object.keys(store)[index] ?? null,
+    _reset: () => {
+      store = {};
+    },
+  };
+}
+
+const localStorageMock = makeLocalStorageMock();
+vi.stubGlobal('localStorage', localStorageMock);
 
 const element: Element = {
   id: 'local-el-1',
@@ -51,8 +78,13 @@ const element: Element = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  localStorageMock._reset();
   useElementsStore.setState({ elements: [element] });
   useCameraStore.setState({ camera: { x: 11, y: 22, zoom: 1.5 } });
+  localStorage.setItem(
+    STORAGE_KEY,
+    JSON.stringify({ elements: [element], camera: { x: 1, y: 2, zoom: 1 } }),
+  );
   Object.defineProperty(window, 'history', {
     value: { ...window.history, pushState: mockPushState },
     writable: true,
@@ -91,8 +123,15 @@ describe('LoginToSave', () => {
     expect(useElementsStore.getState().elements).toEqual([element]);
   });
 
-  it('asks authenticated users to confirm before creating a saved document', () => {
+  it('auto-saves after the login flow produces a session', async () => {
     // @covers AC-7
+    // @covers AC-8
+    vi.mocked(saveLocalBoard).mockResolvedValue({ roomId: 'room-new' });
+    setAuthState({ session: null, status: 'anonymous' });
+
+    render(<LoginToSave />);
+    fireEvent.click(screen.getByRole('button', { name: /login to save/i }));
+
     setAuthState({
       session: {
         accessToken: 'token',
@@ -102,15 +141,15 @@ describe('LoginToSave', () => {
       status: 'authenticated',
     });
 
-    render(<LoginToSave />);
-    fireEvent.click(screen.getByRole('button', { name: /login to save/i }));
-
-    expect(screen.getByRole('heading', { name: /save this board/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /^save$/i })).toBeInTheDocument();
-    expect(saveLocalBoard).not.toHaveBeenCalled();
+    await waitFor(() => {
+      expect(saveLocalBoard).toHaveBeenCalledWith({
+        elements: [element],
+        camera: { x: 11, y: 22, zoom: 1.5 },
+      });
+    });
   });
 
-  it('saves current elements and camera, stores camera for the new room, then opens the saved room', async () => {
+  it('saves current elements and camera, clears local scene, then opens the saved room', async () => {
     // @covers AC-8
     // @covers AC-9
     vi.mocked(saveLocalBoard).mockResolvedValue({ roomId: 'room-new' });
@@ -124,8 +163,7 @@ describe('LoginToSave', () => {
     });
 
     render(<LoginToSave />);
-    fireEvent.click(screen.getByRole('button', { name: /login to save/i }));
-    fireEvent.click(screen.getByRole('button', { name: /^save$/i }));
+    fireEvent.click(screen.getByRole('button', { name: /save board/i }));
 
     await waitFor(() => {
       expect(saveLocalBoard).toHaveBeenCalledWith({
@@ -134,28 +172,9 @@ describe('LoginToSave', () => {
       });
     });
     expect(saveCamera).toHaveBeenCalledWith('room-new', { x: 11, y: 22, zoom: 1.5 });
+    expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
     expect(mockPushState).toHaveBeenCalledWith({}, '', '/?room=room-new');
     expect(mockReload).toHaveBeenCalledOnce();
-  });
-
-  it('canceling confirmation keeps the board local and does not create a saved room', () => {
-    // @covers AC-10
-    setAuthState({
-      session: {
-        accessToken: 'token',
-        expiresAt: null,
-        user: { id: 'user-1', email: 'user@example.com', name: null, avatarUrl: null },
-      },
-      status: 'authenticated',
-    });
-
-    render(<LoginToSave />);
-    fireEvent.click(screen.getByRole('button', { name: /login to save/i }));
-    fireEvent.click(screen.getByRole('button', { name: /stay local/i }));
-
-    expect(saveLocalBoard).not.toHaveBeenCalled();
-    expect(mockPushState).not.toHaveBeenCalled();
-    expect(useElementsStore.getState().elements).toEqual([element]);
   });
 
   it('shows a save error and keeps local board data intact when save fails', async () => {
@@ -171,11 +190,11 @@ describe('LoginToSave', () => {
     });
 
     render(<LoginToSave />);
-    fireEvent.click(screen.getByRole('button', { name: /login to save/i }));
-    fireEvent.click(screen.getByRole('button', { name: /^save$/i }));
+    fireEvent.click(screen.getByRole('button', { name: /save board/i }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Could not persist room.');
     expect(mockPushState).not.toHaveBeenCalled();
+    expect(localStorage.getItem(STORAGE_KEY)).not.toBeNull();
     expect(useElementsStore.getState().elements).toEqual([element]);
   });
 });

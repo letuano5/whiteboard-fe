@@ -44,6 +44,14 @@ export function writeLocalScene(scene: PersistedScene): void {
   writeScene(scene);
 }
 
+export function clearLocalScene(): void {
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // Storage may be unavailable — fail silently.
+  }
+}
+
 export function initLocalStoragePersistence(): void {
   const scene = readScene();
   if (!scene) return;

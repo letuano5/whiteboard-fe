@@ -31,7 +31,7 @@ const session: AuthSession = {
 };
 
 const dashboardResponse = {
-  owned: [
+  documents: [
     {
       id: 'owned-room',
       name: 'Owned Plan',
@@ -43,9 +43,8 @@ const dashboardResponse = {
       archivedAt: null,
       updatedAt: '2026-06-30T10:00:00.000Z',
       lastOpenedAt: '2026-06-30T11:00:00.000Z',
+      previewElements: [],
     },
-  ],
-  sharedWithMe: [
     {
       id: 'shared-room',
       name: 'Shared Plan',
@@ -57,22 +56,10 @@ const dashboardResponse = {
       archivedAt: null,
       updatedAt: '2026-06-30T09:00:00.000Z',
       lastOpenedAt: null,
+      previewElements: [],
     },
   ],
-  recent: [
-    {
-      id: 'owned-room',
-      name: 'Owned Plan',
-      ownerId: 'user-123',
-      ownerName: 'Player',
-      role: 'owner',
-      visibility: 'private',
-      locked: false,
-      archivedAt: null,
-      updatedAt: '2026-06-30T10:00:00.000Z',
-      lastOpenedAt: '2026-06-30T11:00:00.000Z',
-    },
-  ],
+  nextCursor: null,
 };
 
 function setDashboardLocation() {
@@ -114,37 +101,45 @@ describe('DocumentDashboard', () => {
     expect(screen.getByText('Document dashboard')).toBeInTheDocument();
     expect(screen.getByTestId('auth-panel')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /open local board/i })).toBeInTheDocument();
-    expect(screen.queryByText('Owned')).not.toBeInTheDocument();
+    expect(screen.queryByText('Owned by me')).not.toBeInTheDocument();
     expect(listDocuments).not.toHaveBeenCalled();
   });
 
-  it('renders owned, shared, and recent document groups for authenticated users', async () => {
+  it('renders recent document cards for authenticated users', async () => {
     // @covers AC-3
     useAuthStore.setState({ session, status: 'authenticated' });
 
     render(<DocumentDashboard />);
 
-    expect(await screen.findAllByText('Owned Plan')).toHaveLength(2);
+    expect(await screen.findByText('Owned Plan')).toBeInTheDocument();
     expect(screen.getByText('Shared Plan')).toBeInTheDocument();
-    expect(screen.getByText('Owned')).toBeInTheDocument();
+    expect(screen.getByText('Recent documents')).toBeInTheDocument();
+    expect(screen.getByText('Owned by me')).toBeInTheDocument();
     expect(screen.getByText('Shared with me')).toBeInTheDocument();
-    expect(screen.getByText('Recent')).toBeInTheDocument();
+    expect(screen.getByLabelText('Account menu')).toBeInTheDocument();
+    expect(listDocuments).toHaveBeenCalledWith({
+      search: '',
+      scope: 'all',
+      cursor: null,
+      limit: 10,
+    });
   });
 
-  it('reloads the dashboard query when archived filter is enabled', async () => {
+  it('reloads the dashboard query when ownership filter changes', async () => {
     // @covers AC-4
     const user = userEvent.setup();
     useAuthStore.setState({ session, status: 'authenticated' });
 
     render(<DocumentDashboard />);
-    await screen.findAllByText('Owned Plan');
-    await user.click(screen.getByLabelText('Include archived'));
+    await screen.findByText('Owned Plan');
+    await user.click(screen.getByRole('button', { name: /shared with me/i }));
 
     await waitFor(() => {
       expect(listDocuments).toHaveBeenLastCalledWith({
         search: '',
-        status: 'all',
-        includeArchived: true,
+        scope: 'shared',
+        cursor: null,
+        limit: 10,
       });
     });
   });
@@ -157,7 +152,7 @@ describe('DocumentDashboard', () => {
     useAuthStore.setState({ session, status: 'authenticated' });
 
     render(<DocumentDashboard />);
-    await screen.findAllByText('Owned Plan');
+    await screen.findByText('Owned Plan');
     await user.click(screen.getByRole('button', { name: /new document/i }));
 
     await waitFor(() => {

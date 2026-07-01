@@ -5,6 +5,14 @@ import type {
   DocumentDashboardResponse,
   RoomForDashboard,
 } from './types.js';
+import {
+  clampPageSize,
+  decodeDashboardCursor,
+  encodeDashboardCursor,
+} from './document-pagination.js';
+import { isPreviewElement } from './document-preview.js';
+
+const PREVIEW_RECORD_LIMIT = 36;
 
 export class DocumentPermissionError extends Error {
   constructor(
@@ -21,6 +29,7 @@ export async function listDashboardDocuments(
   userId: string,
   filters: DashboardListFilters = {},
 ): Promise<DocumentDashboardResponse> {
+  const pageSize = clampPageSize(filters.limit);
   const rooms = (await db.room.findMany({
     where: buildDashboardWhere(userId, filters),
     include: {
@@ -37,18 +46,24 @@ export async function listDashboardDocuments(
           lastOpenedAt: true,
         },
       },
+      records: {
+        where: { typeName: { not: '' } },
+        select: { state: true },
+        take: PREVIEW_RECORD_LIMIT,
+      },
     },
-    orderBy: [{ updatedAt: 'desc' }, { name: 'asc' }],
+    orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
+    take: pageSize + 1,
   })) as RoomForDashboard[];
 
-  const documents = rooms.map((room) => toDashboardDocument(room, userId));
+  const hasMore = rooms.length > pageSize;
+  const pageRooms = hasMore ? rooms.slice(0, pageSize) : rooms;
+  const documents = pageRooms.map((room) => toDashboardDocument(room, userId));
+  const lastRoom = pageRooms.at(-1) ?? null;
 
   return {
-    owned: documents.filter((document) => document.ownerId === userId),
-    sharedWithMe: documents.filter((document) => document.ownerId !== userId),
-    recent: documents
-      .filter((document) => document.lastOpenedAt)
-      .sort((a, b) => compareNullableIsoDesc(a.lastOpenedAt, b.lastOpenedAt)),
+    documents,
+    nextCursor: hasMore && lastRoom ? encodeDashboardCursor(lastRoom.updatedAt, lastRoom.id) : null,
   };
 }
 
@@ -135,6 +150,11 @@ export async function updateDashboardDocument(
         where: { userId },
         select: { role: true, lastOpenedAt: true },
       },
+      records: {
+        where: { typeName: { not: '' } },
+        select: { state: true },
+        take: PREVIEW_RECORD_LIMIT,
+      },
     },
   })) as RoomForDashboard;
 
@@ -209,9 +229,7 @@ function buildDashboardWhere(
     },
   ];
 
-  if (!filters.includeArchived) {
-    and.push({ archivedAt: null });
-  }
+  and.push({ archivedAt: null });
 
   if (filters.search) {
     and.push({
@@ -223,12 +241,22 @@ function buildDashboardWhere(
     });
   }
 
-  if (filters.status === 'shared') {
+  if (filters.scope === 'owned') {
+    and.push({ ownerId: userId });
+  }
+
+  if (filters.scope === 'shared') {
     and.push({ ownerId: { not: userId }, members: { some: { userId } } });
   }
 
-  if (filters.status === 'locked') {
-    and.push({ locked: true });
+  const cursor = filters.cursor ? decodeDashboardCursor(filters.cursor) : null;
+  if (cursor) {
+    and.push({
+      OR: [
+        { updatedAt: { lt: cursor.updatedAt } },
+        { updatedAt: cursor.updatedAt, id: { lt: cursor.id } },
+      ],
+    });
   }
 
   return { AND: and };
@@ -252,9 +280,6 @@ function toDashboardDocument(room: RoomForDashboard, userId: string): DashboardD
     archivedAt: room.archivedAt?.toISOString() ?? null,
     updatedAt: room.updatedAt.toISOString(),
     lastOpenedAt: membership?.lastOpenedAt?.toISOString() ?? null,
+    previewElements: room.records.map((record) => record.state).filter(isPreviewElement),
   };
-}
-
-function compareNullableIsoDesc(a: string | null, b: string | null): number {
-  return (b ? Date.parse(b) : 0) - (a ? Date.parse(a) : 0);
 }

@@ -32,6 +32,9 @@ model Room {
   invitations                   RoomInvitation[]
   records                       Record[]
   tombstones                    Tombstone[]
+
+  @@index([ownerId, updatedAt, id])
+  @@index([updatedAt, id])
 }
 
 model RoomMember {

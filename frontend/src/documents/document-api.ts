@@ -1,6 +1,9 @@
 import { authenticatedFetch } from '../auth/authenticated-fetch';
+import type { Element } from '../types/shared';
 
 const SERVER_URL = import.meta.env?.VITE_BACKEND_URL ?? '';
+
+export type DocumentScopeFilter = 'all' | 'owned' | 'shared';
 
 export interface DashboardDocument {
   id: string;
@@ -13,18 +16,19 @@ export interface DashboardDocument {
   archivedAt: string | null;
   updatedAt: string;
   lastOpenedAt: string | null;
+  previewElements: Element[];
 }
 
 export interface DocumentDashboardResponse {
-  owned: DashboardDocument[];
-  sharedWithMe: DashboardDocument[];
-  recent: DashboardDocument[];
+  documents: DashboardDocument[];
+  nextCursor: string | null;
 }
 
 export interface ListDocumentsInput {
   search?: string;
-  includeArchived?: boolean;
-  status?: 'all' | 'shared' | 'locked';
+  scope?: DocumentScopeFilter;
+  cursor?: string | null;
+  limit?: number;
 }
 
 export async function listDocuments(
@@ -122,12 +126,16 @@ function buildQuery(input: ListDocumentsInput): string {
     params.set('search', input.search.trim());
   }
 
-  if (input.includeArchived) {
-    params.set('includeArchived', 'true');
+  if (input.scope && input.scope !== 'all') {
+    params.set('scope', input.scope);
   }
 
-  if (input.status && input.status !== 'all') {
-    params.set('status', input.status);
+  if (input.cursor) {
+    params.set('cursor', input.cursor);
+  }
+
+  if (input.limit !== undefined) {
+    params.set('limit', String(input.limit));
   }
 
   const query = params.toString();
@@ -151,12 +159,9 @@ function isDocumentDashboardResponse(value: unknown): value is DocumentDashboard
   if (typeof value !== 'object' || value === null) return false;
   const record = value as Record<string, unknown>;
   return (
-    Array.isArray(record.owned) &&
-    record.owned.every(isDashboardDocument) &&
-    Array.isArray(record.sharedWithMe) &&
-    record.sharedWithMe.every(isDashboardDocument) &&
-    Array.isArray(record.recent) &&
-    record.recent.every(isDashboardDocument)
+    Array.isArray(record.documents) &&
+    record.documents.every(isDashboardDocument) &&
+    (typeof record.nextCursor === 'string' || record.nextCursor === null)
   );
 }
 
@@ -173,7 +178,8 @@ function isDashboardDocument(value: unknown): value is DashboardDocument {
     typeof document.locked === 'boolean' &&
     (typeof document.archivedAt === 'string' || document.archivedAt === null) &&
     typeof document.updatedAt === 'string' &&
-    (typeof document.lastOpenedAt === 'string' || document.lastOpenedAt === null)
+    (typeof document.lastOpenedAt === 'string' || document.lastOpenedAt === null) &&
+    Array.isArray(document.previewElements)
   );
 }
 

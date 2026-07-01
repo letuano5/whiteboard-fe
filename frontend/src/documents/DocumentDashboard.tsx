@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
-import { FileText, FolderOpen, Loader2, Plus, Search } from 'lucide-react';
-import { AuthPanel } from '../auth/AuthPanel';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { FolderOpen, Loader2, Plus, Search } from 'lucide-react';
+import { AuthMenu } from '../auth/AuthMenu';
 import { useAuthStore, type AuthStoreState } from '../auth/auth.store';
 import {
   archiveDocument,
@@ -11,24 +11,37 @@ import {
   renameDocument,
   type DashboardDocument,
   type DocumentDashboardResponse,
+  type DocumentScopeFilter,
 } from './document-api';
-import { DocumentSection } from './DocumentSection';
+import { DocumentCard } from './DocumentCard';
+import { DocumentDashboardLogin } from './DocumentDashboardLogin';
 
 const EMPTY_DASHBOARD: DocumentDashboardResponse = {
-  owned: [],
-  sharedWithMe: [],
-  recent: [],
+  documents: [],
+  nextCursor: null,
 };
+
+const PAGE_LIMIT = 10;
+
+const SCOPE_OPTIONS: { value: DocumentScopeFilter; label: string }[] = [
+  { value: 'all', label: 'All' },
+  { value: 'owned', label: 'Owned by me' },
+  { value: 'shared', label: 'Shared with me' },
+];
 
 export function DocumentDashboard() {
   const session = useAuthStore((state: AuthStoreState) => state.session);
   const status = useAuthStore((state: AuthStoreState) => state.status);
   const initAuth = useAuthStore((state: AuthStoreState) => state.initAuth);
-  const [dashboard, setDashboard] = useState<DocumentDashboardResponse>(EMPTY_DASHBOARD);
+  const [documents, setDocuments] = useState<DashboardDocument[]>(EMPTY_DASHBOARD.documents);
+  const [nextCursor, setNextCursor] = useState<string | null>(EMPTY_DASHBOARD.nextCursor);
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'shared' | 'locked'>('all');
-  const [includeArchived, setIncludeArchived] = useState(false);
+  const [scope, setScope] = useState<DocumentScopeFilter>('all');
+  const [isInitialLoading, setIsInitialLoading] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const latestRequestRef = useRef(0);
+  const loadMoreRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (status === 'idle') {
@@ -36,27 +49,65 @@ export function DocumentDashboard() {
     }
   }, [initAuth, status]);
 
-  useEffect(() => {
-    if (!session) return;
+  const fetchDocuments = useCallback(
+    async (mode: 'replace' | 'append', cursor: string | null = null) => {
+      const requestId =
+        mode === 'replace' ? latestRequestRef.current + 1 : latestRequestRef.current;
+      latestRequestRef.current = requestId;
+      setErrorMessage(null);
+      if (mode === 'replace') {
+        setIsInitialLoading(true);
+      } else {
+        setIsLoadingMore(true);
+      }
 
-    let isCurrent = true;
-    void listDocuments({ search, status: statusFilter, includeArchived })
-      .then((result) => {
-        if (isCurrent) {
-          setDashboard(result);
-          setErrorMessage(null);
-        }
-      })
-      .catch((error) => {
-        if (isCurrent) {
+      try {
+        const result = await listDocuments({ search, scope, cursor, limit: PAGE_LIMIT });
+        if (requestId !== latestRequestRef.current) return;
+
+        setNextCursor(result.nextCursor);
+        setDocuments((current) =>
+          mode === 'replace' ? result.documents : mergeDocuments(current, result.documents),
+        );
+      } catch (error) {
+        if (requestId === latestRequestRef.current) {
           setErrorMessage(error instanceof Error ? error.message : 'Could not load documents.');
         }
-      });
+      } finally {
+        if (requestId === latestRequestRef.current) {
+          setIsInitialLoading(false);
+          setIsLoadingMore(false);
+        }
+      }
+    },
+    [scope, search],
+  );
 
-    return () => {
-      isCurrent = false;
-    };
-  }, [includeArchived, search, session, statusFilter]);
+  useEffect(() => {
+    if (!session) return;
+    const timer = window.setTimeout(() => {
+      void fetchDocuments('replace');
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [fetchDocuments, session]);
+
+  useEffect(() => {
+    const sentinel = loadMoreRef.current;
+    if (!sentinel || !nextCursor || isInitialLoading || isLoadingMore) return;
+    if (typeof IntersectionObserver === 'undefined') return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          void fetchDocuments('append', nextCursor);
+        }
+      },
+      { rootMargin: '420px' },
+    );
+    observer.observe(sentinel);
+
+    return () => observer.disconnect();
+  }, [fetchDocuments, isInitialLoading, isLoadingMore, nextCursor]);
 
   async function handleCreateDocument() {
     await runAction(async () => {
@@ -74,14 +125,14 @@ export function DocumentDashboard() {
     if (name === null) return;
     await runAction(async () => {
       await renameDocument(document.id, name);
-      setDashboard(await listDocuments({ search, status: statusFilter, includeArchived }));
+      await fetchDocuments('replace');
     });
   }
 
   async function handleArchiveDocument(document: DashboardDocument) {
     await runAction(async () => {
       await archiveDocument(document.id, !document.archivedAt);
-      setDashboard(await listDocuments({ search, status: statusFilter, includeArchived }));
+      await fetchDocuments('replace');
     });
   }
 
@@ -89,7 +140,7 @@ export function DocumentDashboard() {
     if (!window.confirm(`Delete ${document.name}?`)) return;
     await runAction(async () => {
       await deleteDocument(document.id);
-      setDashboard(await listDocuments({ search, status: statusFilter, includeArchived }));
+      await fetchDocuments('replace');
     });
   }
 
@@ -109,133 +160,131 @@ export function DocumentDashboard() {
   }
 
   const isCheckingAuth = status === 'idle' || status === 'loading';
-  const totalCount = useMemo(
-    () => dashboard.owned.length + dashboard.sharedWithMe.length,
-    [dashboard],
-  );
 
   if (!session) {
-    return (
-      <main className="min-h-screen bg-[#f5f7f6] px-6 py-8 text-[#18231d]">
-        <div className="mx-auto grid max-w-5xl gap-6 md:grid-cols-[1fr_380px]">
-          <section className="self-start rounded-lg border border-[#c8d6cf] bg-white p-6 shadow-sm">
-            <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-lg bg-[#173f35] text-white">
-              {isCheckingAuth ? <Loader2 className="h-5 w-5 animate-spin" /> : <FolderOpen />}
-            </div>
-            <h1 className="text-2xl font-semibold">Document dashboard</h1>
-            <p className="mt-3 max-w-xl text-sm leading-6 text-[#526057]">
-              Sign in to view owned, shared, and recent saved documents. Anonymous work stays on the
-              local board and does not expose a personal dashboard.
-            </p>
-            <button
-              type="button"
-              onClick={() => {
-                window.history.pushState({}, '', '/');
-                window.location.reload();
-              }}
-              className="mt-5 inline-flex h-10 items-center gap-2 rounded-lg border border-[#173f35] bg-white px-4 text-sm font-semibold text-[#173f35] hover:bg-[#edf5ef]"
-            >
-              <FileText className="h-4 w-4" />
-              Open local board
-            </button>
-          </section>
-          <AuthPanel />
-        </div>
-      </main>
-    );
+    return <DocumentDashboardLogin isCheckingAuth={isCheckingAuth} />;
   }
 
   return (
-    <main className="min-h-screen bg-[#f5f7f6] text-[#18231d]">
-      <header className="border-b border-[#d7e0da] bg-white">
-        <div className="mx-auto flex max-w-7xl flex-col gap-4 px-6 py-5 md:flex-row md:items-center md:justify-between">
-          <div>
-            <p className="text-xs font-semibold uppercase text-[#68766a]">Workspace</p>
-            <h1 className="mt-1 text-2xl font-semibold">Documents</h1>
+    <main className="min-h-screen bg-white text-[#202124]">
+      <header className="sticky top-0 z-20 border-b border-[#e2e5e9] bg-white/95 backdrop-blur">
+        <div className="mx-auto flex max-w-[1680px] flex-col gap-4 px-8 py-5">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase text-[#6b6f76]">Workspace</p>
+              <h1 className="mt-1 text-2xl font-semibold">Recent documents</h1>
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => void handleCreateDocument()}
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-[#173f35] px-4 text-sm font-semibold text-white hover:bg-[#0f2d26]"
+              >
+                <Plus className="h-4 w-4" />
+                New document
+              </button>
+              <AuthMenu />
+            </div>
           </div>
-          <button
-            type="button"
-            onClick={() => void handleCreateDocument()}
-            className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-[#173f35] px-4 text-sm font-semibold text-white hover:bg-[#0f2d26]"
-          >
-            <Plus className="h-4 w-4" />
-            New document
-          </button>
+
+          <div className="grid gap-3 md:grid-cols-[minmax(260px,520px)_auto] md:items-center">
+            <label className="relative block">
+              <Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-[#6b6f76]" />
+              <input
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Search by name or owner"
+                className="h-10 w-full rounded-lg border border-[#d8dde2] bg-white pl-9 pr-3 text-sm outline-none focus:border-[#2457c5] focus:ring-2 focus:ring-[#2457c5]/20"
+              />
+            </label>
+            <div className="flex flex-wrap gap-2" aria-label="Document ownership filter">
+              {SCOPE_OPTIONS.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => setScope(option.value)}
+                  className={`h-10 rounded-lg border px-4 text-sm font-semibold ${
+                    scope === option.value
+                      ? 'border-[#173f35] bg-[#173f35] text-white'
+                      : 'border-[#d8dde2] bg-white text-[#3d444d] hover:bg-[#f3f5f6]'
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       </header>
 
-      <div className="mx-auto max-w-7xl px-6 py-5">
-        <div className="mb-5 grid gap-3 md:grid-cols-[1fr_180px_auto]">
-          <label className="relative block">
-            <Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-[#68766a]" />
-            <input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search by name or owner"
-              className="h-10 w-full rounded-lg border border-[#c8d6cf] bg-white pl-9 pr-3 text-sm outline-none focus:border-[#2457c5] focus:ring-2 focus:ring-[#2457c5]/20"
-            />
-          </label>
-          <select
-            value={statusFilter}
-            onChange={(event) => setStatusFilter(event.target.value as 'all' | 'shared' | 'locked')}
-            className="h-10 rounded-lg border border-[#c8d6cf] bg-white px-3 text-sm outline-none focus:border-[#2457c5] focus:ring-2 focus:ring-[#2457c5]/20"
-            aria-label="Status filter"
-          >
-            <option value="all">All statuses</option>
-            <option value="shared">Shared only</option>
-            <option value="locked">Locked only</option>
-          </select>
-          <label className="flex h-10 items-center gap-2 rounded-lg border border-[#c8d6cf] bg-white px-3 text-sm">
-            <input
-              type="checkbox"
-              checked={includeArchived}
-              onChange={(event) => setIncludeArchived(event.target.checked)}
-            />
-            Include archived
-          </label>
+      <section className="mx-auto max-w-[1680px] px-8 py-8">
+        <div className="mb-6 flex items-center gap-2 text-sm text-[#6b6f76]">
+          <FolderOpen className="h-4 w-4" />
+          {documents.length} loaded · sorted by recent activity
         </div>
 
         {errorMessage ? (
           <p
             role="alert"
-            className="mb-4 rounded-lg border border-[#dfb86a] bg-[#fff8e8] px-3 py-2 text-sm text-[#795014]"
+            className="mb-5 rounded-lg border border-[#dfb86a] bg-[#fff8e8] px-3 py-2 text-sm text-[#795014]"
           >
             {errorMessage}
           </p>
         ) : null}
 
-        <div className="mb-4 flex items-center gap-2 text-sm text-[#526057]">
-          <FolderOpen className="h-4 w-4" />
-          {`${totalCount} accessible documents`}
-        </div>
+        {isInitialLoading ? (
+          <div className="grid min-h-[280px] place-items-center text-[#6b6f76]">
+            <Loader2 className="h-6 w-6 animate-spin" />
+          </div>
+        ) : documents.length ? (
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-x-7 gap-y-10">
+            {documents.map((document) => (
+              <DocumentCard
+                key={document.id}
+                document={document}
+                onOpen={handleOpenDocument}
+                onRename={handleRenameDocument}
+                onArchive={handleArchiveDocument}
+                onDelete={handleDeleteDocument}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="grid min-h-[280px] place-items-center rounded-lg border border-dashed border-[#cdd3d8] bg-[#f8f9fa] px-4 text-center">
+            <div>
+              <FolderOpen className="mx-auto h-8 w-8 text-[#6b6f76]" />
+              <p className="mt-3 text-sm font-semibold">No documents found</p>
+              <p className="mt-1 text-sm text-[#6b6f76]">Try a different search or filter.</p>
+            </div>
+          </div>
+        )}
 
-        <div className="grid gap-5 xl:grid-cols-3">
-          <DocumentSection
-            title="Owned"
-            documents={dashboard.owned}
-            onOpen={handleOpenDocument}
-            onRename={handleRenameDocument}
-            onArchive={handleArchiveDocument}
-            onDelete={handleDeleteDocument}
-          />
-          <DocumentSection
-            title="Shared with me"
-            documents={dashboard.sharedWithMe}
-            onOpen={handleOpenDocument}
-            onRename={handleRenameDocument}
-            onArchive={handleArchiveDocument}
-            onDelete={handleDeleteDocument}
-          />
-          <DocumentSection
-            title="Recent"
-            documents={dashboard.recent}
-            onOpen={handleOpenDocument}
-            onRename={handleRenameDocument}
-            onArchive={handleArchiveDocument}
-            onDelete={handleDeleteDocument}
-          />
-        </div>
-      </div>
+        <div ref={loadMoreRef} className="h-10" />
+        {isLoadingMore ? (
+          <div className="flex justify-center py-6 text-[#6b6f76]">
+            <Loader2 className="h-5 w-5 animate-spin" />
+          </div>
+        ) : nextCursor ? (
+          <div className="flex justify-center py-6">
+            <button
+              type="button"
+              onClick={() => void fetchDocuments('append', nextCursor)}
+              className="h-10 rounded-lg border border-[#d8dde2] bg-white px-4 text-sm font-semibold text-[#3d444d] hover:bg-[#f3f5f6]"
+            >
+              Load more
+            </button>
+          </div>
+        ) : null}
+      </section>
     </main>
   );
+}
+
+function mergeDocuments(
+  current: DashboardDocument[],
+  incoming: DashboardDocument[],
+): DashboardDocument[] {
+  const byId = new Map(current.map((document) => [document.id, document]));
+  incoming.forEach((document) => byId.set(document.id, document));
+  return [...byId.values()];
 }

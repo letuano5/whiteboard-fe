@@ -188,16 +188,18 @@ async function handleDeleteDocument(
 function readListFilters(request: Request): DashboardListFilters {
   const query = request.query;
   const search = typeof query.search === 'string' ? query.search.trim() : '';
-  const includeArchived = query.includeArchived === 'true';
-  const status =
-    query.status === 'shared' || query.status === 'locked' || query.status === 'all'
-      ? query.status
+  const scope =
+    query.scope === 'owned' || query.scope === 'shared' || query.scope === 'all'
+      ? query.scope
       : undefined;
+  const cursor = typeof query.cursor === 'string' ? query.cursor : undefined;
+  const limit = typeof query.limit === 'string' ? Number.parseInt(query.limit, 10) : undefined;
 
   return {
     ...(search ? { search } : {}),
-    includeArchived,
-    ...(status ? { status } : {}),
+    ...(scope ? { scope } : {}),
+    ...(cursor ? { cursor } : {}),
+    ...(Number.isFinite(limit) ? { limit } : {}),
   };
 }
 

@@ -14,7 +14,7 @@ vi.mock('../../auth/authenticated-fetch', () => ({
 }));
 
 const dashboardResponse = {
-  owned: [
+  documents: [
     {
       id: 'owned-room',
       name: 'Owned Plan',
@@ -26,10 +26,10 @@ const dashboardResponse = {
       archivedAt: null,
       updatedAt: '2026-06-30T10:00:00.000Z',
       lastOpenedAt: '2026-06-30T11:00:00.000Z',
+      previewElements: [],
     },
   ],
-  sharedWithMe: [],
-  recent: [],
+  nextCursor: 'cursor-next',
 };
 
 beforeEach(() => {
@@ -37,7 +37,7 @@ beforeEach(() => {
 });
 
 describe('document dashboard API client', () => {
-  it('lists accessible documents with search/status/archived filters', async () => {
+  it('lists accessible documents with search, ownership scope, limit, and cursor', async () => {
     // @covers AC-2
     // @covers AC-4
     vi.mocked(authenticatedFetch).mockResolvedValue(
@@ -45,11 +45,11 @@ describe('document dashboard API client', () => {
     );
 
     await expect(
-      listDocuments({ search: 'briefing', status: 'shared', includeArchived: true }),
+      listDocuments({ search: 'briefing', scope: 'shared', cursor: 'cursor-1', limit: 10 }),
     ).resolves.toEqual(dashboardResponse);
 
     expect(authenticatedFetch).toHaveBeenCalledWith(
-      '/api/documents?search=briefing&includeArchived=true&status=shared',
+      '/api/documents?search=briefing&scope=shared&cursor=cursor-1&limit=10',
     );
   });
 
@@ -82,8 +82,8 @@ describe('document dashboard API client', () => {
   it('sends owner/admin management actions through document endpoints', async () => {
     // @covers AC-6
     vi.mocked(authenticatedFetch)
-      .mockResolvedValueOnce(new Response(JSON.stringify(dashboardResponse.owned[0])))
-      .mockResolvedValueOnce(new Response(JSON.stringify(dashboardResponse.owned[0])))
+      .mockResolvedValueOnce(new Response(JSON.stringify(dashboardResponse.documents[0])))
+      .mockResolvedValueOnce(new Response(JSON.stringify(dashboardResponse.documents[0])))
       .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true })));
 
     await renameDocument('room-owned', 'Renamed');

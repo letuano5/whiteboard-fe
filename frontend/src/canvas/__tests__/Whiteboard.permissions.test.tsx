@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Whiteboard from '../Whiteboard';
 import { useElementsStore } from '../../store/elements.store';
@@ -81,5 +81,20 @@ describe('Whiteboard role permissions', () => {
 
     expect(screen.getByRole('button', { name: /share/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /login/i })).toBeInTheDocument();
+  });
+
+  it('shows dashboard navigation on saved boards', () => {
+    const pushStateSpy = vi.spyOn(window.history, 'pushState').mockImplementation(() => {});
+    const reload = vi.fn();
+    Object.defineProperty(window, 'location', {
+      value: { ...window.location, reload },
+      writable: true,
+    });
+
+    render(<Whiteboard mode="saved" />);
+    fireEvent.click(screen.getByRole('button', { name: /open dashboard/i }));
+
+    expect(pushStateSpy).toHaveBeenCalledWith({}, '', '/dashboard');
+    expect(reload).toHaveBeenCalledOnce();
   });
 });

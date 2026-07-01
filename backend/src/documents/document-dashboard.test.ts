@@ -8,6 +8,7 @@ import {
   recordDocumentOpen,
   updateDashboardDocument,
 } from './document-service.js';
+import { encodeDashboardCursor } from './document-pagination.js';
 
 const ownedOpenedAt = new Date('2026-06-30T10:00:00.000Z');
 const sharedOpenedAt = new Date('2026-06-30T11:00:00.000Z');
@@ -24,6 +25,7 @@ function makeRoom(overrides: Partial<DashboardRoom> = {}): DashboardRoom {
     archivedAt: null,
     updatedAt,
     members: [{ role: 'owner', lastOpenedAt: ownedOpenedAt }],
+    records: [],
     ...overrides,
   };
 }
@@ -38,6 +40,7 @@ interface DashboardRoom {
   archivedAt: Date | null;
   updatedAt: Date;
   members: { role: string; lastOpenedAt: Date | null }[];
+  records: { state: unknown }[];
 }
 
 function buildDb(rooms: DashboardRoom[] = []) {
@@ -75,19 +78,22 @@ beforeEach(() => {
 });
 
 describe('listDashboardDocuments', () => {
-  it('scopes search and filter queries to rooms the user can access', async () => {
+  it('scopes search and ownership filter queries to rooms the user can access', async () => {
     // @covers AC-2
     // @covers AC-4
     const { db, roomFindMany } = buildDb();
 
-    await listDashboardDocuments(db, 'user-123', { search: 'briefing', status: 'locked' });
+    await listDashboardDocuments(db, 'user-123', { search: 'briefing', scope: 'shared' });
 
     const query = roomFindMany.mock.calls[0]?.[0] as { where: { AND: unknown[] } };
     expect(query.where.AND[0]).toEqual({
       OR: [{ ownerId: 'user-123' }, { members: { some: { userId: 'user-123' } } }],
     });
     expect(query.where.AND).toContainEqual({ archivedAt: null });
-    expect(query.where.AND).toContainEqual({ locked: true });
+    expect(query.where.AND).toContainEqual({
+      ownerId: { not: 'user-123' },
+      members: { some: { userId: 'user-123' } },
+    });
     expect(query.where.AND).toContainEqual({
       OR: [
         { name: { contains: 'briefing', mode: 'insensitive' } },
@@ -97,34 +103,75 @@ describe('listDashboardDocuments', () => {
     });
   });
 
-  it('does not add the default archived exclusion when archived filter is enabled', async () => {
-    // @covers AC-4
+  it('uses keyset pagination without offset', async () => {
+    // @covers AC-8
     const { db, roomFindMany } = buildDb();
+    const cursor = encodeDashboardCursor(new Date('2026-06-30T09:00:00.000Z'), 'room-09');
 
-    await listDashboardDocuments(db, 'user-123', { includeArchived: true });
+    await listDashboardDocuments(db, 'user-123', { cursor, limit: 10 });
 
-    const query = roomFindMany.mock.calls[0]?.[0] as { where: { AND: unknown[] } };
-    expect(query.where.AND).not.toContainEqual({ archivedAt: null });
+    const query = roomFindMany.mock.calls[0]?.[0] as {
+      orderBy: unknown;
+      skip?: number;
+      take: number;
+      where: { AND: unknown[] };
+    };
+    expect(query.orderBy).toEqual([{ updatedAt: 'desc' }, { id: 'desc' }]);
+    expect(query.take).toBe(11);
+    expect(query.skip).toBeUndefined();
+    expect(query.where.AND).toContainEqual({
+      OR: [
+        { updatedAt: { lt: new Date('2026-06-30T09:00:00.000Z') } },
+        { updatedAt: new Date('2026-06-30T09:00:00.000Z'), id: { lt: 'room-09' } },
+      ],
+    });
   });
 
-  it('groups owned, shared, and recent documents from accessible rooms', async () => {
+  it('returns recent documents with preview elements and a next cursor', async () => {
     // @covers AC-3
     // @covers AC-7
-    const { db } = buildDb([
-      makeRoom(),
+    const rooms = Array.from({ length: 11 }, (_, index) =>
       makeRoom({
-        id: 'room-shared',
-        name: 'Shared Plan',
-        ownerId: 'owner-456',
-        members: [{ role: 'viewer', lastOpenedAt: sharedOpenedAt }],
+        id: `room-${String(index).padStart(2, '0')}`,
+        name: index === 0 ? 'Shared Plan' : 'Owned Plan',
+        ownerId: index === 0 ? 'owner-456' : 'user-123',
+        updatedAt: new Date(`2026-06-30T10:${String(59 - index).padStart(2, '0')}:00.000Z`),
+        members: [
+          {
+            role: index === 0 ? 'viewer' : 'owner',
+            lastOpenedAt: index === 0 ? sharedOpenedAt : ownedOpenedAt,
+          },
+        ],
+        records:
+          index === 0
+            ? [
+                {
+                  state: {
+                    id: 'preview-el',
+                    type: 'rectangle',
+                    x: 10,
+                    y: 20,
+                    width: 30,
+                    height: 40,
+                    zIndex: 1,
+                    isDeleted: false,
+                    props: {},
+                  },
+                },
+              ]
+            : [],
       }),
-    ]);
+    );
+    const { db } = buildDb(rooms);
 
     const result = await listDashboardDocuments(db, 'user-123');
 
-    expect(result.owned.map((document) => document.id)).toEqual(['room-owned']);
-    expect(result.sharedWithMe.map((document) => document.id)).toEqual(['room-shared']);
-    expect(result.recent.map((document) => document.id)).toEqual(['room-shared', 'room-owned']);
+    expect(result.documents).toHaveLength(10);
+    expect(result.documents[0]?.id).toBe('room-00');
+    expect(result.documents[0]?.previewElements.map((element) => element.id)).toEqual([
+      'preview-el',
+    ]);
+    expect(result.nextCursor).toEqual(expect.any(String));
   });
 });
 

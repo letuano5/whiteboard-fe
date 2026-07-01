@@ -1,4 +1,5 @@
 import { useRef } from 'react';
+import { Menu } from 'lucide-react';
 import { useElementsStore, useInteractionStore, useCameraStore } from '../store';
 import ContextMenu from '../components/context-menu/ContextMenu';
 import TextEditor from './tools/text-editor';
@@ -66,6 +67,18 @@ export default function Whiteboard({ mode = 'saved' }: WhiteboardProps) {
       ref={containerRef}
       style={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden', cursor }}
     >
+      <button
+        type="button"
+        onClick={() => {
+          window.history.pushState({}, '', '/dashboard');
+          window.location.reload();
+        }}
+        className="absolute left-3 top-3 z-50 flex h-10 w-10 items-center justify-center rounded-lg border border-[#cbd9cb] bg-white text-[#173f35] shadow-[0_8px_24px_rgba(23,63,53,0.12)] hover:bg-[#edf5ef] focus:outline-none focus:ring-2 focus:ring-[#2457c5] focus:ring-offset-2"
+        aria-label="Open dashboard"
+        title="Open dashboard"
+      >
+        <Menu className="h-5 w-5" />
+      </button>
       <SvgLayer
         elements={elements}
         camera={camera}

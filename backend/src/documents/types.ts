@@ -1,4 +1,6 @@
-export type DocumentStatusFilter = 'all' | 'shared' | 'locked';
+import type { Element } from '@vdt/shared';
+
+export type DocumentScopeFilter = 'all' | 'owned' | 'shared';
 
 export interface DashboardDocument {
   id: string;
@@ -11,18 +13,19 @@ export interface DashboardDocument {
   archivedAt: string | null;
   updatedAt: string;
   lastOpenedAt: string | null;
+  previewElements: Element[];
 }
 
 export interface DocumentDashboardResponse {
-  owned: DashboardDocument[];
-  sharedWithMe: DashboardDocument[];
-  recent: DashboardDocument[];
+  documents: DashboardDocument[];
+  nextCursor: string | null;
 }
 
 export interface DashboardListFilters {
   search?: string;
-  includeArchived?: boolean;
-  status?: DocumentStatusFilter;
+  scope?: DocumentScopeFilter;
+  cursor?: string;
+  limit?: number;
 }
 
 export interface RoomForDashboard {
@@ -35,6 +38,7 @@ export interface RoomForDashboard {
   archivedAt: Date | null;
   updatedAt: Date;
   members: { role: string; lastOpenedAt: Date | null }[];
+  records: { state: unknown }[];
 }
 
 export interface DocumentErrorResponse {

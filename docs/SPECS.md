@@ -660,11 +660,11 @@ Clone Repo chính thức tại: https://github.com/supabase/supabase/tree/master
 - [ ] Local-only board không tạo `Room`, `Record`, `Tombstone`, `RoomMember` trong DB.
 - [ ] Local-only board vẫn lưu localStorage và sync qua các tab cùng browser bằng BroadcastChannel.
 - [ ] Local-only board không kết nối persistence/autosave DB; network realtime cho anonymous saved room dời sang P4-02 link/public modes.
-- [ ] UI trong local-only board chỉ hiện một CTA ở góc: `Login to save`.
-- [ ] Bấm `Login to save` chuyển sang màn login, sau login quay lại board local hiện tại.
-- [ ] Sau login, user được hỏi confirm để lưu board local thành saved document.
-- [ ] Nếu user confirm: tạo room persisted mới, copy toàn bộ elements hiện tại vào DB qua mutation/import path hợp lệ, user hiện tại là owner, room mặc định `visibility = 'private'`.
-- [ ] Nếu user cancel: board vẫn ở local-only mode, không tạo DB room.
+- [ ] UI anonymous local-only board hiện import, export, và CTA `Login to save`.
+- [ ] Bấm `Login to save` mở login nếu user chưa đăng nhập; sau login thành công tự tạo saved document ngay, không hỏi confirm.
+- [ ] Tạo room persisted mới, copy toàn bộ elements hiện tại vào DB qua mutation/import path hợp lệ, user hiện tại là owner, room mặc định `visibility = 'private'`.
+- [ ] Sau khi convert local → saved thành công, xóa local board scene khỏi localStorage để reload không resurrect bản local cũ.
+- [ ] Local-only board có nút menu ở góc trái trên; bấm vào mở `/dashboard`.
 - [ ] Convert local → saved không làm mất element, zIndex, version metadata, deleted/tombstone semantics cần thiết, và camera hiện tại nếu có lưu.
 
 **Acceptance criteria:**
@@ -673,7 +673,7 @@ Clone Repo chính thức tại: https://github.com/supabase/supabase/tree/master
 - [ ] Anonymous mở tab thứ hai cùng local board, thay đổi sync qua tab.
 - [ ] Anonymous local board không xuất hiện trong DB và không có room id persisted.
 - [ ] `Login to save` chỉ hiện cho local-only board; saved document không hiện CTA này.
-- [ ] Login thành công rồi confirm save tạo saved document với owner đúng.
+- [ ] Login thành công rồi auto-save tạo saved document với owner đúng.
 - [ ] Convert local → saved giữ nguyên nội dung canvas nhìn thấy trước khi login.
 - [ ] Nếu login hoặc save thất bại, local board không mất data và user thấy lỗi rõ ràng.
 
@@ -681,10 +681,11 @@ Clone Repo chính thức tại: https://github.com/supabase/supabase/tree/master
 
 - [ ] User đã đăng nhập có dashboard liệt kê các room/document mình sở hữu, được share, và mở gần đây.
 - [ ] Anonymous user không có dashboard cá nhân; chỉ có local board hiện tại và CTA login.
-- [ ] Dashboard tách rõ nhóm: `Owned`, `Shared with me`, `Recent`.
+- [ ] Dashboard hiển thị tài liệu theo `Recent` mặc định, có preview từng document theo kiểu grid card.
 - [ ] Tạo room mới từ dashboard; room mới mặc định `visibility = 'private'`, owner là user hiện tại.
 - [ ] Đổi tên room/document; xóa hoặc archive room chỉ owner/admin được làm.
-- [ ] Search/filter theo tên, owner, updatedAt, và trạng thái shared/locked.
+- [ ] Search theo tên/owner; filter chỉ gồm `All`, `Owned by me`, `Shared with me`.
+- [ ] Dashboard dùng infinite scroll với keyset cursor (`updatedAt`, `id`), không dùng limit/offset pagination.
 - [BE] Thêm `Workspace` và `WorkspaceMember` nếu cần nhóm nhiều document; tối thiểu P4 có thể dùng personal workspace mặc định cho mỗi user.
 - [BE] Room lưu `workspaceId`, `ownerId`, `visibility`, `locked`, `archivedAt`, `lastOpenedAt`, `createdBy`.
 - [BE] Query dashboard chỉ trả document mà user có quyền xem; không leak private room qua search.
@@ -697,6 +698,7 @@ Clone Repo chính thức tại: https://github.com/supabase/supabase/tree/master
 - [ ] Archived/deleted document không xuất hiện mặc định nhưng owner có thể xem bằng filter nếu còn retained.
 - [ ] Tạo document từ dashboard mở thẳng canvas saved document với role owner.
 - [ ] Rename/archive/delete bị server reject nếu actor không phải owner/admin.
+- [ ] Trang đầu dashboard lấy tối đa 10 documents; các trang sau dùng cursor từ document cuối cùng để query tiếp.
 
 ### [P4-02] Sharing, public/private access, invited users
 
