@@ -1,5 +1,10 @@
 import type { PrismaClient } from '@prisma/client';
-import type { RoomAccessMode, RoomAccessPayload, RoomRole } from '@vdt/shared';
+import {
+  ROOM_CAPACITY_LIMITS,
+  type RoomAccessMode,
+  type RoomAccessPayload,
+  type RoomRole,
+} from '@vdt/shared';
 import type { AppUser } from '../auth/index.js';
 import { normalizeEmail } from './room-access-records.js';
 import { loadRoomForOwnerAction, resolveRoomAccess, RoomAccessError } from './room-roles.js';
@@ -172,4 +177,63 @@ export async function revokeRoomShareLink(
   });
 
   return resolveRoomAccess(db, roomId, actor);
+}
+
+export interface RoomCapacitySettingsInput {
+  maxParticipants?: number | null;
+  maxEditors?: number | null;
+}
+
+export async function updateRoomCapacitySettings(
+  db: PrismaClient,
+  roomId: string,
+  actor: AppUser | undefined,
+  input: RoomCapacitySettingsInput,
+): Promise<RoomAccessPayload> {
+  if (!actor) {
+    throw new RoomAccessError('room-access/unauthenticated', 'Authentication is required.');
+  }
+
+  const room = await loadRoomForOwnerAction(db, roomId, actor);
+  const nextMaxParticipants =
+    input.maxParticipants !== undefined ? input.maxParticipants : room.maxParticipants;
+  const nextMaxEditors = input.maxEditors !== undefined ? input.maxEditors : room.maxEditors;
+  validateCapacitySettings(nextMaxParticipants, nextMaxEditors);
+
+  const roomDelegate = db.room as unknown as {
+    update: (args: { where: { id: string }; data: RoomCapacitySettingsInput }) => Promise<unknown>;
+  };
+  const data: RoomCapacitySettingsInput = {};
+  if (input.maxParticipants !== undefined) data.maxParticipants = input.maxParticipants;
+  if (input.maxEditors !== undefined) data.maxEditors = input.maxEditors;
+
+  await roomDelegate.update({
+    where: { id: roomId },
+    data,
+  });
+
+  return resolveRoomAccess(db, roomId, actor);
+}
+
+function validateCapacitySettings(maxParticipants: number | null, maxEditors: number | null): void {
+  if (maxParticipants !== null && maxParticipants > ROOM_CAPACITY_LIMITS.MAX_PARTICIPANTS) {
+    throw new RoomAccessError(
+      'room-access/invalid-capacity',
+      `Participant limit cannot exceed ${ROOM_CAPACITY_LIMITS.MAX_PARTICIPANTS}.`,
+    );
+  }
+
+  if (maxEditors !== null && maxEditors > ROOM_CAPACITY_LIMITS.MAX_EDITORS) {
+    throw new RoomAccessError(
+      'room-access/invalid-capacity',
+      `Editor limit cannot exceed ${ROOM_CAPACITY_LIMITS.MAX_EDITORS}.`,
+    );
+  }
+
+  if (maxParticipants !== null && maxEditors !== null && maxEditors > maxParticipants) {
+    throw new RoomAccessError(
+      'room-access/invalid-capacity',
+      'Editor limit cannot exceed participant limit.',
+    );
+  }
 }

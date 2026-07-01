@@ -19,6 +19,8 @@ model Room {
   visibility                    String           @default("private")
   shareRevokedAt                DateTime?
   locked                        Boolean          @default(false)
+  maxParticipants               Int?
+  maxEditors                    Int?
   archivedAt                    DateTime?
   lastOpenedAt                  DateTime?
   createdBy                     String?

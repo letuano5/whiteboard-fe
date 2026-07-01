@@ -1,7 +1,12 @@
 import type { Request, Response, Router } from 'express';
 import express from 'express';
 import type { PrismaClient } from '@prisma/client';
-import type { RoomAccessMode, RoomAccessPayload, RoomRole } from '@vdt/shared';
+import {
+  ROOM_CAPACITY_LIMITS,
+  type RoomAccessMode,
+  type RoomAccessPayload,
+  type RoomRole,
+} from '@vdt/shared';
 import type { AuthVerifier } from '../auth/index.js';
 import {
   createHttpAuthMiddleware,
@@ -13,6 +18,8 @@ import {
   removeRoomMember,
   revokeRoomInvitation,
   revokeRoomShareLink,
+  updateRoomCapacitySettings,
+  type RoomCapacitySettingsInput,
   updateRoomMemberRole,
   updateRoomShareMode,
 } from './room-access-management.js';
@@ -33,6 +40,8 @@ interface RoomAccessHttpError {
       | 'room-access/member-not-found'
       | 'room-access/invitation-not-found'
       | 'room-access/invalid-role'
+      | 'room-access/invalid-capacity'
+      | 'room-access/room-full'
       | 'room-access/invalid-payload';
     message: string;
   };
@@ -65,6 +74,12 @@ export function createRoomSharingRouter(deps: RoomSharingDeps): Router {
       void handleRevokeShareLink(request as AuthenticatedRequest, response, deps);
     },
   );
+  router.patch(
+    '/api/rooms/:roomId/capacity',
+    (request: Request, response: Response<RoomAccessPayload | RoomAccessHttpError>) => {
+      void handleUpdateRoomCapacity(request as AuthenticatedRequest, response, deps);
+    },
+  );
   router.post(
     '/api/rooms/:roomId/invitations',
     (request: Request, response: Response<RoomAccessPayload | RoomAccessHttpError>) => {
@@ -91,6 +106,26 @@ export function createRoomSharingRouter(deps: RoomSharingDeps): Router {
   );
 
   return router;
+}
+
+async function handleUpdateRoomCapacity(
+  request: AuthenticatedRequest,
+  response: Response<RoomAccessPayload | RoomAccessHttpError>,
+  deps: RoomSharingDeps,
+): Promise<void> {
+  const input = readRoomCapacityInput(request.body);
+  if (!input) {
+    sendAccessError(response, 400, 'room-access/invalid-payload', 'Room capacity is invalid.');
+    return;
+  }
+
+  try {
+    response.json(
+      await updateRoomCapacitySettings(deps.db, readRoomId(request), request.auth.user, input),
+    );
+  } catch (error) {
+    sendKnownAccessError(response, error);
+  }
 }
 
 async function handleAccessSummary(
@@ -245,6 +280,37 @@ function readEditableRole(value: unknown): Extract<RoomRole, 'editor' | 'viewer'
   return role === 'editor' || role === 'viewer' ? role : null;
 }
 
+function readRoomCapacityInput(value: unknown): RoomCapacitySettingsInput | null {
+  if (typeof value !== 'object' || value === null) return null;
+  const body = value as Record<string, unknown>;
+  const input: RoomCapacitySettingsInput = {};
+  const keys = Object.keys(body);
+  if (keys.some((key) => key !== 'maxParticipants' && key !== 'maxEditors')) return null;
+
+  if ('maxParticipants' in body) {
+    const limit = readOptionalCapacityLimit(
+      body.maxParticipants,
+      ROOM_CAPACITY_LIMITS.MAX_PARTICIPANTS,
+    );
+    if (limit === undefined) return null;
+    input.maxParticipants = limit;
+  }
+  if ('maxEditors' in body) {
+    const limit = readOptionalCapacityLimit(body.maxEditors, ROOM_CAPACITY_LIMITS.MAX_EDITORS);
+    if (limit === undefined) return null;
+    input.maxEditors = limit;
+  }
+
+  return Object.keys(input).length > 0 ? input : null;
+}
+
+function readOptionalCapacityLimit(value: unknown, maxValue: number): number | null | undefined {
+  if (value === null) return null;
+  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0 && value <= maxValue
+    ? value
+    : undefined;
+}
+
 function readRoomId(request: Request): string {
   return readParam(request.params.roomId);
 }
@@ -263,7 +329,12 @@ function readParam(value: string | string[] | undefined): string {
 
 function sendKnownAccessError(response: Response<RoomAccessHttpError>, error: unknown): void {
   if (error instanceof RoomAccessError) {
-    const status = error.code === 'room-access/unauthenticated' ? 401 : 403;
+    const status =
+      error.code === 'room-access/unauthenticated'
+        ? 401
+        : error.code === 'room-access/invalid-capacity'
+          ? 400
+          : 403;
     sendAccessError(response, status, error.code, error.message);
     return;
   }

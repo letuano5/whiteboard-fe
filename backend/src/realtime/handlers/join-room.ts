@@ -14,8 +14,18 @@ export async function handleJoinRoom(
   const { roomPresence: presence, roomElements: elements, roomClocks: clocks, db } = deps;
 
   try {
-    const access = await resolveRoomAccess(db, roomId, socket.data?.auth?.user);
+    const roomMap = presence.get(roomId);
+    const access = await resolveRoomAccess(db, roomId, socket.data?.auth?.user, {
+      activePresences: roomMap?.values(),
+      currentSessionId: sessionId,
+    });
+    socket.data.roomBaseRole = access.baseRole;
     socket.data.roomRole = access.effectiveRole;
+    socket.data.roomRoleCapacityDowngraded = isEditorCapacityDowngrade(
+      access,
+      roomMap?.values(),
+      sessionId,
+    );
     socket.emit(WS_EVENTS.ROOM_ACCESS, access);
   } catch (err) {
     if (err instanceof RoomAccessError) {
@@ -28,13 +38,17 @@ export async function handleJoinRoom(
 
     console.error('[room-access] DB error during join:', err);
     if (!socket.data?.auth?.user) {
+      socket.data.roomBaseRole = 'editor';
       socket.data.roomRole = 'editor';
+      socket.data.roomRoleCapacityDowngraded = false;
       socket.emit(WS_EVENTS.ROOM_ACCESS, {
         roomId,
         role: 'editor',
         baseRole: 'editor',
         effectiveRole: 'editor',
         visibility: 'link_edit',
+        maxParticipants: null,
+        maxEditors: null,
         shareRevokedAt: null,
         members: [],
         invitations: [],
@@ -58,11 +72,14 @@ export async function handleJoinRoom(
   const roomMap = presence.get(roomId)!;
   roomMap.set(socket.id, {
     sessionId,
+    userId: socket.data?.auth?.user?.id,
     name,
     color,
     cursor: null,
     selectedIds: [],
     status: 'active',
+    baseRole: socket.data.roomBaseRole,
+    effectiveRole: socket.data.roomRole,
   });
 
   console.log(`socket ${socket.id} (${name}) joined room ${roomId}`);
@@ -116,4 +133,25 @@ export async function handleJoinRoom(
 
   const presences = [...roomMap.values()];
   ioServer.to(roomId).emit(WS_EVENTS.USER_JOIN, { presences });
+}
+
+interface AccessForAdmission {
+  baseRole: string;
+  effectiveRole: string;
+  maxEditors: number | null;
+}
+
+function isEditorCapacityDowngrade(
+  access: AccessForAdmission,
+  activePresences: Iterable<{ sessionId: string; effectiveRole?: string }> | undefined,
+  currentSessionId: string,
+): boolean {
+  if (access.baseRole !== 'editor' || access.effectiveRole !== 'viewer' || !access.maxEditors) {
+    return false;
+  }
+
+  const activeEditorCount = [...(activePresences ?? [])].filter(
+    (presence) => presence.sessionId !== currentSessionId && presence.effectiveRole === 'editor',
+  ).length;
+  return activeEditorCount >= access.maxEditors;
 }

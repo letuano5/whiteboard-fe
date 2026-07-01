@@ -6,6 +6,7 @@ import {
   inviteRoomUser,
   removeRoomMember,
   setRoomShareMode,
+  updateRoomCapacitySettings,
   updateRoomMemberRole,
 } from '../room-access-api';
 
@@ -13,6 +14,7 @@ vi.mock('../room-access-api', () => ({
   inviteRoomUser: vi.fn(),
   removeRoomMember: vi.fn(),
   setRoomShareMode: vi.fn(),
+  updateRoomCapacitySettings: vi.fn(),
   updateRoomMemberRole: vi.fn(),
 }));
 
@@ -22,6 +24,8 @@ const ownerAccess = {
   baseRole: 'owner' as const,
   effectiveRole: 'owner' as const,
   visibility: 'private' as const,
+  maxParticipants: null,
+  maxEditors: null,
   shareRevokedAt: null,
   members: [
     {
@@ -50,6 +54,7 @@ beforeEach(() => {
   vi.mocked(updateRoomMemberRole).mockResolvedValue(ownerAccess);
   vi.mocked(removeRoomMember).mockResolvedValue(ownerAccess);
   vi.mocked(setRoomShareMode).mockResolvedValue(ownerAccess);
+  vi.mocked(updateRoomCapacitySettings).mockResolvedValue(ownerAccess);
 });
 
 describe('ManageAccessModal', () => {
@@ -62,6 +67,9 @@ describe('ManageAccessModal', () => {
     expect(screen.getByRole('button', { name: 'Private' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Public viewer' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Public editor' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Capacity' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Max participants')).toBeInTheDocument();
+    expect(screen.getByLabelText('Max editors')).toBeInTheDocument();
   });
 
   it('adds email, changes role, removes member, and updates link access', async () => {
@@ -82,6 +90,23 @@ describe('ManageAccessModal', () => {
       expect(updateRoomMemberRole).toHaveBeenCalledWith('room-1', 'member-1', 'viewer');
       expect(removeRoomMember).toHaveBeenCalledWith('room-1', 'member-1');
       expect(setRoomShareMode).toHaveBeenCalledWith('room-1', 'link_edit');
+    });
+  });
+
+  it('updates room capacity limits from the Share modal', async () => {
+    // @covers AC-2
+    render(<ManageAccessModal roomId="room-1" onClose={vi.fn()} />);
+
+    fireEvent.change(screen.getByLabelText('Max participants'), { target: { value: '20' } });
+    fireEvent.blur(screen.getByLabelText('Max participants'));
+    fireEvent.change(screen.getByLabelText('Max editors'), { target: { value: '5' } });
+    fireEvent.blur(screen.getByLabelText('Max editors'));
+
+    await waitFor(() => {
+      expect(updateRoomCapacitySettings).toHaveBeenCalledWith('room-1', {
+        maxParticipants: 20,
+      });
+      expect(updateRoomCapacitySettings).toHaveBeenCalledWith('room-1', { maxEditors: 5 });
     });
   });
 });

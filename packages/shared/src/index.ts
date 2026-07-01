@@ -75,6 +75,8 @@ export interface Presence {
   selectedIds: string[];
   status: 'active' | 'idle' | 'away';
   viewport?: { x: number; y: number; zoom: number };
+  baseRole?: EffectiveRoomRole;
+  effectiveRole?: EffectiveRoomRole;
 }
 
 // ─── Room access (§P3B-02) ──────────────────────────────────────────────────
@@ -82,6 +84,11 @@ export interface Presence {
 export type RoomRole = 'owner' | 'editor' | 'viewer';
 export type EffectiveRoomRole = RoomRole | 'none';
 export type RoomAccessMode = 'private' | 'link_view' | 'link_edit';
+
+export const ROOM_CAPACITY_LIMITS = {
+  MAX_PARTICIPANTS: 50,
+  MAX_EDITORS: 10,
+} as const;
 
 export interface RoomMemberSummary {
   userId: string;
@@ -104,6 +111,8 @@ export interface RoomAccessPayload {
   baseRole: EffectiveRoomRole;
   effectiveRole: EffectiveRoomRole;
   visibility: RoomAccessMode;
+  maxParticipants: number | null;
+  maxEditors: number | null;
   shareRevokedAt: string | null;
   members: RoomMemberSummary[];
   invitations: RoomInvitationSummary[];
@@ -122,7 +131,9 @@ export interface RoomAccessErrorPayload {
     | 'room-access/user-not-found'
     | 'room-access/member-not-found'
     | 'room-access/invitation-not-found'
-    | 'room-access/invalid-role';
+    | 'room-access/invalid-role'
+    | 'room-access/invalid-capacity'
+    | 'room-access/room-full';
   message: string;
 }
 

@@ -67,6 +67,8 @@ declare module 'socket.io' {
       identity: VerifiedIdentity;
       user?: AppUser;
     };
+    roomBaseRole?: EffectiveRoomRole;
     roomRole?: EffectiveRoomRole;
+    roomRoleCapacityDowngraded?: boolean;
   }
 }

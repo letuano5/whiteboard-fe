@@ -44,6 +44,41 @@ describe('handleElementUpdate room role authorization', () => {
     });
   });
 
+  it('rejects mutations from an editor socket admitted as viewer by capacity', async () => {
+    // @covers AC-4
+    const emit = vi.fn();
+    const peerEmit = vi.fn();
+    const socket = makeSocket(editorUser, emit, peerEmit);
+    socket.data.roomRole = 'viewer';
+    socket.data.roomRoleCapacityDowngraded = true;
+    const db = makeRoleDb('editor', editorUser);
+    const autosave = createAutosaveManager({
+      delayMs: 60000,
+      getRoomElements: () => [],
+      saveRoomElements: vi.fn().mockResolvedValue(null),
+    });
+    const roomElements = new Map<string, Map<string, Element>>();
+
+    await handleElementUpdate(
+      socket,
+      {
+        roomPresence: new Map<string, Map<string, Presence>>(),
+        roomElements,
+        roomClocks: new Map(),
+        autosave,
+        db,
+      },
+      { roomId: 'room-1', elements: [makeElement({ id: 'capacity-el' })] },
+    );
+
+    expect(roomElements.get('room-1')).toBeUndefined();
+    expect(peerEmit).not.toHaveBeenCalled();
+    expect(emit).toHaveBeenCalledWith(WS_EVENTS.ROOM_ACCESS_ERROR, {
+      code: 'room-access/forbidden',
+      message: 'Viewers cannot mutate room elements.',
+    });
+  });
+
   it('allows editor mutations and broadcasts the committed update', async () => {
     const emit = vi.fn();
     const peerEmit = vi.fn();
@@ -104,12 +139,16 @@ function makeSocket(
   } as unknown as Socket;
 }
 
-function makeRoleDb(role: 'editor' | 'viewer', user: AppUser, clock = 0): PrismaClient {
+function makeRoleDb(role: 'owner' | 'editor' | 'viewer', user: AppUser, clock = 0): PrismaClient {
   return {
     room: {
       upsert: vi.fn().mockResolvedValue({
         id: 'room-1',
         ownerId: ownerUser.id,
+        visibility: 'private',
+        locked: false,
+        maxParticipants: null,
+        maxEditors: null,
         members: [
           { roomId: 'room-1', userId: ownerUser.id, role: 'owner', user: ownerUser },
           { roomId: 'room-1', userId: user.id, role, user },

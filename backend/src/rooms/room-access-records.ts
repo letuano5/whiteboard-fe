@@ -35,6 +35,8 @@ export interface RoomAccessRecord {
   visibility: string;
   shareRevokedAt: Date | null;
   locked: boolean;
+  maxParticipants: number | null;
+  maxEditors: number | null;
   archivedAt: Date | null;
   lastOpenedAt: Date | null;
   createdBy: string | null;
@@ -114,6 +116,8 @@ export function makeLegacyEphemeralRoom(roomId: string): RoomAccessRecord {
     visibility: 'link_edit',
     shareRevokedAt: null,
     locked: false,
+    maxParticipants: null,
+    maxEditors: null,
     archivedAt: null,
     lastOpenedAt: null,
     createdBy: null,
@@ -139,6 +143,8 @@ function normalizeLoadedRoom(room: Partial<RoomAccessRecord>, roomId: string): R
     visibility: room.visibility ?? 'private',
     shareRevokedAt: room.shareRevokedAt ?? null,
     locked: room.locked ?? false,
+    maxParticipants: normalizeLimit(room.maxParticipants),
+    maxEditors: normalizeLimit(room.maxEditors),
     archivedAt: room.archivedAt ?? null,
     lastOpenedAt: room.lastOpenedAt ?? null,
     createdBy: room.createdBy ?? null,
@@ -149,4 +155,8 @@ function normalizeLoadedRoom(room: Partial<RoomAccessRecord>, roomId: string): R
     members: room.members,
     invitations: Array.isArray(room.invitations) ? room.invitations : [],
   };
+}
+
+function normalizeLimit(value: unknown): number | null {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : null;
 }

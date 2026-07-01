@@ -4,9 +4,11 @@ import type { AppUser } from '../auth/index.js';
 import {
   inviteRoomUser,
   revokeRoomShareLink,
+  updateRoomCapacitySettings,
   updateRoomMemberRole,
 } from './room-access-management.js';
 import { resolveRoomAccess } from './room-roles.js';
+import type { Presence } from '@vdt/shared';
 
 const owner = makeUser('owner', 'owner@example.com');
 const editor = makeUser('editor', 'editor@example.com');
@@ -32,18 +34,58 @@ describe('resolveRoomAccess', () => {
     });
   });
 
-  it('allows link_edit visitors as editors unless the room is locked', async () => {
+  it('allows link_edit visitors as editors', async () => {
     // @covers AC-8
-    const openDb = makeDb([makeRoom({ visibility: 'link_edit', locked: false })]);
-    const lockedDb = makeDb([makeRoom({ visibility: 'link_edit', locked: true })]);
+    const db = makeDb([makeRoom({ visibility: 'link_edit', locked: true })]);
 
-    await expect(resolveRoomAccess(openDb, 'room-1', undefined)).resolves.toMatchObject({
+    await expect(resolveRoomAccess(db, 'room-1', undefined)).resolves.toMatchObject({
       baseRole: 'editor',
       effectiveRole: 'editor',
     });
-    await expect(resolveRoomAccess(lockedDb, 'room-1', undefined)).resolves.toMatchObject({
+  });
+
+  it('rejects new participants when maxParticipants is already reached', async () => {
+    // @covers AC-3
+    const db = makeDb([makeRoom({ visibility: 'link_view', maxParticipants: 1 })]);
+
+    await expect(
+      resolveRoomAccess(db, 'room-1', undefined, {
+        activePresences: [makePresence('existing-session', 'viewer')],
+        currentSessionId: 'new-session',
+      }),
+    ).rejects.toThrow('Room participant limit reached.');
+  });
+
+  it('downgrades eligible editors to viewer when maxEditors is already reached', async () => {
+    // @covers AC-4
+    // @covers AC-6
+    const db = makeDb([makeRoom({ visibility: 'link_edit', maxEditors: 1 })]);
+
+    await expect(
+      resolveRoomAccess(db, 'room-1', undefined, {
+        activePresences: [makePresence('existing-editor', 'editor')],
+        currentSessionId: 'new-session',
+      }),
+    ).resolves.toMatchObject({
       baseRole: 'editor',
       effectiveRole: 'viewer',
+      maxEditors: 1,
+    });
+  });
+
+  it('returns room capacity metadata in the access payload', async () => {
+    // @covers AC-5
+    const db = makeDb([
+      makeRoom({
+        maxParticipants: 12,
+        maxEditors: 4,
+        members: [makeMember(owner, 'owner')],
+      }),
+    ]);
+
+    await expect(resolveRoomAccess(db, 'room-1', owner)).resolves.toMatchObject({
+      maxParticipants: 12,
+      maxEditors: 4,
     });
   });
 
@@ -132,6 +174,58 @@ describe('room access management', () => {
       data: { visibility: 'private', shareRevokedAt: expect.any(Date) },
     });
   });
+
+  it('allows owners to update room capacity limits', async () => {
+    // @covers AC-2
+    // @covers AC-3
+    // @covers AC-4
+    const db = makeDb([
+      makeRoom({ members: [makeMember(owner, 'owner')] }),
+      makeRoom({
+        maxParticipants: 20,
+        maxEditors: 5,
+        members: [makeMember(owner, 'owner')],
+      }),
+    ]);
+
+    await updateRoomCapacitySettings(db, 'room-1', owner, {
+      maxParticipants: 20,
+      maxEditors: 5,
+    });
+
+    expect(db.room.update).toHaveBeenCalledWith({
+      where: { id: 'room-1' },
+      data: { maxParticipants: 20, maxEditors: 5 },
+    });
+  });
+
+  it('rejects capacity limits above the configured maximums', async () => {
+    // @covers AC-2
+    const participantsDb = makeDb([makeRoom({ members: [makeMember(owner, 'owner')] })]);
+
+    await expect(
+      updateRoomCapacitySettings(participantsDb, 'room-1', owner, { maxParticipants: 51 }),
+    ).rejects.toThrow('Participant limit cannot exceed 50.');
+    expect(participantsDb.room.update).not.toHaveBeenCalled();
+
+    const editorsDb = makeDb([makeRoom({ members: [makeMember(owner, 'owner')] })]);
+
+    await expect(
+      updateRoomCapacitySettings(editorsDb, 'room-1', owner, { maxEditors: 11 }),
+    ).rejects.toThrow('Editor limit cannot exceed 10.');
+    expect(editorsDb.room.update).not.toHaveBeenCalled();
+  });
+
+  it('rejects editor capacity above participant capacity', async () => {
+    // @covers AC-2
+    const db = makeDb([makeRoom({ maxParticipants: 3, members: [makeMember(owner, 'owner')] })]);
+
+    await expect(
+      updateRoomCapacitySettings(db, 'room-1', owner, { maxEditors: 4 }),
+    ).rejects.toThrow('Editor limit cannot exceed participant limit.');
+
+    expect(db.room.update).not.toHaveBeenCalled();
+  });
 });
 
 type RoomRoleRecord = 'owner' | 'editor' | 'viewer';
@@ -192,6 +286,8 @@ function baseRoom() {
     visibility: 'private',
     shareRevokedAt: null,
     locked: false,
+    maxParticipants: null as number | null,
+    maxEditors: null as number | null,
     archivedAt: null,
     lastOpenedAt: null,
     createdBy: owner.id,
@@ -199,6 +295,19 @@ function baseRoom() {
     tombstoneHistoryStartsAtClock: 0n,
     createdAt: new Date(0),
     updatedAt: new Date(0),
+  };
+}
+
+function makePresence(sessionId: string, effectiveRole: Presence['effectiveRole']): Presence {
+  return {
+    sessionId,
+    name: sessionId,
+    color: '#000',
+    cursor: null,
+    selectedIds: [],
+    status: 'active',
+    baseRole: effectiveRole,
+    effectiveRole,
   };
 }
 

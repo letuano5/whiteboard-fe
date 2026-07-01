@@ -14,6 +14,8 @@ interface RoomAccessState {
   baseRole: EffectiveRoomRole;
   effectiveRole: EffectiveRoomRole;
   visibility: RoomAccessMode;
+  maxParticipants: number | null;
+  maxEditors: number | null;
   shareRevokedAt: string | null;
   members: RoomMemberSummary[];
   invitations: RoomInvitationSummary[];
@@ -30,6 +32,8 @@ export const useRoomAccessStore = create<RoomAccessState>((set) => ({
   baseRole: 'editor',
   effectiveRole: 'editor',
   visibility: 'private',
+  maxParticipants: null,
+  maxEditors: null,
   shareRevokedAt: null,
   members: [],
   invitations: [],
@@ -43,6 +47,8 @@ export const useRoomAccessStore = create<RoomAccessState>((set) => ({
       baseRole: normalized.baseRole,
       effectiveRole: normalized.effectiveRole,
       visibility: normalized.visibility,
+      maxParticipants: normalized.maxParticipants,
+      maxEditors: normalized.maxEditors,
       shareRevokedAt: normalized.shareRevokedAt,
       members: normalized.members,
       invitations: normalized.invitations,
@@ -58,6 +64,8 @@ export const useRoomAccessStore = create<RoomAccessState>((set) => ({
       baseRole: 'editor',
       effectiveRole: 'editor',
       visibility: 'private',
+      maxParticipants: null,
+      maxEditors: null,
       shareRevokedAt: null,
       members: [],
       invitations: [],
@@ -70,7 +78,13 @@ export function canEditRoom(role: EffectiveRoomRole): boolean {
   return role === 'owner' || role === 'editor';
 }
 
-type RoomAccessInput = RoomAccessPayload | LegacyRoomAccessPayload;
+type RoomAccessInput =
+  | RoomAccessPayload
+  | PartialCapacityRoomAccessPayload
+  | LegacyRoomAccessPayload;
+
+type PartialCapacityRoomAccessPayload = Omit<RoomAccessPayload, 'maxParticipants' | 'maxEditors'> &
+  Partial<Pick<RoomAccessPayload, 'maxParticipants' | 'maxEditors'>>;
 
 interface LegacyRoomAccessPayload {
   roomId: string;
@@ -79,13 +93,21 @@ interface LegacyRoomAccessPayload {
 }
 
 function normalizeRoomAccess(payload: RoomAccessInput): RoomAccessPayload {
-  if ('effectiveRole' in payload) return payload;
+  if ('effectiveRole' in payload) {
+    return {
+      ...payload,
+      maxParticipants: payload.maxParticipants ?? null,
+      maxEditors: payload.maxEditors ?? null,
+    };
+  }
 
   return {
     ...payload,
     baseRole: payload.role,
     effectiveRole: payload.role,
     visibility: 'private',
+    maxParticipants: null,
+    maxEditors: null,
     shareRevokedAt: null,
     invitations: [],
   };

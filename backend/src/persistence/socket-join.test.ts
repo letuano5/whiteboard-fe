@@ -245,3 +245,135 @@ describe('AC-7 (P3A-02): DB error during join is non-fatal', () => {
     );
   });
 });
+
+describe('P4-03 admission control on socket join', () => {
+  it('rejects a new participant when maxParticipants is full', async () => {
+    // @covers AC-3
+    roomPresence.set(
+      JOIN_PAYLOAD.roomId,
+      new Map([
+        [
+          'socket-existing',
+          {
+            sessionId: 'existing-session',
+            name: 'Existing',
+            color: '#111111',
+            cursor: null,
+            selectedIds: [],
+            status: 'active',
+            baseRole: 'viewer',
+            effectiveRole: 'viewer',
+          },
+        ],
+      ]),
+    );
+    const { db } = makeAccessDb(makeAccessRoom({ visibility: 'link_view', maxParticipants: 1 }));
+    const { ioServer, makeSocket, connect, getHandler } = makeFakeIo();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    createWhiteboardServer(ioServer as any, { roomPresence, roomElements, autosave, db });
+
+    const socket = makeSocket();
+    connect(socket);
+
+    const handler = getHandler(socket, WS_EVENTS.JOIN_ROOM);
+    await (handler as (p: typeof JOIN_PAYLOAD) => Promise<void>)(JOIN_PAYLOAD);
+
+    expect(socket.join).not.toHaveBeenCalled();
+    expect(socket.emit).toHaveBeenCalledWith(WS_EVENTS.ROOM_ACCESS_ERROR, {
+      code: 'room-access/room-full',
+      message: 'Room participant limit reached.',
+    });
+  });
+
+  it('admits an eligible editor as viewer when maxEditors is full and exposes roles in presence', async () => {
+    // @covers AC-4
+    // @covers AC-5
+    roomPresence.set(
+      JOIN_PAYLOAD.roomId,
+      new Map([
+        [
+          'socket-existing',
+          {
+            sessionId: 'existing-editor',
+            name: 'Existing editor',
+            color: '#111111',
+            cursor: null,
+            selectedIds: [],
+            status: 'active',
+            baseRole: 'editor',
+            effectiveRole: 'editor',
+          },
+        ],
+      ]),
+    );
+    const { db } = makeAccessDb(makeAccessRoom({ visibility: 'link_edit', maxEditors: 1 }));
+    const { ioServer, makeSocket, connect, getHandler, toReturn } = makeFakeIo();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    createWhiteboardServer(ioServer as any, { roomPresence, roomElements, autosave, db });
+
+    const socket = makeSocket();
+    connect(socket);
+
+    const handler = getHandler(socket, WS_EVENTS.JOIN_ROOM);
+    await (handler as (p: typeof JOIN_PAYLOAD) => Promise<void>)(JOIN_PAYLOAD);
+
+    expect(socket.emit).toHaveBeenCalledWith(
+      WS_EVENTS.ROOM_ACCESS,
+      expect.objectContaining({ baseRole: 'editor', effectiveRole: 'viewer', maxEditors: 1 }),
+    );
+    expect(roomPresence.get(JOIN_PAYLOAD.roomId)?.get(socket.id)).toMatchObject({
+      baseRole: 'editor',
+      effectiveRole: 'viewer',
+    });
+    expect(toReturn.emit).toHaveBeenCalledWith(
+      WS_EVENTS.USER_JOIN,
+      expect.objectContaining({
+        presences: expect.arrayContaining([
+          expect.objectContaining({ sessionId: JOIN_PAYLOAD.sessionId, effectiveRole: 'viewer' }),
+        ]),
+      }),
+    );
+  });
+});
+
+function makeAccessDb(room: ReturnType<typeof makeAccessRoom>) {
+  return {
+    db: {
+      room: {
+        findUnique: vi.fn().mockResolvedValue(room),
+      },
+      roomInvitation: {},
+    } as unknown as PrismaClient,
+  };
+}
+
+function makeAccessRoom(
+  overrides: Partial<{
+    visibility: string;
+    locked: boolean;
+    maxParticipants: number | null;
+    maxEditors: number | null;
+  }> = {},
+) {
+  return {
+    id: JOIN_PAYLOAD.roomId,
+    name: 'Room',
+    workspaceId: null,
+    ownerId: null,
+    visibility: overrides.visibility ?? 'private',
+    shareRevokedAt: null,
+    locked: overrides.locked ?? false,
+    maxParticipants: overrides.maxParticipants ?? null,
+    maxEditors: overrides.maxEditors ?? null,
+    archivedAt: null,
+    lastOpenedAt: null,
+    createdBy: null,
+    documentClock: 0n,
+    tombstoneHistoryStartsAtClock: 0n,
+    createdAt: new Date(0),
+    updatedAt: new Date(0),
+    members: [],
+    invitations: [],
+    records: [],
+  };
+}

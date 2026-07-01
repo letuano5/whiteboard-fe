@@ -16,8 +16,13 @@ vi.mock('../../sync/presence', () => ({
   }),
 }));
 
-function makePresence(sessionId: string, name: string, color: string): Presence {
-  return { sessionId, name, color, cursor: null, selectedIds: [], status: 'active' };
+function makePresence(
+  sessionId: string,
+  name: string,
+  color: string,
+  roles: Pick<Presence, 'baseRole' | 'effectiveRole'> = {},
+): Presence {
+  return { sessionId, name, color, cursor: null, selectedIds: [], status: 'active', ...roles };
 }
 
 beforeEach(() => {
@@ -100,5 +105,26 @@ describe('OnlineUsersPanel — AC-11 (solo user sees only themselves)', () => {
 
     expect(screen.getByText('Owner')).toBeDefined();
     expect(screen.queryByText('Blue Fox')).toBeNull();
+  });
+
+  it('shows effective role for a downgraded editor peer', () => {
+    // @covers AC-5
+    useInteractionStore.setState({
+      remoteCursors: new Map([
+        [
+          'peer-1',
+          makePresence('peer-1', 'Red Bear', '#ef4444', {
+            baseRole: 'editor',
+            effectiveRole: 'viewer',
+          }),
+        ],
+      ]),
+    });
+
+    render(<OnlineUsersPanel />);
+
+    expect(screen.getByText('Red Bear')).toBeDefined();
+    expect(screen.getByText('Viewer')).toBeDefined();
+    expect(screen.getByTitle('Base: Editor')).toBeDefined();
   });
 });

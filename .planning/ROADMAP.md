@@ -12,11 +12,13 @@ project roadmap, phase order, and product scope remain canonical in `docs/SPECS.
 - Repo roadmap ID `P4-00` maps to GSD Phase `4.0`.
 - Repo roadmap ID `P4-01` maps to GSD Phase `4.1`.
 - Repo roadmap ID `P4-02` maps to GSD Phase `4.2`.
+- Repo roadmap ID `P4-03` maps to GSD Phase `4.3`.
 - The source of truth is `docs/SPECS.md` Phase 4 feature sections.
 
 - [x] **Phase 4.0: P4-00 Anonymous local board + Login to save** - Anonymous local-only board can be converted into a private saved document after login.
 - [x] **Phase 4.1: P4-01 Workspace + document dashboard** - Authenticated users can list, search, create, open, rename, archive, and delete accessible saved documents.
 - [x] **Phase 4.2: P4-02 Sharing, public/private access, invited users** - Owners can share saved documents by link or invite while the server enforces effective room roles.
+- [x] **Phase 4.3: P4-03 Room lock + admission control** - Owners can lock saved rooms and the server enforces participant/editor capacity through effective roles.
 
 ## Phase Details
 
@@ -80,6 +82,29 @@ Plans:
 
 - [x] 04.2-01: Implement sharing access modes, invitation management, effective roles, UI modal, and AC tests.
 
+### Phase 4.3: P4-03 Room lock + admission control
+
+**Goal**: Saved room owners can lock/unlock collaboration while admission control enforces
+participant and editor limits through `baseRole` and `effectiveRole`.
+**Depends on**: Phase 4.2
+**Source**: `docs/SPECS.md` `[P4-03]`
+**Canonical refs**: `docs/SPECS.md`, `specs/028-room-lock-admission-control/acceptance.md`
+**Requirements**: [P4-03-AC-1, P4-03-AC-2, P4-03-AC-3, P4-03-AC-4, P4-03-AC-5, P4-03-AC-6]
+**Success Criteria** (what must be TRUE):
+
+1. Locked saved rooms continue to stream updates to editors/viewers while rejecting their
+   mutation attempts.
+2. Owners/admins can lock/unlock rooms and retain mutation rights while locked.
+3. Participant capacity blocks additional joins with an explicit admission error.
+4. Editor capacity downgrades otherwise eligible editors to viewer on join.
+5. Presence/online user metadata includes effective roles; realtime auto-promotion after leave is
+   not required in this phase.
+   **Plans**: 1 plan
+
+Plans:
+
+- [x] 04.3-01: Implement room lock controls, admission limits, effective-role presence, and AC tests.
+
 ## Progress
 
 **Execution Order:**
@@ -90,3 +115,4 @@ Follow `docs/SPECS.md`; this bootstrap tracks active Phase 4 feature slices.
 | 4.0. P4-00 Anonymous local board + Login to save | 1/1            | Complete | 2026-06-30 |
 | 4.1. P4-01 Workspace + document dashboard        | 1/1            | Complete | 2026-06-30 |
 | 4.2. P4-02 Sharing, public/private access        | 1/1            | Complete | 2026-06-30 |
+| 4.3. P4-03 Room lock + admission control         | 1/1            | Complete | 2026-07-01 |

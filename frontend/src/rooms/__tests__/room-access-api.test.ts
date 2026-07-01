@@ -6,6 +6,7 @@ import {
   revokeRoomInvitation,
   revokeRoomShareLink,
   setRoomShareMode,
+  updateRoomCapacitySettings,
   updateRoomMemberRole,
 } from '../room-access-api';
 
@@ -19,6 +20,8 @@ const accessPayload = {
   baseRole: 'owner',
   effectiveRole: 'owner',
   visibility: 'link_view',
+  maxParticipants: null,
+  maxEditors: null,
   shareRevokedAt: null,
   members: [],
   invitations: [],
@@ -72,5 +75,16 @@ describe('room access API client', () => {
       '/api/rooms/room-1/invitations/invite-1',
       { method: 'DELETE' },
     );
+  });
+
+  it('updates room capacity through the owner endpoint', async () => {
+    // @covers AC-2
+    await updateRoomCapacitySettings('room-1', { maxParticipants: 20, maxEditors: 5 });
+
+    expect(authenticatedFetch).toHaveBeenCalledWith('/api/rooms/room-1/capacity', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ maxParticipants: 20, maxEditors: 5 }),
+    });
   });
 });

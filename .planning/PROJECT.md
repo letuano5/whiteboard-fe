@@ -20,14 +20,15 @@ when the workflow calls for it.
 
 ### Active
 
-- [ ] Anonymous users can use a local-only board without creating persisted database rooms.
-- [ ] Authenticated users can convert local board content into a saved document.
-- [ ] Saved rooms remain accessed through the existing `/?room=<uuid>` query-string pattern.
+- [x] Anonymous users can use a local-only board without creating persisted database rooms.
+- [x] Authenticated users can convert local board content into a saved document.
+- [x] Saved rooms remain accessed through the existing `/?room=<uuid>` query-string pattern.
+- [x] Saved room owners can manage sharing, lock state, participant limits, and editor limits.
 
 ### Out of Scope
 
-- Public/link sharing, invited users, admission control, file import/export, asset storage, and
-  version history are deferred to later P4 feature IDs in `docs/SPECS.md`.
+- File import/export, asset storage, and version history are deferred to later P4 feature IDs in
+  `docs/SPECS.md`.
 - Anonymous network realtime for saved rooms is deferred to P4-02.
 
 ## Context
@@ -53,4 +54,4 @@ when the workflow calls for it.
 | Root path without `room` is the local-only board surface for P4-00 | Prevents anonymous local work from accidentally joining/creating a DB room | Pending |
 
 ---
-*Last updated: 2026-06-30 after GSD bootstrap for P4-00*
+*Last updated: 2026-07-01 after P4-03 implementation*

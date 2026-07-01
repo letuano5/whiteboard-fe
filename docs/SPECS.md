@@ -31,7 +31,7 @@
 | **[BE]** Server         | Node + TypeScript + Express + Socket.IO; state phòng in-memory (authoritative-light)                                                                 |
 | Lưu trữ (P1)            | `localStorage` + `BroadcastChannel` (đồng bộ giữa các tab)                                                                                           |
 | **[BE]** Lưu trữ (P3A+) | PostgreSQL + Prisma                                                                                                                                  |
-| **[BE]** Lưu trữ (P3D+) | Redis (shared room state + Socket.IO adapter) + write-behind → PostgreSQL                                                                           |
+| **[BE]** Lưu trữ (P3D+) | Redis (shared room state + Socket.IO adapter) + write-behind → PostgreSQL                                                                            |
 | Conflict resolution     | Last-Write-Wins theo `version` + `versionNonce`                                                                                                      |
 
 ### 1.2 Nguyên tắc kiến trúc xuyên suốt
@@ -335,6 +335,7 @@ applyRemoteElements(incoming: Element[])  // LWW theo version/versionNonce; bỏ
 - [ ] Thứ tự render theo `zIndex`; shape mới `= max+1`; hit-test ưu tiên `zIndex` cao. (UI reorder để P2.5.)
 
 ### [P1A-11] Back to content & Trackpad support
+
 - [ ] Khi user pan/zoom ra vùng trống, nếu không còn thấy content nào trên viewport thì hiển thị nút Back to content ngay phía trên toolbar, có khoảng hở nhỏ và không đè lên toolbar. Khi bấm Back to content, tự động đưa camera về vị trí và zoom sao cho fit vừa đủ toàn bộ content hiện có trên canvas, có padding nhẹ, không bị crop. Nếu canvas chưa có content thì không hiển thị nút này.
 - [ ] Cải thiện zoom bằng trackpad: giảm sensitivity để zoom chậm và mượt hơn, không bị phóng quá nhanh.
 - [ ] Hỗ trợ pan bằng trackpad: khi scroll/lăn 2 chiều thì canvas di chuyển theo deltaX / deltaY; còn pinch hoặc Ctrl/Cmd + wheel thì vẫn xử lý là zoom.
@@ -482,13 +483,13 @@ applyRemoteElements(incoming: Element[])  // LWW theo version/versionNonce; bỏ
 - [ ] Router ưu tiên theo thứ tự:
   1. Simple orthogonal path nếu không cắt source/target bbox.
   2. Thêm đoạn “dongle” ngắn đi ra ngoài source/target shape trước khi bẻ hướng.
-  3. Nếu path đơn giản vẫn lỗi, dùng **A*** trên sparse grid để tìm đường orthogonal tránh source/target bbox.
-- [ ] A* chỉ được đi 4 hướng:
+  3. Nếu path đơn giản vẫn lỗi, dùng **A\*** trên sparse grid để tìm đường orthogonal tránh source/target bbox.
+- [ ] A\* chỉ được đi 4 hướng:
   - left
   - right
   - up
   - down
-- [ ] Cost function của A* nên ưu tiên:
+- [ ] Cost function của A\* nên ưu tiên:
   - đường ngắn hơn
   - ít góc gấp hơn
   - không đi xuyên `boundingBox + padding` của source/target
@@ -501,7 +502,6 @@ applyRemoteElements(incoming: Element[])  // LWW theo version/versionNonce; bỏ
 - [ ] Không cần xử lý obstacle là shape không liên quan.
 - [ ] Không cần reroute khi user di chuyển shape không phải source/target.
 - [ ] Không cần routing toàn cục giữa nhiều arrow.
-
 
 ---
 
@@ -703,15 +703,15 @@ Clone Repo chính thức tại: https://github.com/supabase/supabase/tree/master
 - [ ] Room hỗ trợ access mode:
   - `private`: chỉ owner và added members được vào.
   - `link_view`: public viewer — ai có link vào được với quyền viewer.
-  - `link_edit`: public editor — ai có link vào được với quyền editor, trừ khi room bị locked hoặc editor slots đã đầy.
+  - `link_edit`: public editor — ai có link vào được với quyền editor, trừ khi editor slots đã đầy.
 - [ ] Owner có một nút `Share`; bấm vào mở modal với backdrop tối nền phía sau.
 - [ ] Modal Share có 2 nhóm: add email + set role cho user, và link access (`private`, `link_view`, `link_edit`) kèm copy link.
 - [ ] Modal Share hiển thị members hiện tại và role owner/editor/viewer.
 - [ ] Owner add user đã tồn tại theo email với role `editor` hoặc `viewer`; email chưa có account phải bị reject rõ ràng, không tạo pending invite.
 - [ ] Owner đổi role member giữa `editor` và `viewer`, remove member.
 - [ ] Bản P4 đầu không hỗ trợ transfer owner; không cho owner tự hạ role hoặc remove chính mình.
-- [ ] Explicit `RoomMember.role` ưu tiên hơn link role. Lock/capacity có thể hạ quyền thành `effectiveRole` thấp hơn.
-- [BE] Server quyết định `baseRole` và `effectiveRole` khi join dựa trên `RoomMember.role`, `visibility`, lock state, và room capacity.
+- [ ] Explicit `RoomMember.role` ưu tiên hơn link role. Capacity có thể hạ quyền thành `effectiveRole` thấp hơn.
+- [BE] Server quyết định `baseRole` và `effectiveRole` khi join dựa trên `RoomMember.role`, `visibility`, và room capacity.
 - [BE] Tất cả HTTP/socket mutation phải check permission server-side; UI chỉ là lớp UX.
 - [BE] Non-owner gọi API/socket quản lý quyền phải bị reject dù UI bị ẩn.
 
@@ -726,27 +726,28 @@ Clone Repo chính thức tại: https://github.com/supabase/supabase/tree/master
 - [ ] Viewer không thấy toolbar edit và server reject `ELEMENT_UPDATE`.
 - [ ] Private room từ chối user không phải owner/member.
 - [ ] `link_view` cho người có link vào xem với `effectiveRole = 'viewer'`.
-- [ ] `link_edit` cho người có link vào edit nếu room không locked và editor slot còn.
+- [ ] `link_edit` cho người có link vào edit nếu editor slot còn.
 - [ ] Revoke link làm link cũ mất quyền truy cập.
 
-### [P4-03] Room lock + admission control
+### [P4-03] Room capacity control
 
-- [ ] Owner có thể lock/unlock room; khi locked, chỉ owner/admin được mutate, editor/viewer vẫn xem realtime.
-- [ ] Room có `maxParticipants` và `maxEditors` để tránh quá tải realtime.
+- [ ] Room có `maxParticipants` và `maxEditors` để tránh quá tải realtime; P4 đầu dùng in-memory presence nên chỉ đảm bảo mạnh trong một backend process.
+- [ ] Owner có thể chỉnh `maxParticipants` và `maxEditors` trong Share modal; không có room-level lock/unlock trong access model.
+- [ ] Capacity input phải bị giới hạn: `maxParticipants <= 50`, `maxEditors <= 10`, và `maxEditors <= maxParticipants` khi cả hai được đặt.
 - [ ] Nếu phòng chưa đầy: user join theo role thật hoặc role từ link.
 - [ ] Nếu editor slots đã đầy: user có quyền editor vẫn được join dưới `effectiveRole = 'viewer'`.
-- [ ] Khi editor rời phòng, server có thể promote user đang chờ lên editor nếu base role cho phép.
+- [ ] Khi editor rời phòng, P4 đầu không cần queue/auto-promote; user bị hạ xuống viewer có thể reload/rejoin để claim slot mới nếu base role cho phép.
 - [BE] Presence/session list phân biệt `baseRole` và `effectiveRole`.
 - [BE] Server reject `ELEMENT_UPDATE`, restore, import, delete khi `effectiveRole` không đủ quyền.
 
 **Acceptance criteria:**
 
-- [ ] Locked room cho editor/viewer xem realtime nhưng không mutate được.
-- [ ] Owner/admin vẫn mutate được trong locked room.
+- [ ] Share modal có capacity controls cho participant/editor limits và không có room lock/unlock control.
+- [ ] Capacity settings reject giá trị malformed, vượt trần, hoặc `maxEditors > maxParticipants`.
 - [ ] Khi `maxParticipants` đầy, user mới không join được và thấy thông báo rõ ràng.
 - [ ] Khi `maxEditors` đầy, user có base role editor vẫn join dưới `effectiveRole = 'viewer'`.
 - [ ] Presence/online-users UI thể hiện role hiệu lực để user hiểu vì sao toolbar bị ẩn.
-- [ ] Bản P4 đầu có thể yêu cầu rejoin/reload để nhận editor slot mới; auto-promote realtime là optional nếu chưa cần.
+- [ ] Bản P4 đầu yêu cầu rejoin/reload để nhận editor slot mới; không cần queue hay auto-promote realtime.
 
 ### [P4-04] Native file lifecycle: save/load `.vdt.json`
 
@@ -802,7 +803,7 @@ Clone Repo chính thức tại: https://github.com/supabase/supabase/tree/master
 
 ### [P4-07] Version history (snapshot) + owner restore
 
-**Prerequisite:** P3A (PostgreSQL + Prisma schema với `Room`, `Record`, `Tombstone` đã có). P4-03 khuyến nghị (permission/lock đã rõ). Snapshot chỉ áp dụng cho saved document; local-only board không có server snapshot.
+**Prerequisite:** P3A (PostgreSQL + Prisma schema với `Room`, `Record`, `Tombstone` đã có). P4-03 khuyến nghị (permission/capacity đã rõ). Snapshot chỉ áp dụng cho saved document; local-only board không có server snapshot.
 
 **Schema bổ sung vào Prisma (P4-07):**
 
@@ -832,9 +833,9 @@ model Snapshot {
 
 ```ts
 // Events mới
-SNAPSHOT_LIST:    'snapshot-list'     // client request → server HTTP GET hoặc socket
-SNAPSHOT_RESTORE: 'snapshot-restore'  // client → server: { roomId, snapshotId }
-ROOM_RESTORED:    'room-restored'     // server → broadcast toàn phòng
+SNAPSHOT_LIST: 'snapshot-list'; // client request → server HTTP GET hoặc socket
+SNAPSHOT_RESTORE: 'snapshot-restore'; // client → server: { roomId, snapshotId }
+ROOM_RESTORED: 'room-restored'; // server → broadcast toàn phòng
 ```
 
 ```ts
@@ -906,7 +907,7 @@ Thêm vòng ack tối giản: client biết server đã nhận và xử lý push
 // Mở rộng ELEMENT_UPDATE payload (client → server)
 interface ElementUpdatePayload {
   roomId: string;
-  requestId: string;   // uuid v4, client tự sinh
+  requestId: string; // uuid v4, client tự sinh
   clientClock: number; // counter tăng dần per-client
   elements: Element[];
 }
@@ -1032,27 +1033,27 @@ Lý do không cần `speculativeChanges` stack (khác tldraw): codebase này LWW
 
 ```ts
 // Đơn vị sync không còn là Element nguyên vẹn mà là diff từng field
-type ScalarDiff<T> = { prev: T; next: T };  // LWW-Register per field
+type ScalarDiff<T> = { prev: T; next: T }; // LWW-Register per field
 
 interface ElementDiff {
   id: string;
   // Top-level scalar fields — mỗi field là LWW-Register riêng
-  x?:      ScalarDiff<number>;
-  y?:      ScalarDiff<number>;
-  width?:  ScalarDiff<number>;
+  x?: ScalarDiff<number>;
+  y?: ScalarDiff<number>;
+  width?: ScalarDiff<number>;
   height?: ScalarDiff<number>;
-  angle?:  ScalarDiff<number>;
+  angle?: ScalarDiff<number>;
   zIndex?: ScalarDiff<number>;
   locked?: ScalarDiff<boolean>;
   isDeleted?: ScalarDiff<boolean>;
   // Props — tương tự, từng field con
   props?: Partial<{
     strokeColor: ScalarDiff<string>;
-    fillColor:   ScalarDiff<string>;
+    fillColor: ScalarDiff<string>;
     strokeWidth: ScalarDiff<number>;
-    opacity:     ScalarDiff<number>;
-    text:        ScalarDiff<string>;       // LWW-string (char-level CRDT để sau)
-    points:      ScalarDiff<[number, number][]>;  // LWW-array (replace toàn bộ)
+    opacity: ScalarDiff<number>;
+    text: ScalarDiff<string>; // LWW-string (char-level CRDT để sau)
+    points: ScalarDiff<[number, number][]>; // LWW-array (replace toàn bộ)
     // ... các field còn lại
   }>;
 }
@@ -1060,14 +1061,14 @@ interface ElementDiff {
 
 **Merge strategy mỗi loại:**
 
-| Field | Strategy | Ghi chú |
-|---|---|---|
-| `x`, `y`, `width`, `height`, `angle` | LWW-Register theo `updatedAt` + nonce | Số → không có "trung gian" hợp lý |
-| `strokeColor`, `fillColor`, `opacity` | LWW-Register | Style → winner takes all per field |
-| `zIndex` | LWW-Register | Fractional index sau này |
-| `locked`, `isDeleted` | LWW-Register | Boolean |
-| `text` | LWW-string (toàn bộ) ở P6; char-level (Yjs) nếu muốn collaborative text | Char-level cần thư viện riêng |
-| `points` | LWW-array (replace toàn bộ) | Merge point-by-point không có ngữ nghĩa rõ ràng |
+| Field                                 | Strategy                                                                | Ghi chú                                         |
+| ------------------------------------- | ----------------------------------------------------------------------- | ----------------------------------------------- |
+| `x`, `y`, `width`, `height`, `angle`  | LWW-Register theo `updatedAt` + nonce                                   | Số → không có "trung gian" hợp lý               |
+| `strokeColor`, `fillColor`, `opacity` | LWW-Register                                                            | Style → winner takes all per field              |
+| `zIndex`                              | LWW-Register                                                            | Fractional index sau này                        |
+| `locked`, `isDeleted`                 | LWW-Register                                                            | Boolean                                         |
+| `text`                                | LWW-string (toàn bộ) ở P6; char-level (Yjs) nếu muốn collaborative text | Char-level cần thư viện riêng                   |
+| `points`                              | LWW-array (replace toàn bộ)                                             | Merge point-by-point không có ngữ nghĩa rõ ràng |
 
 ### [P6-02] Mutation pipeline xuất diff thay vì element
 
@@ -1076,9 +1077,9 @@ Hiện tại `MutationEvent.elements` là `Element[]` — toàn bộ snapshot sa
 ```ts
 interface MutationEvent {
   type: 'create' | 'patch' | 'delete' | 'update';
-  diffs: ElementDiff[];   // chỉ những field đã thay đổi
-  before: Element[];      // vẫn giữ để undo/redo
-  after: Element[];       // committed state
+  diffs: ElementDiff[]; // chỉ những field đã thay đổi
+  before: Element[]; // vẫn giữ để undo/redo
+  after: Element[]; // committed state
 }
 ```
 
@@ -1088,7 +1089,7 @@ Pipeline tính diff bằng cách so sánh `before` và `after` field-by-field tr
 
 ```ts
 // Hiện tại (LWW):
-elMap.set(el.id, el);   // replace toàn bộ
+elMap.set(el.id, el); // replace toàn bộ
 
 // Sau refactor:
 function applyDiff(existing: Element, diff: ElementDiff): Element {
@@ -1124,16 +1125,16 @@ Với diffs: undo = apply inverse diff `{ prev: next, next: prev }` cho từng f
 
 ### Tóm tắt delta so với LWW hiện tại
 
-| Thành phần | LWW (hiện tại) | CRDT diffs (P6) |
-|---|---|---|
-| Đơn vị sync | `Element` (whole) | `ElementDiff` (per-field) |
-| Conflict unit | Element | Field |
-| Server logic | `map.set(id, el)` | `applyDiff(existing, diff)` |
-| Ack rebase payload | `Element[]` | `ElementDiff[]` |
-| `applyRemoteElements` | skip element nếu đang active | skip field nếu field đang active |
-| Undo | restore `before` element | apply inverse diff per-field |
-| Complexity | thấp | trung bình–cao |
-| Khi nào upgrade | conflict per-field xảy ra thường xuyên, hoặc yêu cầu "không ai mất thay đổi" | — |
+| Thành phần            | LWW (hiện tại)                                                               | CRDT diffs (P6)                  |
+| --------------------- | ---------------------------------------------------------------------------- | -------------------------------- |
+| Đơn vị sync           | `Element` (whole)                                                            | `ElementDiff` (per-field)        |
+| Conflict unit         | Element                                                                      | Field                            |
+| Server logic          | `map.set(id, el)`                                                            | `applyDiff(existing, diff)`      |
+| Ack rebase payload    | `Element[]`                                                                  | `ElementDiff[]`                  |
+| `applyRemoteElements` | skip element nếu đang active                                                 | skip field nếu field đang active |
+| Undo                  | restore `before` element                                                     | apply inverse diff per-field     |
+| Complexity            | thấp                                                                         | trung bình–cao                   |
+| Khi nào upgrade       | conflict per-field xảy ra thường xuyên, hoặc yêu cầu "không ai mất thay đổi" | —                                |
 
 ---
 

@@ -26,6 +26,24 @@ export async function revokeRoomShareLink(roomId: string): Promise<RoomAccessPay
   );
 }
 
+export interface RoomCapacitySettingsInput {
+  maxParticipants?: number | null;
+  maxEditors?: number | null;
+}
+
+export async function updateRoomCapacitySettings(
+  roomId: string,
+  input: RoomCapacitySettingsInput,
+): Promise<RoomAccessPayload> {
+  return readRoomAccessResponse(
+    await authenticatedFetch(`/api/rooms/${roomId}/capacity`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    }),
+  );
+}
+
 export async function inviteRoomUser(
   roomId: string,
   email: string,

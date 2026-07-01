@@ -1,6 +1,7 @@
 import type { PrismaClient } from '@prisma/client';
 import type {
   EffectiveRoomRole,
+  Presence,
   RoomAccessMode,
   RoomAccessPayload,
   RoomInvitationSummary,
@@ -32,6 +33,7 @@ export async function resolveRoomAccess(
   db: PrismaClient,
   roomId: string,
   user: AppUser | undefined,
+  options: ResolveRoomAccessOptions = {},
 ): Promise<RoomAccessPayload> {
   if (!user && !hasSharingDelegate(db)) {
     return toAccessPayload(makeLegacyEphemeralRoom(roomId), 'editor', 'editor');
@@ -39,12 +41,13 @@ export async function resolveRoomAccess(
 
   const room = await loadRoomWithAccess(db, roomId);
 
-  const { baseRole, fromLink } = resolveBaseRole(room, user);
+  const { baseRole } = resolveBaseRole(room, user);
   if (baseRole === 'none') {
     throw new RoomAccessError('room-access/forbidden', 'Room access denied.');
   }
 
-  return toAccessPayload(room, baseRole, resolveEffectiveRole(room, baseRole, fromLink));
+  enforceParticipantLimit(room, options);
+  return toAccessPayload(room, baseRole, resolveEffectiveRole(room, baseRole, options));
 }
 
 export async function loadRoomForOwnerAction(
@@ -67,12 +70,19 @@ export class RoomAccessError extends Error {
       | 'room-access/user-not-found'
       | 'room-access/member-not-found'
       | 'room-access/invitation-not-found'
-      | 'room-access/invalid-role',
+      | 'room-access/invalid-role'
+      | 'room-access/invalid-capacity'
+      | 'room-access/room-full',
     message: string,
   ) {
     super(message);
     this.name = 'RoomAccessError';
   }
+}
+
+interface ResolveRoomAccessOptions {
+  activePresences?: Iterable<Presence>;
+  currentSessionId?: string;
 }
 
 function resolveBaseRole(
@@ -104,12 +114,34 @@ function resolveBaseRole(
 function resolveEffectiveRole(
   room: RoomAccessRecord,
   baseRole: EffectiveRoomRole,
-  fromLink: boolean,
+  options: ResolveRoomAccessOptions,
 ): EffectiveRoomRole {
-  if (fromLink && baseRole === 'editor' && room.locked) {
+  if (baseRole === 'editor' && isEditorLimitFull(room, options)) {
     return 'viewer';
   }
   return baseRole;
+}
+
+function enforceParticipantLimit(room: RoomAccessRecord, options: ResolveRoomAccessOptions): void {
+  if (!room.maxParticipants) return;
+  const activeCount = getActivePresences(options).length;
+  if (activeCount >= room.maxParticipants) {
+    throw new RoomAccessError('room-access/room-full', 'Room participant limit reached.');
+  }
+}
+
+function isEditorLimitFull(room: RoomAccessRecord, options: ResolveRoomAccessOptions): boolean {
+  if (!room.maxEditors) return false;
+  const activeEditorCount = getActivePresences(options).filter(
+    (presence) => presence.effectiveRole === 'editor',
+  ).length;
+  return activeEditorCount >= room.maxEditors;
+}
+
+function getActivePresences(options: ResolveRoomAccessOptions): Presence[] {
+  const presences = [...(options.activePresences ?? [])];
+  if (!options.currentSessionId) return presences;
+  return presences.filter((presence) => presence.sessionId !== options.currentSessionId);
 }
 
 function toAccessPayload(
@@ -123,6 +155,8 @@ function toAccessPayload(
     baseRole,
     effectiveRole,
     visibility: normalizeVisibility(room.visibility),
+    maxParticipants: room.maxParticipants,
+    maxEditors: room.maxEditors,
     shareRevokedAt: room.shareRevokedAt?.toISOString() ?? null,
     members: summarizeMembers(room),
     invitations: summarizeInvitations(room.invitations),

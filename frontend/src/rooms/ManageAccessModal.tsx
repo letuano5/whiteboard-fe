@@ -8,6 +8,7 @@ import {
   setRoomShareMode,
   updateRoomMemberRole,
 } from './room-access-api';
+import { CapacitySettings } from './CapacitySettings';
 import { useRoomAccessStore } from './room-access.store';
 
 type EditableRole = Extract<RoomRole, 'editor' | 'viewer'>;
@@ -152,6 +153,8 @@ export function ManageAccessModal({ roomId, onClose }: ManageAccessModalProps) {
             );
           })}
         </div>
+
+        <CapacitySettings roomId={roomId} />
 
         <section style={linkSectionStyle} aria-label="Link access">
           <div style={sectionHeaderStyle}>

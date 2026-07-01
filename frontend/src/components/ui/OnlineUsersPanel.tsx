@@ -1,9 +1,11 @@
 import { useInteractionStore } from '../../store/interaction.store';
 import { LOCAL_PRESENCE } from '../../sync/presence';
 import { useRoomAccessStore } from '../../rooms/room-access.store';
+import type { EffectiveRoomRole } from '../../types/shared';
 
 export default function OnlineUsersPanel() {
   const remoteCursors = useInteractionStore((s) => s.remoteCursors);
+  const baseRole = useRoomAccessStore((s) => s.baseRole);
   const role = useRoomAccessStore((s) => s.effectiveRole);
   const peers = [...remoteCursors.values()];
   const selfName = role === 'owner' ? 'Owner' : LOCAL_PRESENCE.name;
@@ -19,16 +21,43 @@ export default function OnlineUsersPanel() {
       }}
     >
       {/* Local user — always shown first */}
-      <UserBadge name={selfName} color={LOCAL_PRESENCE.color} isSelf />
+      <UserBadge
+        name={selfName}
+        color={LOCAL_PRESENCE.color}
+        baseRole={baseRole}
+        role={role}
+        isSelf
+      />
       {/* Remote peers */}
       {peers.map((p) => (
-        <UserBadge key={p.sessionId} name={p.name} color={p.color} />
+        <UserBadge
+          key={p.sessionId}
+          name={p.name}
+          color={p.color}
+          baseRole={p.baseRole}
+          role={p.effectiveRole}
+        />
       ))}
     </div>
   );
 }
 
-function UserBadge({ name, color, isSelf }: { name: string; color: string; isSelf?: boolean }) {
+function UserBadge({
+  name,
+  color,
+  baseRole,
+  role,
+  isSelf,
+}: {
+  name: string;
+  color: string;
+  baseRole?: EffectiveRoomRole;
+  role?: EffectiveRoomRole;
+  isSelf?: boolean;
+}) {
+  const roleText = formatRole(role);
+  const baseRoleText = baseRole && baseRole !== role ? `Base: ${formatRole(baseRole)}` : null;
+
   return (
     <div
       style={{
@@ -56,6 +85,26 @@ function UserBadge({ name, color, isSelf }: { name: string; color: string; isSel
         {name}
         {isSelf && <span style={{ color: '#999', fontWeight: 400, marginLeft: 4 }}>(you)</span>}
       </span>
+      {roleText && roleText !== name && (
+        <span
+          title={baseRoleText ?? undefined}
+          style={{
+            border: '1px solid #d7dfd8',
+            borderRadius: 4,
+            padding: '1px 5px',
+            color: '#47564d',
+            fontSize: 11,
+            fontWeight: 700,
+          }}
+        >
+          {roleText}
+        </span>
+      )}
     </div>
   );
+}
+
+function formatRole(role: EffectiveRoomRole | undefined): string | null {
+  if (!role || role === 'none') return null;
+  return role.charAt(0).toUpperCase() + role.slice(1);
 }
