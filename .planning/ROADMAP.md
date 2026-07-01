@@ -15,6 +15,7 @@ project roadmap, phase order, and product scope remain canonical in `docs/SPECS.
 - Repo roadmap ID `P4-03` maps to GSD Phase `4.3`.
 - Repo roadmap ID `P4-04` maps to GSD Phase `4.4`.
 - Repo roadmap ID `P5-01` maps to GSD Phase `5.1`.
+- Repo roadmap ID `P5-02` maps to GSD Phase `5.2`.
 - The source of truth is `docs/SPECS.md` feature sections.
 
 - [x] **Phase 4.0: P4-00 Anonymous local board + Login to save** - Anonymous local-only board can be converted into a private saved document after login.
@@ -23,6 +24,7 @@ project roadmap, phase order, and product scope remain canonical in `docs/SPECS.
 - [x] **Phase 4.3: P4-03 Room lock + admission control** - Owners can lock saved rooms and the server enforces participant/editor capacity through effective roles.
 - [x] **Phase 4.4: P4-04 Native file lifecycle: save/load `.vdt.json`** - Users can export and import the native backup format for local boards and permitted saved documents.
 - [x] **Phase 5.1: P5-01 Module boundary & legacy removal** - Saved-room writes are routed through a backend sync module entrypoint instead of socket/import handlers mutating document state directly.
+- [x] **Phase 5.2: P5-02 Shared sync contracts** - Shared P5 slot-level sync contracts, field mapping, command envelopes, and validation helpers are defined in `@vdt/shared`.
 
 ## Phase Details
 
@@ -148,6 +150,26 @@ Plans:
 
 - [x] 05.1-01: Create backend sync module boundary, route legacy adapters through it, and cover AC tests.
 
+### Phase 5.2: P5-02 Shared sync contracts
+
+**Goal**: Define shared slot-level P5 sync contracts in `@vdt/shared` so backend and frontend use one protocol vocabulary for future server-authoritative sync.
+**Depends on**: Phase 5.1
+**Source**: `docs/SPECS.md` `[P5-02]`
+**Canonical refs**: `docs/SPECS.md`, `specs/031-p5-02-shared-sync-contracts/acceptance.md`
+**Requirements**: [P5-02-AC-1, P5-02-AC-2, P5-02-AC-3, P5-02-AC-4, P5-02-AC-5]
+**Success Criteria** (what must be TRUE):
+
+1. `@vdt/shared` exports the complete P5 `SyncSlot`, `SlotPatch`, `SyncCommand`, and change-set contract types.
+2. Every mutable `Element` field is mapped to a slot or explicitly classified as identity, derived, non-sync, or legacy-only.
+3. Shared validators reject malformed slot patches, duplicate slots, direct `order` patches, `isDeleted` patches, duplicate creates, and tombstone-window creates.
+4. Create commands carry order hints and server-normalized change sets can return the final order.
+5. Shared command payloads carry protocol/schema/room/request/client/epoch metadata without trusting actor identity from the payload.
+   **Plans**: 1 plan
+
+Plans:
+
+- [x] 05.2-01: Define shared sync contracts, validation helpers, field mapping, and AC tests.
+
 ## Progress
 
 **Execution Order:**
@@ -161,3 +183,4 @@ Follow `docs/SPECS.md`; this bootstrap tracks active Phase 4 feature slices.
 | 4.3. P4-03 Room lock + admission control         | 1/1            | Complete | 2026-07-01 |
 | 4.4. P4-04 Native file lifecycle                 | 1/1            | Complete | 2026-07-01 |
 | 5.1. P5-01 Module boundary & legacy removal      | 1/1            | Complete | 2026-07-02 |
+| 5.2. P5-02 Shared sync contracts                 | 1/1            | Complete | 2026-07-02 |

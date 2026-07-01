@@ -92,6 +92,11 @@ interface Element {
   createdBy: string;
 }
 
+interface ArrowEndpointBinding {
+  elementId: string;
+  anchorRatio: { x: number; y: number };
+}
+
 interface ElementProps {
   strokeColor: string;
   fillColor: string;
@@ -105,8 +110,8 @@ interface ElementProps {
   fontFamily?: string;
   textAlign?: 'left' | 'center' | 'right';
   src?: string; // image
-  startBinding?: string | null;
-  endBinding?: string | null; // arrow
+  startBinding?: ArrowEndpointBinding | null;
+  endBinding?: ArrowEndpointBinding | null; // arrow
   url?: string; // embed
 }
 ```
@@ -173,6 +178,7 @@ model Room {
   documentClock                 BigInt      @default(0)
   roomEpoch                     BigInt      @default(0) // P5: tăng khi replace document/import/restore
   tombstoneHistoryStartsAtClock BigInt      @default(0)
+  processedRequestHistoryStartsAtClock BigInt @default(0)
   createdAt                     DateTime    @default(now())
   updatedAt                     DateTime    @updatedAt
   members    RoomMember[]
@@ -233,11 +239,14 @@ model ProcessedRequest {
   requestId   String
   payloadHash String
   serverClock BigInt
+  action      String
+  reason      String?
   ack         Json
   createdAt   DateTime @default(now())
   room        Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
   @@id([roomId, actorId, requestId])
   @@index([roomId, serverClock])
+  @@index([roomId, createdAt])
 }
 ```
 
@@ -1032,6 +1041,19 @@ history đã có surface đủ để refactor thay đường bên dưới.
   element chưa tồn tại.
 - [ ] `ReorderElementsCommand` là domain command riêng; nếu chưa implement reorder đầy đủ trong
   phase đầu thì vẫn reject `PatchSlotsCommand` vào slot `order`.
+- [ ] `SlotReadPrecondition` có `{ elementId, slot, baseClock, onStale }`, với `onStale` thuộc
+  `'reject' | 'rebase' | 'server_recompute'`. Command ghi slot A nhưng đọc slot B để tính toán phải
+  khai báo precondition cho slot B hoặc dùng domain command để server recompute.
+- [ ] Protocol invariant: slot chưa từng set dùng `baseClock = 0`; sau normalization không có clock
+  `null`; một `SyncCommand` có một `requestId` và nhận một ACK; không dùng `batchId` riêng hoặc
+  patch-level ack trong phase đầu.
+- [ ] `PatchSlotsCommand` chỉ dùng trực tiếp cho slot độc lập; patch phải chứa full semantic slot
+  value (`x+y`, `width+height`, full `points`, full endpoint/route, hoặc field đơn tương ứng).
+- [ ] `UpdateArrowBindingCommand` chứa `arrowId`, `terminal`,
+  `binding: ArrowEndpointBinding | null`, `baseBindingClock`, `baseGeometryClock`; server không tin
+  geometry do client gửi trong binding command.
+- [ ] `DeleteElementsCommand` chứa `elementIds`; `ReplaceDocumentCommand` chứa `elements` và
+  `reason: 'import' | 'restore' | 'manual_replace'`.
 
 **Acceptance criteria:**
 
@@ -1042,6 +1064,11 @@ history đã có surface đủ để refactor thay đường bên dưới.
 - [ ] Create element reject duplicate active id và id còn trong tombstone retention window.
 - [ ] Create element materialize defaults/derived fields trước khi init slot clocks, rồi trả final
       server-normalized order trong change set.
+- [ ] Slot chưa từng set dùng `baseClock = 0`, không dùng `null`; `baseClock > currentSlotClock`
+      bị reject `STALE_CLIENT_STATE`.
+- [ ] Command phụ thuộc slot đọc thêm có `readPreconditions` hoặc server-side recompute; stale
+      precondition đi đúng nhánh `reject`, `rebase`, hoặc `server_recompute`.
+- [ ] `PatchSlotsCommand` dùng command-level `requestId`; không có `batchId` hoặc patch-level ACK.
 
 ### [P5-03] Server-authoritative `SyncRoom` + room actor — [BE]
 
@@ -1088,15 +1115,36 @@ Delete => delete-wins.
 - [BE] `grouping.groupId`/`grouping.frameId` không được trỏ tới missing/deleted record hoặc tạo cycle;
   khi delete group/frame, server phải clear children trong cùng change set hoặc reject theo rule
   product đã chọn.
+- [BE] Derived/server-only/local-only fields không được client patch: bounds/cache/computed bbox,
+  `version`, `versionNonce`, `updatedAt`, selection/hover/editing state và transient render cache.
+- [BE] `PatchSlotsCommand` là atomic batch: invalid hard error reject toàn bộ command; stale base cùng
+  slot vẫn accept latest-to-server wins; duplicate `(elementId, slot)` sau normalization phải reject
+  hoặc coalesce deterministic theo rule đã test.
+- [BE] Linear elements (`line`, `arrow`, `freehand`, `highlighter`) sync bằng `geometry.points`,
+  `geometry.route`, `geometry.startPoint` hoặc `geometry.endPoint`; server validate finite numbers,
+  point count/size limit (`MAX_POINTS_PER_STROKE` cho freehand/highlighter) và normalize
+  `x/y/width/height` từ geometry trong cùng command.
+- [BE] Limits tối thiểu: `MAX_PATCHES_PER_COMMAND = 128`, `MAX_ELEMENTS_PER_DELETE = 128`,
+  `MAX_REPAIRED_ARROWS_PER_COMMAND = 512`, `MAX_CHANGESET_BYTES = 1_000_000`; vượt limit reject
+  `TOO_LARGE`, không commit partial.
 
 **Acceptance criteria:**
 
 - [ ] A move shape và B đổi fill cùng shape đồng thời: cả position và fill đều được giữ.
+- [ ] A đổi fill và B đổi strokeWidth cùng shape đồng thời: cả hai style slots đều được giữ.
+- [ ] A move shape và B resize cùng shape đồng thời: `transform.position` và `transform.size` đều
+      được giữ.
 - [ ] A move shape và B move cùng shape đồng thời: command commit sau trên server thắng slot
       `transform.position`.
+- [ ] A resize shape và B resize cùng shape đồng thời: command commit sau thắng slot
+      `transform.size`.
 - [ ] Delete shape thắng mọi patch sau đó vào shape đã deleted.
 - [ ] Viewer bị reject ở command boundary trước khi plan mutation.
 - [ ] Asset/group/frame refs invalid bị reject trước khi commit; không tạo document half-valid.
+- [ ] Derived/local-only fields như cache/bounds/selection/versionNonce bị reject `INVALID_FIELD`.
+- [ ] Linear element nhận `transform.*` patch bị reject `INVALID_SLOT_FOR_ELEMENT_TYPE`; bbox được
+      normalize server-side từ `geometry.*`.
+- [ ] Command vượt patch/delete/repair/changeset limit bị reject `TOO_LARGE`.
 
 ### [P5-05] Change sets, ack/reject/rebase & broadcast
 
@@ -1109,6 +1157,12 @@ Delete => delete-wins.
   element cho mọi mutation nhỏ.
 - [ ] Sender nhận ack riêng: `commit`, `rebase`, hoặc `reject`; peers nhận broadcast
   `CommittedChangeSet`.
+- [ ] `SyncAck` luôn chứa `protocolVersion`, `schemaVersion`, `requestId` và `serverClock`.
+  `commit`/`rebase` có `changeSet`; `reject` có `reason` và có thể kèm `serverChangeSet`.
+- [ ] `SyncBroadcast` chứa `protocolVersion`, `schemaVersion`, `roomId`, `serverClock` và
+  `changeSet`; sender có thể không nhận broadcast của chính mình vì ACK đã có change set.
+- [ ] `slotPatches` trong `CommittedChangeSet` chứa full semantic slot value và clock của slot; mọi
+  repaired arrow phải emit `slotPatches` đầy đủ, không chỉ nằm trong `puts`.
 - [ ] Ack/broadcast cũ với `serverClock <= lastServerClock` không được overwrite state mới hơn.
 - [ ] Gap `serverClock > lastServerClock + 1` phải buffer event và request `ROOM_DIFF`.
 
@@ -1117,6 +1171,7 @@ Delete => delete-wins.
 - [ ] Ack `commit/rebase` đều clear đúng pending request của sender.
 - [ ] Broadcast cùng origin của chính client cũng có thể clear pending nếu ack bị miss.
 - [ ] Reject không rollback mù slot đã có pending mới hơn.
+- [ ] Rebase đi qua reconciliation từ `changeSet`, không trigger push lại cùng command.
 - [ ] Client không replace nguyên element khi change set chỉ touch một slot.
 
 ### [P5-06] Transactional persistence & idempotency — [BE]
@@ -1125,8 +1180,17 @@ Delete => delete-wins.
 - [BE] Tất cả `recordClock`, `deletedClock`, `RecordSlotClock.clock` bị touch bởi command đó bằng
   cùng `documentClock`.
 - [BE] `ProcessedRequest` dùng key `{ roomId, actorId, requestId }` và `payloadHash`.
+- [BE] `payloadHash` được tính từ canonical command payload sau normalization, không gồm debug
+  transient field hoặc `actorId` do client tự khai.
 - [BE] Idempotency check chạy trước validation domain để retry create đã commit có thể replay ack,
   không bị reject nhầm `DUPLICATE_ELEMENT_ID`.
+- [BE] Retry cùng `requestId` + cùng payload replay ACK/result cũ, không mutate state lần hai và
+  không broadcast duplicate. Retry cùng `requestId` + payload khác reject
+  `DUPLICATE_REQUEST_CONFLICT`.
+- [BE] `ProcessedRequest` durable trong Postgres là source of truth sau restart; memory cache chỉ là
+  fast path và không đủ để đảm bảo idempotency.
+- [BE] Nếu GC `ProcessedRequest`, cập nhật `Room.processedRequestHistoryStartsAtClock`; client có
+  pending quá retention nhận status `expired` hoặc manual retry, không resend mù.
 - [BE] Clock trong DB dùng `BigInt`; wire protocol dùng `number` kèm assert
   `Number.isSafeInteger`, hoặc đổi sang string nếu overflow.
 - [BE] Không mutate `SyncRoom` memory trước khi DB commit; nếu DB commit thành công nhưng
@@ -1137,17 +1201,32 @@ Delete => delete-wins.
 
 - [ ] Retry cùng `requestId` + cùng payload replay ack cũ, không tăng clock.
 - [ ] Retry cùng `requestId` + payload khác bị reject `DUPLICATE_REQUEST_CONFLICT`.
+- [ ] Duplicate request không broadcast lại cho peers.
 - [ ] Crash/restart sau commit DB nhưng trước ack vẫn replay được ack từ `ProcessedRequest`.
 - [ ] Một command delete 3 shape và repair 5 arrow chỉ tăng clock một lần.
 - [ ] Server chỉ ACK sau khi DB transaction commit; DB fail không đổi memory và không gửi ACK.
+- [ ] Nếu `applyCommitted` fail sau DB commit, room dừng nhận command mới, reload từ Postgres tại
+      `Room.documentClock`, rebuild binding indexes rồi mới resume.
 
 ### [P5-07] Load, reconnect & diff
 
 - [ ] `ROOM_SNAPSHOT` hydrate full server state, `documentClock`, `roomEpoch`, slot clocks.
 - [ ] `ROOM_DIFF` từ `lastServerClock` trả changed records, deleted tombstones, slot clocks và
   server clock; nếu tombstone history quá cũ thì trả `wipe_all` snapshot.
+- [ ] `RoomSnapshot` chứa `protocolVersion`, `schemaVersion`, `roomId`, `serverClock`,
+  `roomEpoch`, `elements`, `slotClocks` và optional `processedRequestHistoryStartsAtClock`.
+- [ ] `RoomDiff` chứa `protocolVersion`, `schemaVersion`, `roomId`, `fromClock`, `toClock`,
+  `serverClock`, `roomEpoch`, `changed`, `deleted`, `slotClocks`, `hasMore` và optional
+  `nextFromClock`.
+- [ ] `ReconnectRequest` gửi `lastServerClock`, `roomEpoch` và `pendingRequestIds`. Response trả
+  `kind: 'snapshot' | 'diff'` kèm `PendingRequestStatus[]`.
+- [ ] `PendingRequestStatus.status` thuộc `'processed' | 'unknown' | 'conflict' | 'expired'`:
+  `processed` clear pending và có thể replay ACK; `unknown` resend cùng `requestId` nếu còn relevant;
+  `conflict`/`expired` drop pending và surface manual retry/conflict.
 - [ ] `ROOM_DIFF`/`ROOM_SNAPSHOT` phải đọc state nhất quán tại một target clock (DB transaction
   consistent snapshot hoặc serialize qua room actor nếu đọc từ hot `SyncRoom`).
+- [ ] Query diff tại `targetClock = Room.documentClock`: `Record.recordClock`, `Tombstone.deletedClock`
+  và `RecordSlotClock.clock` đều filter trong `(lastServerClock, targetClock]`.
 - [ ] Client giữ `lastServerClock` là clock mới nhất đã apply đầy đủ vào `serverState`.
 - [ ] Client giữ `knownSlotClock[elementId][slot]`; không lấy max slot clock lẻ rồi coi là đã
   apply full document clock.
@@ -1155,8 +1234,12 @@ Delete => delete-wins.
   statuses/acks qua `ProcessedRequest`.
 - [ ] Không trả `ROOM_DIFF` xuyên qua replace boundary: nếu `lastServerClock < roomEpoch`, server
   trả full `ROOM_SNAPSHOT wipe_all` tại current `roomEpoch/serverClock`.
-- [ ] Nếu diff quá lớn thì trả snapshot nếu còn trong limit; nếu response có `hasMore`, client tiếp
-  tục request theo `nextFromClock` cho tới target server clock.
+- [ ] Nếu diff vượt `MAX_DIFF_BYTES` thì trả snapshot nếu còn trong limit; nếu snapshot cũng quá lớn
+  thì stream/chunk theo page. Nếu response có `hasMore`, client tiếp tục request theo
+  `nextFromClock` cho tới target server clock.
+- [ ] Tombstone GC policy rõ: giữ tombstone tối thiểu 24h hoặc N clocks gần nhất; khi GC, update
+  `tombstoneHistoryStartsAtClock = max(deletedClock đã GC)`. Nếu chưa implement GC, giữ tombstone
+  vô hạn và để `tombstoneHistoryStartsAtClock = 0`.
 
 **Acceptance criteria:**
 
@@ -1165,6 +1248,11 @@ Delete => delete-wins.
 - [ ] Pending create/patch/delete replay đúng dependency order sau reconnect.
 - [ ] Nếu diff có gap hoặc quá cũ, client wipe optimistic state cũ và hydrate snapshot an toàn.
 - [ ] Pending quá idempotency retention nhận status `expired`/manual retry thay vì resend mù.
+- [ ] `unknown` pending chỉ resend sau khi client kiểm tra element tồn tại, slot clock và `roomEpoch`
+      còn hợp lệ.
+- [ ] Client update `lastServerClock` chỉ sau khi apply đầy đủ snapshot/diff/change set.
+- [ ] `ROOM_DIFF` không cần `originRequestIds`; client apply diff slot-aware từ `changed` +
+      `slotClocks`.
 
 ### [P5-08] Delete, tombstone & binding repair — [BE]
 
@@ -1175,9 +1263,18 @@ Delete => delete-wins.
   `geometry.endPoint` khi cần).
 - [BE] Binding update là domain command riêng, có validation target và server recompute geometry khi
   read preconditions stale theo rule đã chọn.
+- [BE] `ArrowEndpointBinding` lưu `{ elementId, anchorRatio }`; chỉ lưu target id là không đủ vì
+  target có thể move/resize/rotate và endpoint cần bám đúng anchor.
+- [BE] `UpdateArrowBindingCommand` giữ terminal còn lại theo server-current arrow, apply terminal
+  đang đổi, recompute endpoint/path từ binding state hiện tại; nếu `baseGeometryClock` stale nhưng
+  domain còn safe thì accept và ACK `rebase`.
+- [BE] A sửa `binding.start` và B sửa `binding.end` có thể merge: server apply từng terminal trên
+  arrow current rồi recompute full geometry, không lấy route/path client làm source of truth.
 - [BE] Khi transform/geometry của shape đang là binding target đổi, server phải recompute endpoint/path
   của arrows liên quan trong cùng `PlannedChangeSet`; không commit target change rồi để arrow lệch
   visual.
+- [BE] Delete bound target clear binding liên quan, giữ visual endpoint hiện tại thành concrete point
+  khi cần, normalize arrow geometry và ghi tombstone trong cùng `CommittedChangeSet`.
 - [BE] Có giới hạn như `MAX_ELEMENTS_PER_DELETE`, `MAX_REPAIRED_ARROWS_PER_COMMAND`,
   `MAX_CHANGESET_BYTES`.
 
@@ -1188,6 +1285,11 @@ Delete => delete-wins.
 - [ ] Delete/import/replace không resurrect element đã tombstone ngoài ý muốn.
 - [ ] Command vượt limit bị reject `TOO_LARGE` và không commit partial.
 - [ ] Move/resize/rotate bound target cập nhật repaired arrow geometry trong cùng server clock.
+- [ ] A sửa startBinding và B sửa endBinding cùng arrow: cả hai terminal được giữ, geometry do server
+      recompute từ arrow current.
+- [ ] Binding tới deleted/missing target bị reject `INVALID_BINDING_TARGET`.
+- [ ] Request mới delete element đã tombstoned bị reject `ELEMENT_DELETED`; retry cùng `requestId`
+      replay ACK cũ.
 
 ### [P5-09] Replace document for import/restore — [BE]
 
@@ -1197,10 +1299,14 @@ Delete => delete-wins.
 - [BE] Trước import/restore phải tạo safety snapshot nếu feature snapshot đã bật.
 - [BE] Replace document transaction xóa/ghi records, tombstones, slot clocks, document metadata liên
   quan và stamp một `CommittedChangeSet` reason `replace_document`.
+- [BE] Replace document compute active ids hiện tại không có trong file mới thành tombstones; upsert
+  incoming elements sau normalize/validate; xóa toàn bộ old slot clock rows của room trước khi rebuild.
 - [BE] Replace document phải rebuild slot clocks từ scratch cho toàn bộ incoming elements; không giữ
   stale slot clock của element cùng id nhưng đổi type/schema.
 - [BE] Broadcast `ROOM_REPLACED`/replace change set chứa `serverClock`, `roomEpoch`, elements và
   slot clocks để client wipe/re-hydrate một server truth duy nhất.
+- [BE] `RoomReplacedPayload` tối thiểu chứa `roomId`, `serverClock`, `roomEpoch`, `elements` và
+  `slotClocks`; mọi command có `baseRoomEpoch !== roomEpoch` reject `STALE_ROOM_EPOCH`.
 - [BE] Import adapters chỉ parse/normalize/validate/report; không mutate DB/store trực tiếp.
 
 **Acceptance criteria:**
@@ -1211,6 +1317,8 @@ Delete => delete-wins.
 - [ ] Pending command trước replace bị cancel/reject, không ghost push sau restore/import.
 - [ ] Viewer/editor không đủ quyền bị reject trước khi parse/apply payload lớn.
 - [ ] Element cùng id sau replace nhưng đổi type/schema không giữ lại slot clock cũ.
+- [ ] Client nhận `ROOM_REPLACED` clear pending queue, set server/optimistic state từ payload, update
+      `lastServerClock` và `roomEpoch`, rồi ignore ACK cũ của request không còn pending.
 
 ### [P5-10] Export adapters use materialized server truth
 
@@ -1234,11 +1342,20 @@ Delete => delete-wins.
 - [ ] Local mutation tạo command từ before/after, group changed fields theo `SyncSlot`.
 - [ ] Coalesce drag patch theo `{ elementId, slot }` trong flush window; inverse lấy từ before đầu,
   changes lấy từ after cuối.
+- [ ] Flush window mặc định khoảng `33ms`; nếu durable DB transaction gây nghẽn thì có thể tăng
+  debounce lên `50-100ms` và dùng presence/transient preview cho cảm giác realtime khi drag.
+- [ ] Có max in-flight/backpressure: coalesce command chưa gửi, drop intermediate drag patches đã bị
+  final patch supersede, nhưng luôn gửi final pointerup patch.
 - [ ] Pending queue keyed by `requestId`, có dependency order cho pending create -> patch/delete.
 - [ ] Mutation vào element chưa ACK create phải squash vào create nếu chưa gửi, hoặc giữ dependency
   order nếu create đã gửi; delete trước khi create được gửi thì cancel create local.
 - [ ] Sau ack/broadcast, client apply slot-aware vào `serverState`, update known clocks, remove
   pending đã origin từ mình, rồi replay pending lên `optimisticState`.
+- [ ] `ROOM_DIFF` apply slot-aware: với existing element chỉ copy slot có `slotClock >
+  previousLastServerClock`; không replace whole `changed: Element[]` trừ khi snapshot `wipe_all` hoặc
+  create/new element chưa có trong `serverState`.
+- [ ] `changeSet.serverClock <= lastServerClock` bị ignore như duplicate/old state; nếu là ACK thì chỉ
+  clear pending request tương ứng. `serverClock > lastServerClock + 1` thì buffer và request diff.
 - [ ] Sau `ROOM_REPLACED`/replace-document, pending cũ bị clear/cancel.
 - [ ] Presence/cursor/selection không đi qua `SlotPatch`, không persist và không tăng
   `documentClock`.
@@ -1252,6 +1369,10 @@ Delete => delete-wins.
 - [ ] Reload/reconnect không double-apply command đã processed.
 - [ ] Multiplayer-aware undo đầy đủ không nằm trong phase này; undo phase đầu chỉ gửi inverse
       single-slot patch nếu slot clock chưa đổi từ edit gốc.
+- [ ] Undo phase đầu chỉ apply nếu `currentSlotClock === afterSlotClock` của undo entry; nếu slot đã
+      đổi thì báo conflict/manual retry, không tự động undo.
+- [ ] Pending create rồi patch/delete giữ dependency order sau reconnect; không gửi patch/delete của
+      pending-created element trước create.
 
 ### [P5-12] Scope guardrails / non-goals
 
@@ -1264,6 +1385,10 @@ Delete => delete-wins.
   freehand/highlighter.
 - [ ] Không làm merge import file trong phase đầu; import/restore saved document dùng replace path.
 - [ ] Không làm asset binary upload/storage/ref-count/GC trong sync core Phase 5.
+- [ ] Không làm full Figma-style undo semantics hoặc multiplayer-aware undo cho
+  create/delete/binding/replace trong phase đầu.
+- [ ] Không biến Redis thành durable source of truth cho sync core; nếu dùng Redis thì chỉ là
+  scale/cache/presence/pubsub layer, tài liệu vẫn recover từ Postgres.
 
 ### Phase 5 Definition of Done
 
