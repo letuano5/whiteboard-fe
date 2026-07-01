@@ -2,13 +2,15 @@
 
 |               |                                                                                            |
 | ------------- | ------------------------------------------------------------------------------------------ |
-| **Phiên bản** | 0.3                                                                                        |
-| **Ngày**      | 2026-06-30                                                                                 |
+| **Phiên bản** | 0.4                                                                                        |
+| **Ngày**      | 2026-07-02                                                                                 |
 | **Phạm vi**   | Đồ án web collaborative whiteboard, đồng bộ realtime nhiều người trên một canvas/bản đồ số |
 
 > **Ghi chú v0.2:** restructure lộ trình để không bị ngợp — tách Phase 1 thành P1A/P1B, tách Phase 3 thành P3A/P3B/P3C, thêm Phase 0 foundation; bổ sung **mutation pipeline** và tách **committed vs transient state**; đưa undo/redo và optimistic update lên sớm; tách `image` khỏi Canvas overlay.
 >
 > **Ghi chú v0.3:** bổ sung Phase 4 cho workspace/document management, sharing/public/private access, admission control, import/export, version history/rollback; đẩy các phần sync polish/advanced canvas/refactor xuống các phase sau.
+>
+> **Ghi chú v0.4:** Phase 5 được thay bằng một refactor sync/import/export thống nhất: đập bỏ các đường sync cũ phân mảnh (`ELEMENT_UPDATE`, whole-element LWW, DB write/import/restore bypass), đưa toàn bộ write document vào module backend `SyncRoom` server-authoritative với `SyncCommand`, `SlotPatch`, `CommittedChangeSet`, `documentClock`, `roomEpoch`, idempotency và persistence transaction. Bỏ các sub-phase ack/rebase lẻ tẻ và section refactor future cũ.
 >
 > **Các sub-phase (P1A, P1B, P2.5, P3A…) là thứ tự triển khai (thứ tự tấn công), KHÔNG phải các milestone chấm điểm riêng.**
 
@@ -32,17 +34,18 @@
 | Lưu trữ (P1)            | `localStorage` + `BroadcastChannel` (đồng bộ giữa các tab)                                                                                           |
 | **[BE]** Lưu trữ (P3A+) | PostgreSQL + Prisma                                                                                                                                  |
 | **[BE]** Lưu trữ (P3D+) | Redis (shared room state + Socket.IO adapter) + write-behind → PostgreSQL                                                                            |
-| Conflict resolution     | Last-Write-Wins theo `version` + `versionNonce`                                                                                                      |
+| Conflict resolution     | P1–P4 tạm dùng whole-element LWW; P5 thay bằng server-authoritative slot-level LWW qua `SyncRoom`                                                    |
 
 ### 1.2 Nguyên tắc kiến trúc xuyên suốt
 
 1. **Unified element store** — mọi đối tượng là một `Element` trong cùng store; renderer chỉ là cách hiển thị.
-2. **Versioning từng element** — mỗi mutate: `version++`, random lại `versionNonce`. Nền tảng cho conflict + "chỉ gửi cái đã đổi".
+2. **Versioning từng element là legacy trước P5** — P1–P4 có thể dùng `version/versionNonce` cho sync tạm thời; từ P5 conflict source chính là `documentClock`, `roomEpoch` và slot clocks do server stamp.
 3. **Shared camera transform** — mọi layer (DOM/SVG/Canvas overlay) dùng chung camera `{x, y, zoom}`.
 4. **ShapeUtil (strategy)** — mỗi `type` là một module khai báo render / hit-test / resize / export riêng; core không biết chi tiết từng loại.
-5. **Sync data, không sync renderer** — qua mạng (và qua tab) chỉ truyền dữ liệu `Element`.
+5. **Sync data, không sync renderer** — qua mạng chỉ truyền document command/change-set hoặc snapshot data; renderer không nằm trong protocol.
 6. **Mutation pipeline duy nhất** — mọi thay đổi element đi qua một API chung (xem §3.1), không rải rác.
 7. **Tách committed vs transient state** — chỉ committed state mới được lưu/sync; tương tác tạm thời nằm riêng (xem §3.2).
+8. **Backend `SyncRoom` là authoritative path từ P5** — mọi write vào saved document, gồm realtime edit, import, restore, replace document, delete, binding repair và persistence, phải đi qua cùng module sync/import/export; không có DB write bypass hoặc thuật toán merge song song.
 
 ---
 
@@ -65,7 +68,7 @@ type ElementType =
   | 'highlighter' // P3C (Canvas overlay)
   | 'frame'
   | 'sticky'
-  | 'embed'; // P5
+  | 'embed'; // future polish
 
 interface Element {
   id: string;
@@ -78,8 +81,8 @@ interface Element {
   zIndex: number; // số nguyên (MVP). // later: index: string (fractional) nếu reorder nhiều trong collab
   props: ElementProps;
 
-  version: number;
-  versionNonce: number;
+  version: number; // legacy P1-P4 sync metadata; P5 không dùng làm conflict source chính
+  versionNonce: number; // legacy P1-P4 sync metadata
   updatedAt: number;
   isDeleted: boolean;
 
@@ -168,12 +171,15 @@ model Room {
   name                          String      @default("Untitled")
   ownerId                       String?     // FK → User, thêm ở P3B
   documentClock                 BigInt      @default(0)
+  roomEpoch                     BigInt      @default(0) // P5: tăng khi replace document/import/restore
   tombstoneHistoryStartsAtClock BigInt      @default(0)
   createdAt                     DateTime    @default(now())
   updatedAt                     DateTime    @updatedAt
   members    RoomMember[]
   records    Record[]
   tombstones Tombstone[]
+  slotClocks RecordSlotClock[]
+  processedRequests ProcessedRequest[]
 }
 
 model RoomMember {
@@ -206,12 +212,40 @@ model Tombstone {
   @@id([roomId, recordId])
   @@index([roomId, deletedClock])
 }
+
+// P5+: clock theo conflict slot, dùng để merge slot-level.
+model RecordSlotClock {
+  roomId        String @db.Uuid
+  recordId      String
+  slot          String
+  clock         BigInt
+  lastActorId   String?
+  lastRequestId String?
+  room          Room   @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  @@id([roomId, recordId, slot])
+  @@index([roomId, clock])
+}
+
+// P5+: idempotency cho retry/reconnect, tránh apply lại cùng command.
+model ProcessedRequest {
+  roomId      String   @db.Uuid
+  actorId     String
+  requestId   String
+  payloadHash String
+  serverClock BigInt
+  ack         Json
+  createdAt   DateTime @default(now())
+  room        Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  @@id([roomId, actorId, requestId])
+  @@index([roomId, serverClock])
+}
 ```
 
 > Bảng `Snapshot` (version history / checkpoint) dời sang **P4-07**.
 >
-> **Invariant:** `documentClock` chỉ tăng, không bao giờ giảm. Mỗi write transaction tăng clock
-> một lần rồi gán `recordClock = documentClock` cho toàn bộ elements trong batch đó.
+> **Invariant:** `documentClock` chỉ tăng, không bao giờ giảm. Mỗi accepted command tăng clock
+> đúng một lần rồi gán `recordClock/deletedClock/slotClock = documentClock` cho toàn bộ phần state
+> bị chạm trong command đó.
 
 ---
 
@@ -228,9 +262,12 @@ deleteElements(ids); // soft delete: isDeleted = true
 updateElements(patches); // batch
 ```
 
-Trong API này tập trung xử lý: `version++`, `versionNonce = random`, `updatedAt = Date.now()`, capture history (cho undo), persist local, và broadcast nếu đang online. Nhờ vậy undo/redo và sync "miễn phí" với mọi đường mutation (tool, panel, shortcut…).
+Trong API này tập trung xử lý: tạo before/after state, capture history (cho undo), persist local,
+và emit mutation event cho sync layer. P1–P4 có thể tiếp tục tăng `version/versionNonce` để phục vụ
+legacy whole-element sync. Từ P5, pipeline phải sinh `SyncCommand`/`SlotPatch` từ before/after
+thay vì gửi nguyên `Element[]` làm authoritative network payload.
 
-### 3.2 Apply-remote path dùng chung
+### 3.2 Apply-remote path dùng chung (legacy P1-P4)
 
 Có **một** hàm áp thay đổi từ "bên ngoài" (tab khác qua `BroadcastChannel`, hoặc peer qua Socket.IO) vào store theo LWW:
 
@@ -238,7 +275,47 @@ Có **một** hàm áp thay đổi từ "bên ngoài" (tab khác qua `BroadcastC
 applyRemoteElements(incoming: Element[])  // LWW theo version/versionNonce; bỏ qua element đang sửa cục bộ
 ```
 
-→ Cross-tab sync ở **P1B** và network sync ở **P2** dùng chung hàm này. Viết một lần, tái dùng — P1B là bệ thử cho P2.
+→ Cross-tab sync ở **P1B** và network sync ở **P2** dùng chung hàm này. Đây là path tạm để build
+MVP sớm; P5 phải xóa vai trò authoritative của nó khỏi saved-room sync.
+
+### 3.3 Unified sync/import/export module (P5 target)
+
+Từ P5, saved document chỉ có một authoritative write path:
+
+```txt
+local mutation
+  -> optimistic local state
+  -> SyncCommand
+  -> room actor serialized execution
+  -> server SyncRoom
+  -> PlannedChangeSet
+  -> DB transaction
+  -> CommittedChangeSet
+  -> apply to room memory
+  -> ack/broadcast
+  -> client materialize server truth
+```
+
+Những contract cũ cần bị thay trong saved-room path:
+
+```txt
+ELEMENT_UPDATE: Element[]
+whole-element version/versionNonce conflict
+applyRemoteElements(Element[]) as final network merge
+DB write bypass SyncRoom
+```
+
+Thay bằng:
+
+```txt
+CREATE_ELEMENT / PATCH_SLOTS / UPDATE_ARROW_BINDING / DELETE_ELEMENTS / REPLACE_DOCUMENT
+server-authoritative documentClock
+roomEpoch for replace-document boundaries
+slot clocks
+CommittedChangeSet
+server ack/reject/rebase
+ROOM_SNAPSHOT / ROOM_DIFF based on documentClock
+```
 
 ---
 
@@ -519,25 +596,26 @@ applyRemoteElements(incoming: Element[])  // LWW theo version/versionNonce; bỏ
 
 ### [P3A-02] Load khi mở phòng
 
-- [ ] Client nhận `ROOM_SNAPSHOT { elements, documentClock }` khi join; áp qua `applyRemoteElements`; lưu `lastServerClock = documentClock`.
+- [ ] Client nhận `ROOM_SNAPSHOT { elements, documentClock }` khi join; P3A áp qua `applyRemoteElements`, P5 thay bằng snapshot hydration của sync client; lưu `lastServerClock = documentClock`.
 - [ ] Phòng chưa có dữ liệu → `elements: [], documentClock: 0`.
 - [BE] Server query `Record WHERE roomId = ?` và gửi snapshot kèm `documentClock` hiện tại.
 
 ### [P3A-03] Reconnect không mất data
 
 - [ ] Socket.IO tự reconnect; client gửi `lastServerClock` khi reconnect.
-- [ ] Client áp diff nhận về: upsert `changed` elements, xóa `deleted` khỏi store (`applyRemoteElements`).
-- [ ] Thay đổi cục bộ chưa kịp gửi: gửi lại qua `ELEMENT_UPDATE` sau khi đã áp server diff.
+- [ ] Client áp diff nhận về: upsert `changed` elements, xóa `deleted` khỏi store; P3A có thể dùng `applyRemoteElements`, P5 phải apply slot-aware theo `ROOM_DIFF`.
+- [ ] Thay đổi cục bộ chưa kịp gửi: P3A gửi lại qua `ELEMENT_UPDATE`; P5 replay pending `SyncCommand` sau khi hydrate server state.
 - [BE] Nhận `lastServerClock` từ client, trả về:
   - Bình thường (`lastServerClock >= tombstoneHistoryStartsAtClock`): diff `{ changed: Record[], deleted: Tombstone[], documentClock }` — chỉ những gì thay đổi sau `lastServerClock`.
   - Clock quá cũ (`lastServerClock < tombstoneHistoryStartsAtClock`): wipe_all — trả full snapshot như P3A-02.
 
 ### [P3A-04] Delta push theo clock
 
-- [BE] Sau mỗi `ELEMENT_UPDATE` nhận vào: tăng `documentClock` một lần cho cả batch, gán `recordClock = documentClock`; persist throttled vào DB.
+- [BE] P3A: sau mỗi `ELEMENT_UPDATE` nhận vào, tăng `documentClock` một lần cho cả batch, gán `recordClock = documentClock`; persist throttled vào DB.
+- [BE] P5: xóa `ELEMENT_UPDATE` khỏi saved-room write path; mỗi accepted `SyncCommand` tăng `documentClock` một lần trong DB transaction rồi stamp `recordClock/deletedClock/slotClock`.
 - [ ] Client không cần track `version đã gửi` per element — clock trên server quản lý.
 - [ ] `lastServerClock` client cập nhật mỗi khi nhận ack hoặc patch từ server.
-- [BE] Bỏ full-resync định kỳ — clock-based diff đã đủ. Nếu phát hiện drift, thêm lại ở P5-01a.
+- [BE] Bỏ full-resync định kỳ — clock-based diff đã đủ. Nếu phát hiện drift, P5 dùng gap detection + `ROOM_DIFF`/`ROOM_SNAPSHOT`, không thêm đường sync song song.
 
 ---
 
@@ -725,7 +803,8 @@ Clone Repo chính thức tại: https://github.com/supabase/supabase/tree/master
 - [ ] Chưa login thì góc phải hiện `Login`; đã login thì hiện avatar tròn, bấm avatar có ít nhất action `Sign out`, nằm bên phải nút `Share`.
 - [ ] Editor/viewer không thấy action quản lý quyền hoặc thấy disabled; nếu gọi lén vẫn bị server reject.
 - [ ] Existing user vào room đúng role sau khi được add bằng email.
-- [ ] Viewer không thấy toolbar edit và server reject `ELEMENT_UPDATE`.
+- [ ] Viewer không thấy toolbar edit và server reject document mutation (`ELEMENT_UPDATE` ở P1-P4,
+      `SyncCommand` từ P5).
 - [ ] Private room từ chối user không phải owner/member.
 - [ ] `link_view` cho người có link vào xem với `effectiveRole = 'viewer'`.
 - [ ] `link_edit` cho người có link vào edit nếu editor slot còn.
@@ -740,7 +819,7 @@ Clone Repo chính thức tại: https://github.com/supabase/supabase/tree/master
 - [ ] Nếu editor slots đã đầy: user có quyền editor vẫn được join dưới `effectiveRole = 'viewer'`.
 - [ ] Khi editor rời phòng, P4 đầu không cần queue/auto-promote; user bị hạ xuống viewer có thể reload/rejoin để claim slot mới nếu base role cho phép.
 - [BE] Presence/session list phân biệt `baseRole` và `effectiveRole`.
-- [BE] Server reject `ELEMENT_UPDATE`, restore, import, delete khi `effectiveRole` không đủ quyền.
+- [BE] Server reject document mutation khi `effectiveRole` không đủ quyền. P1-P4 mutation event chính là `ELEMENT_UPDATE`; từ P5 gồm mọi `SyncCommand` như patch, delete, import/replace và restore.
 
 **Acceptance criteria:**
 
@@ -760,7 +839,7 @@ Clone Repo chính thức tại: https://github.com/supabase/supabase/tree/master
 - [ ] Import phải validate schema version; file lạ/thiếu field cần báo lỗi rõ ràng.
 - [ ] Load file không được ghi đè room đang mở nếu user chưa confirm.
 - [ ] Save/load native format phải round-trip được toàn bộ element types hiện có.
-- [BE] Import vào persisted room tạo batch mutation mới và tăng `documentClock`, không ghi DB bypass mutation pipeline.
+- [BE] Import vào persisted room tạo batch mutation mới và tăng `documentClock`, không ghi DB bypass mutation pipeline. Từ P5 import phải đi qua `REPLACE_DOCUMENT` hoặc command tương ứng trong unified sync module.
 - [BE] Import vào persisted room phải check `effectiveRole` editor/owner trước khi mutate.
 
 **Acceptance criteria:**
@@ -851,15 +930,16 @@ interface RoomRestoredPayload {
 }
 ```
 
-**Server restore transaction:**
+**Server restore transaction (P4 path; P5 thay bằng `REPLACE_DOCUMENT` command):**
 
 1. Check user là owner/admin của room.
 2. Load snapshot theo `snapshotId`.
 3. Insert snapshot hiện tại với `reason: 'restore'` (safety net).
-4. Xóa toàn bộ `Record` của room, insert lại từ `snapshot.records`.
-5. Xóa toàn bộ `Tombstone`, insert lại từ `snapshot.tombstones`.
+4. P4 có thể xóa toàn bộ `Record` của room, insert lại từ `snapshot.records`.
+5. P4 có thể xóa toàn bộ `Tombstone`, insert lại từ `snapshot.tombstones`.
 6. `Room.documentClock = max(current + 1, snapshot.documentClock + 1)`.
 7. Broadcast `ROOM_RESTORED` với `mode: 'wipe_all'` và toàn bộ elements.
+8. Từ P5, restore không được thao tác DB trực tiếp; phải tạo safety snapshot rồi execute `REPLACE_DOCUMENT` qua `SyncRoom`, tăng `roomEpoch`, clear pending cũ và broadcast `CommittedChangeSet`.
 
 **Client xử lý `ROOM_RESTORED`:**
 
@@ -895,248 +975,269 @@ useElementsStore.getState().setElements(data.elements);
 
 ---
 
-## 14. Phase 5 — Advanced sync & polish
+## 14. Phase 5 — Unified sync/import/export module
 
-### [P5-01a] Optimistic ack — commit / discard
+**Chủ đề:** đập bỏ toàn bộ sync/import/export cũ bị phân mảnh và thay bằng một module backend
+riêng rẽ, dùng chung cho realtime edit, load/reconnect, delete, binding repair, import, export,
+restore và replace document. Frontend chỉ giữ phần mutation capture/reconciliation cần thiết; server
+là nơi quyết định final document state.
 
-**Prerequisite:** P3A (PostgreSQL + `documentClock` đã có).
+**Prerequisite:** P3A persistence/reconnect, P3B permission enforcement, P4 file lifecycle/version
+history đã có surface đủ để refactor thay đường bên dưới.
 
-Thêm vòng ack tối giản: client biết server đã nhận và xử lý push, có thể detect timeout và retry.
+**Legacy paths phải bị xóa khỏi saved-room authoritative flow:**
 
-**Protocol thêm vào `@vdt/shared`:**
+- [ ] Không còn `ELEMENT_UPDATE: Element[]` là write contract cho saved document.
+- [ ] Không còn whole-element `version/versionNonce` làm conflict source chính.
+- [ ] Không còn `applyRemoteElements(Element[])` làm final network merge cho saved document.
+- [ ] Không còn import/restore/delete/persistence ghi DB trực tiếp hoặc đi đường riêng ngoài
+      `SyncRoom`.
+- [ ] Không còn nhiều thuật toán sync cùng tồn tại cho cùng một saved-room mutation path.
 
-```ts
-// Mở rộng ELEMENT_UPDATE payload (client → server)
-interface ElementUpdatePayload {
-  roomId: string;
-  requestId: string; // uuid v4, client tự sinh
-  clientClock: number; // counter tăng dần per-client
-  elements: Element[];
-}
+### [P5-01] Module boundary & legacy removal — [BE]
 
-// Event mới: ELEMENT_UPDATE_ACK (server → sender only, không broadcast)
-type ElementUpdateAck =
-  | { requestId: string; clientClock: number; serverClock: number; action: 'commit' }
-  | { requestId: string; clientClock: number; serverClock: number; action: 'discard' };
-```
-
-**Server (`backend/src/index.ts`):**
-
-- Thêm `roomClock: Map<string, number>` (in-memory, sau P3A migrate sang `documentClock` từ DB).
-- Sau khi LWW upsert batch elements: tăng `roomClock` một lần, gán `serverClock = roomClock`.
-- Gửi `ELEMENT_UPDATE_ACK` về **chỉ sender** (không broadcast):
-  - `commit`: ít nhất một element được lưu đúng như request (version mới nhất của nó).
-  - `discard`: toàn bộ elements trong batch đều bị bỏ qua vì server đang giữ version cao hơn hoặc nonce thắng.
-- [BE] Tiếp tục broadcast `ELEMENT_UPDATE` cho peers như hiện tại.
-
-**Client (`sync/pending-push.ts` — file mới, import vào `socket-client.ts`):**
-
-```ts
-interface PendingPush {
-  requestId: string;
-  clientClock: number;
-  sentAt: number; // Date.now() — cho timeout
-}
-```
-
-- `clientClock` tăng mỗi lần emit `ELEMENT_UPDATE`.
-- Khi ack nhận về: xóa request khỏi `pendingPushRequests`.
-- Timeout (ví dụ 10s không nhận ack): log warning, xóa khỏi queue; không cần tự retry — Socket.IO reconnect tự xử lý resend qua `ROOM_RESYNC` của P3A.
-- `lastServerClock` client cập nhật từ `ack.serverClock`.
+- [BE] Tạo module sync riêng, ví dụ `backend/src/sync/`, chứa contracts, `SyncRoom`, room actor,
+  planner, repository, validators, import/replace adapters và socket/http handlers.
+- [BE] Socket handlers chỉ wire auth/permission/session rồi gọi sync module; không import mutable
+  singleton room state hoặc tự merge element.
+- [BE] Mọi saved-room write đi qua một hàm entrypoint thống nhất, ví dụ
+  `executeSyncCommand(command, actorContext)`.
+- [BE] Import/restore/delete/binding repair không được gọi Prisma trực tiếp để thay document state.
 
 **Acceptance criteria:**
 
-- [ ] Mỗi `ELEMENT_UPDATE` client gửi có `requestId` và `clientClock` duy nhất.
-- [ ] Server gửi `ELEMENT_UPDATE_ACK` về đúng sender, không về peer khác.
-- [ ] `pendingPushRequests` queue được dọn sạch sau khi nhận ack.
-- [ ] `lastServerClock` client cập nhật chính xác.
-- [BE] Server `roomClock` tăng monotonically, không giảm.
+- [ ] Search codebase không còn saved-room handler nào tự xử lý `ELEMENT_UPDATE` để mutate DB/store.
+- [ ] Tất cả tests mutation saved-room đi qua sync module entrypoint.
+- [ ] Legacy helpers chỉ còn cho local board/cross-tab hoặc migration, có comment rõ phạm vi.
 
-### [P5-01b] Optimistic rebase khi conflict
+### [P5-02] Shared sync contracts — `@vdt/shared`
 
-**Prerequisite:** P5-01a đã xong.
-
-Xử lý trường hợp cạnh: hai client edit **cùng một element** đồng thời — server LWW chọn winner khác với những gì client đã gửi.
-
-**Mở rộng protocol (bổ sung thêm vào `ELEMENT_UPDATE_ACK`):**
-
-```ts
-// Thêm action thứ ba vào union type
-| { requestId: string; clientClock: number; serverClock: number; action: 'rebase'; elements: Element[] }
-// elements = các element mà server đã commit với version/nonce khác request
-```
-
-**Server rule — khi nào gửi `rebase`:**
-
-Sau khi apply LWW batch: với từng element trong request, nếu `elMap.get(el.id)` kết quả **khác** với `el` đã gửi (cùng id nhưng `versionNonce` khác — tức là một concurrent push với nonce thấp hơn đã thắng trước đó), gom các element winners đó vào `rebase.elements`.
-
-**Client xử lý `rebase`:**
-
-```ts
-// Không cần reverse speculativeChanges — applyRemoteElements đã có LWW đúng
-// Server trả về winner với cùng version nhưng nonce thấp hơn → applyRemoteElements sẽ apply
-applyRemoteElements(ack.elements);
-```
-
-Lý do không cần `speculativeChanges` stack (khác tldraw): codebase này LWW trên whole-element, không phải field-level CRDT diff. `applyRemoteElements` với `(version === current.version && versionNonce < current.versionNonce)` → winner apply tự động.
+- [ ] Định nghĩa `SyncSlot` là conflict unit nhỏ nhất, tối thiểu gồm:
+  `transform.position`, `transform.size`, `transform.rotation`, `style.*`, `text.*`,
+  `geometry.points`, `geometry.route`, `geometry.startPoint`, `geometry.endPoint`,
+  `binding.start`, `binding.end`, `order`, `asset.src`, `embed.url`, `grouping.groupId`,
+  `grouping.frameId`.
+- [ ] Có exhaustive field-to-slot mapping: mọi mutable field hoặc map vào slot, hoặc ghi rõ là
+  non-sync / derived / legacy-only.
+- [ ] Định nghĩa `SlotPatch` chứa `elementId`, `slot`, `baseClock`, `changes`, optional
+  `inverseChanges`; patch phải chứa full semantic slot value.
+- [ ] Định nghĩa `SyncCommand` gồm `CreateElementCommand`, `PatchSlotsCommand`,
+  `ReorderElementsCommand`, `UpdateArrowBindingCommand`, `DeleteElementsCommand`,
+  `ReplaceDocumentCommand`.
+- [ ] Command có `protocolVersion`, `schemaVersion`, `roomId`, `requestId`, `clientClock`,
+  `baseRoomEpoch`, optional `readPreconditions`.
+- [ ] Server không tin `actorId` từ payload; actor lấy từ authenticated socket/session.
 
 **Acceptance criteria:**
 
-- [ ] Server phát hiện và trả `rebase` khi concurrent push có nonce thấp hơn đã thắng.
-- [ ] Client nhận `rebase` → `applyRemoteElements(elements)` → store hội tụ về winner.
-- [ ] Test: 2 client đồng thời patch cùng element → sau ack cả hai client hiển thị cùng một state.
-- [ ] Không có vòng lặp (rebase không trigger thêm push).
+- [ ] Type tests hoặc unit tests chứng minh field-to-slot mapping không bỏ sót mutable field.
+- [ ] `PatchSlotsCommand` gửi field ngoài slot, thiếu full semantic value, duplicate slot không hợp lệ,
+      hoặc patch `isDeleted` đều bị reject.
+- [ ] Slot `order` không được patch trực tiếp trong phase đầu; reorder phải đi domain command.
 
-### [P5-02] Element lock / unlock
+### [P5-03] Server-authoritative `SyncRoom` + room actor — [BE]
 
-- [ ] `locked = true` chặn move/resize/delete đến khi unlock.
+- [BE] `SyncRoom` giữ hot state: `elements`, `documentClock`, `roomEpoch`, `slotClocks`,
+  `processedRequests`.
+- [BE] Mỗi room có serialized executor/room actor. Critical section gồm idempotency check,
+  `planCommand`, repository commit, `applyCommitted`, enqueue ack/broadcast đúng thứ tự clock.
+- [BE] Server là sequencer duy nhất. Client timestamp và `clientClock` không quyết định winner.
+- [BE] Scope phase đầu cho phép một Node.js process là owner authoritative của room; nếu scale ngang
+  thì cần sticky routing/room owner/ordered sequencer trước khi bật multi-instance writes.
 
-### [P5-03] Align / Distribute + Flip
+**Acceptance criteria:**
 
-- [ ] Align 6 hướng + distribute đều; flip ngang/dọc đúng cả khi đã xoay.
+- [ ] Hai command concurrent vào cùng room được commit theo thứ tự deterministic, không interleave
+      giữa plan và apply.
+- [ ] Command vào room khác không bị serialize chung nếu không cần.
+- [ ] Unit test chứng minh duplicate/retry không apply lại side effect.
 
-### [P5-04] Snap to grid + đường gióng + Grid background
+### [P5-04] Conflict resolution & validation — [BE]
 
-- [ ] Snap làm tròn theo lưới; đường gióng khi thẳng hàng; bật/tắt grid (co theo zoom).
+Rule chính:
 
-### [P5-05] Zoom to fit / selection / reset
+```txt
+Khác slot => merge.
+Cùng slot => latest-to-server wins.
+Delete => delete-wins.
+```
 
-- [ ] Mỗi chế độ tính `camera` đúng.
+- [BE] Nếu `baseClock == currentSlotClock`: commit clean.
+- [BE] Nếu `baseClock < currentSlotClock`: accept theo latest-to-server wins, ack có thể là
+  `rebase` vì server truth khác optimistic base.
+- [BE] Nếu `baseClock > currentSlotClock`: reject `STALE_CLIENT_STATE`, yêu cầu client fetch
+  `ROOM_DIFF` hoặc `ROOM_SNAPSHOT`.
+- [BE] Validation tối thiểu: `ROOM_NOT_FOUND`, `ELEMENT_NOT_FOUND`, `ELEMENT_DELETED`,
+  `INVALID_SLOT`, `INVALID_FIELD`, `INVALID_VALUE`, `INVALID_SLOT_FOR_ELEMENT_TYPE`,
+  `INVALID_BINDING_TARGET`, `DUPLICATE_ELEMENT_ID`, `DUPLICATE_REQUEST_CONFLICT`, `TOO_LARGE`,
+  `CLOCK_OVERFLOW`, `STALE_CLIENT_STATE`, `STALE_ROOM_EPOCH`, `FORBIDDEN`,
+  `UNSUPPORTED_COMMAND`, `UNSUPPORTED_PROTOCOL_VERSION`, `UNSUPPORTED_SCHEMA_VERSION`.
+- [BE] Delete không được đi qua `SlotPatch`; patch vào deleted element hoặc patch `isDeleted` bị reject.
+- [BE] Linear elements không nhận `transform.*` patch độc lập nếu geometry của type đó không hỗ trợ.
+- [BE] Bound arrow endpoint geometry không được patch trực tiếp; dùng `UpdateArrowBindingCommand`.
 
-### [P5-06] Idle/Away + Follow viewport
+**Acceptance criteria:**
 
-- [ ] Không thao tác > ngưỡng → idle; ẩn tab → away.
-- [ ] A follow B → camera A bám viewport B; có dừng follow; tránh vòng lặp.
-- [BE] Server relay viewport cho Follow mode.
+- [ ] A move shape và B đổi fill cùng shape đồng thời: cả position và fill đều được giữ.
+- [ ] A move shape và B move cùng shape đồng thời: command commit sau trên server thắng slot
+      `transform.position`.
+- [ ] Delete shape thắng mọi patch sau đó vào shape đã deleted.
+- [ ] Viewer bị reject ở command boundary trước khi plan mutation.
 
-### [P5-07] Sticky note + Embed/iframe/video
+### [P5-05] Change sets, ack/reject/rebase & broadcast
 
-- [ ] Sticky có nền màu + text.
-- [ ] Embed render DOM (iframe); mặc định `pointer-events:none`, chỉ bật khi vào chế độ interact.
+- [ ] `planCommand` tạo `PlannedChangeSet`; repository commit trong DB transaction stamp
+  `serverClock` và trả `CommittedChangeSet`.
+- [ ] `CommittedChangeSet` chứa `serverClock`, `roomEpoch`, `originActorId`, `originRequestIds`,
+  `reason`, `slotPatches`, `slotClocks`, `puts`, `deletes`.
+- [ ] `slotPatches` là instruction apply chính cho patch/update/repair; `puts` là materialized
+  element cho create, replace, reconnect, debug và persistence, không phải lệnh replace whole
+  element cho mọi mutation nhỏ.
+- [ ] Sender nhận ack riêng: `commit`, `rebase`, hoặc `reject`; peers nhận broadcast
+  `CommittedChangeSet`.
+- [ ] Ack/broadcast cũ với `serverClock <= lastServerClock` không được overwrite state mới hơn.
+- [ ] Gap `serverClock > lastServerClock + 1` phải buffer event và request `ROOM_DIFF`.
 
-### [P5-08] Roughness (tuỳ chọn)
+**Acceptance criteria:**
 
-- [ ] `props.roughness` điều khiển độ "vẽ tay"; render ổn định giữa client (SVG rough mode hoặc Canvas).
+- [ ] Ack `commit/rebase` đều clear đúng pending request của sender.
+- [ ] Broadcast cùng origin của chính client cũng có thể clear pending nếu ack bị miss.
+- [ ] Reject không rollback mù slot đã có pending mới hơn.
+- [ ] Client không replace nguyên element khi change set chỉ touch một slot.
 
-### [P5-09] Context menu + Keyboard shortcuts
+### [P5-06] Transactional persistence & idempotency — [BE]
 
-- [ ] Menu chuột phải theo ngữ cảnh.
-- [ ] Tối thiểu: V/H/R/O/L/T, Del, Ctrl/Cmd+Z/Shift+Z, Ctrl/Cmd+C/V/D.
+- [BE] Mỗi accepted command tăng `Room.documentClock` đúng một lần trong DB transaction.
+- [BE] Tất cả `recordClock`, `deletedClock`, `RecordSlotClock.clock` bị touch bởi command đó bằng
+  cùng `documentClock`.
+- [BE] `ProcessedRequest` dùng key `{ roomId, actorId, requestId }` và `payloadHash`.
+- [BE] Idempotency check chạy trước validation domain để retry create đã commit có thể replay ack,
+  không bị reject nhầm `DUPLICATE_ELEMENT_ID`.
+- [BE] Clock trong DB dùng `BigInt`; wire protocol dùng `number` kèm assert
+  `Number.isSafeInteger`, hoặc đổi sang string nếu overflow.
+
+**Acceptance criteria:**
+
+- [ ] Retry cùng `requestId` + cùng payload replay ack cũ, không tăng clock.
+- [ ] Retry cùng `requestId` + payload khác bị reject `DUPLICATE_REQUEST_CONFLICT`.
+- [ ] Crash/restart sau commit DB nhưng trước ack vẫn replay được ack từ `ProcessedRequest`.
+- [ ] Một command delete 3 shape và repair 5 arrow chỉ tăng clock một lần.
+
+### [P5-07] Load, reconnect & diff
+
+- [ ] `ROOM_SNAPSHOT` hydrate full server state, `documentClock`, `roomEpoch`, slot clocks.
+- [ ] `ROOM_DIFF` từ `lastServerClock` trả changed records, deleted tombstones, slot clocks và
+  server clock; nếu tombstone history quá cũ thì trả `wipe_all` snapshot.
+- [ ] Client giữ `lastServerClock` là clock mới nhất đã apply đầy đủ vào `serverState`.
+- [ ] Client giữ `knownSlotClock[elementId][slot]`; không lấy max slot clock lẻ rồi coi là đã
+  apply full document clock.
+- [ ] Reconnect gửi `lastServerClock` và pending request ids; server replay pending statuses/acks
+  qua `ProcessedRequest`.
+
+**Acceptance criteria:**
+
+- [ ] Client mất mạng, peer edit/delete nhiều object, reconnect chỉ fetch diff nếu còn history.
+- [ ] Diff apply slot-aware: chỉ slot có clock mới hơn base mới được copy từ materialized element.
+- [ ] Pending create/patch/delete replay đúng dependency order sau reconnect.
+- [ ] Nếu diff có gap hoặc quá cũ, client wipe optimistic state cũ và hydrate snapshot an toàn.
+
+### [P5-08] Delete, tombstone & binding repair — [BE]
+
+- [BE] `DeleteElementsCommand` xóa records sống, ghi tombstones và emit deletes trong
+  `CommittedChangeSet`.
+- [BE] Delete shape phải repair arrows/bindings liên quan bằng slot patches đầy đủ
+  (`binding.start`, `binding.end`, `geometry.route`, `geometry.startPoint`,
+  `geometry.endPoint` khi cần).
+- [BE] Binding update là domain command riêng, có validation target và server recompute geometry khi
+  read preconditions stale theo rule đã chọn.
+- [BE] Có giới hạn như `MAX_ELEMENTS_PER_DELETE`, `MAX_REPAIRED_ARROWS_PER_COMMAND`,
+  `MAX_CHANGESET_BYTES`.
+
+**Acceptance criteria:**
+
+- [ ] Delete bound shape không để arrow trỏ tới id chết.
+- [ ] Peer nhận cùng change set có state arrow/binding giống sender.
+- [ ] Delete/import/replace không resurrect element đã tombstone ngoài ý muốn.
+- [ ] Command vượt limit bị reject `TOO_LARGE` và không commit partial.
+
+### [P5-09] Replace document for import/restore — [BE]
+
+- [BE] `ReplaceDocumentCommand` là đường duy nhất để thay toàn bộ saved document khi native import,
+  restore snapshot hoặc convert local board sang saved document cần replace.
+- [BE] Replace document tăng `roomEpoch` để pending command cũ bị reject `STALE_ROOM_EPOCH`.
+- [BE] Trước import/restore phải tạo safety snapshot nếu feature snapshot đã bật.
+- [BE] Replace document transaction xóa/ghi records, tombstones, slot clocks, document metadata liên
+  quan và stamp một `CommittedChangeSet` reason `replace_document`.
+- [BE] Import adapters chỉ parse/normalize/validate/report; không mutate DB/store trực tiếp.
+
+**Acceptance criteria:**
+
+- [ ] Native `.vdt.json` import vào saved document đi qua `ReplaceDocumentCommand` hoặc domain
+      command tương ứng, không bypass repository.
+- [ ] Snapshot restore đi qua cùng path với import/replace và broadcast một server truth duy nhất.
+- [ ] Pending command trước replace bị cancel/reject, không ghost push sau restore/import.
+- [ ] Viewer/editor không đủ quyền bị reject trước khi parse/apply payload lớn.
+
+### [P5-10] Export adapters use materialized server truth
+
+- [ ] Native export lấy snapshot materialized từ `SyncRoom`/repository, không đọc state client cũ khi
+  export saved document.
+- [ ] Cross-platform export/import adapters dùng chung normalizer/validator với sync module để field
+  mapping không lệch.
+- [ ] Export không mutate document, không tăng `documentClock`.
+- [ ] Import report gồm số object import được, skipped và lý do chính.
+
+**Acceptance criteria:**
+
+- [ ] Export ngay sau concurrent edits phản ánh server state mới nhất đã commit.
+- [ ] Import/export round-trip `.vdt.json` giữ element types, styles, zIndex/order, angle,
+      group/frame metadata và asset references hiện có.
+- [ ] Unsupported object bị skip/report, không tạo document half-mutated.
+
+### [P5-11] Frontend reconciliation
+
+- [ ] Client tách `serverState` và `optimisticState`.
+- [ ] Local mutation tạo command từ before/after, group changed fields theo `SyncSlot`.
+- [ ] Coalesce drag patch theo `{ elementId, slot }` trong flush window; inverse lấy từ before đầu,
+  changes lấy từ after cuối.
+- [ ] Pending queue keyed by `requestId`, có dependency order cho pending create -> patch/delete.
+- [ ] Sau ack/broadcast, client apply slot-aware vào `serverState`, update known clocks, remove
+  pending đã origin từ mình, rồi replay pending lên `optimisticState`.
+- [ ] Sau `ROOM_REPLACED`/replace-document, pending cũ bị clear/cancel.
+
+**Acceptance criteria:**
+
+- [ ] Drag liên tục không tạo queue vô hạn; final pointerup patch luôn được gửi.
+- [ ] A kéo shape trong lúc B đổi màu: A vẫn thấy màu của B sau reconciliation, không mất local drag
+      cuối đã accepted.
+- [ ] Ack cũ đến muộn không overwrite optimistic state mới hơn.
+- [ ] Reload/reconnect không double-apply command đã processed.
+
+### Phase 5 Definition of Done
+
+- [ ] Saved-room realtime edit, reconnect, delete, binding repair, native import, restore snapshot
+  và export đều dùng cùng sync/import/export module.
+- [ ] Không còn 4 thuật toán sync cùng tồn tại cho saved-room authoritative behavior.
+- [ ] Có unit tests cho planner/validator/conflict/idempotency/repository.
+- [ ] Có integration tests cho socket command -> DB transaction -> ack/broadcast -> reconnect diff.
+- [ ] Có regression tests cho import/restore không bypass `SyncRoom`.
+- [ ] Typecheck, lint, test và format check pass trước khi mark phase done.
 
 ---
 
-## 15. Phase 6 — Refactor: LWW → Field-level CRDT diffs (future / ngoài phạm vi đồ án)
+## 15. Future backlog (không phải phase)
 
-> Phase này **không nằm trong kế hoạch triển khai** của đồ án. Ghi lại để rõ hướng phát triển nếu scale lên, và để hiểu rõ hơn trade-off của LWW hiện tại.
+Các mục polish dưới đây không thuộc Phase 5 sync refactor và không được đánh số thành phase mới
+trong lộ trình hiện tại:
 
-**Động lực:** LWW per-element có một điểm yếu rõ ràng — khi hai người edit **cùng shape nhưng khác field** đồng thời (A kéo, B đổi màu), một người mất trắng thay đổi. Với field-level diffs, cả hai thay đổi được giữ miễn là không đụng cùng field.
-
-### [P6-01] Định nghĩa `ElementDiff` và merge strategy per field
-
-```ts
-// Đơn vị sync không còn là Element nguyên vẹn mà là diff từng field
-type ScalarDiff<T> = { prev: T; next: T }; // LWW-Register per field
-
-interface ElementDiff {
-  id: string;
-  // Top-level scalar fields — mỗi field là LWW-Register riêng
-  x?: ScalarDiff<number>;
-  y?: ScalarDiff<number>;
-  width?: ScalarDiff<number>;
-  height?: ScalarDiff<number>;
-  angle?: ScalarDiff<number>;
-  zIndex?: ScalarDiff<number>;
-  locked?: ScalarDiff<boolean>;
-  isDeleted?: ScalarDiff<boolean>;
-  // Props — tương tự, từng field con
-  props?: Partial<{
-    strokeColor: ScalarDiff<string>;
-    fillColor: ScalarDiff<string>;
-    strokeWidth: ScalarDiff<number>;
-    opacity: ScalarDiff<number>;
-    text: ScalarDiff<string>; // LWW-string (char-level CRDT để sau)
-    points: ScalarDiff<[number, number][]>; // LWW-array (replace toàn bộ)
-    // ... các field còn lại
-  }>;
-}
-```
-
-**Merge strategy mỗi loại:**
-
-| Field                                 | Strategy                                                                | Ghi chú                                         |
-| ------------------------------------- | ----------------------------------------------------------------------- | ----------------------------------------------- |
-| `x`, `y`, `width`, `height`, `angle`  | LWW-Register theo `updatedAt` + nonce                                   | Số → không có "trung gian" hợp lý               |
-| `strokeColor`, `fillColor`, `opacity` | LWW-Register                                                            | Style → winner takes all per field              |
-| `zIndex`                              | LWW-Register                                                            | Fractional index sau này                        |
-| `locked`, `isDeleted`                 | LWW-Register                                                            | Boolean                                         |
-| `text`                                | LWW-string (toàn bộ) ở P6; char-level (Yjs) nếu muốn collaborative text | Char-level cần thư viện riêng                   |
-| `points`                              | LWW-array (replace toàn bộ)                                             | Merge point-by-point không có ngữ nghĩa rõ ràng |
-
-### [P6-02] Mutation pipeline xuất diff thay vì element
-
-Hiện tại `MutationEvent.elements` là `Element[]` — toàn bộ snapshot sau mutation. Sau refactor:
-
-```ts
-interface MutationEvent {
-  type: 'create' | 'patch' | 'delete' | 'update';
-  diffs: ElementDiff[]; // chỉ những field đã thay đổi
-  before: Element[]; // vẫn giữ để undo/redo
-  after: Element[]; // committed state
-}
-```
-
-Pipeline tính diff bằng cách so sánh `before` và `after` field-by-field trước khi fire hooks.
-
-### [P6-03] Server apply diffs thay vì replace
-
-```ts
-// Hiện tại (LWW):
-elMap.set(el.id, el); // replace toàn bộ
-
-// Sau refactor:
-function applyDiff(existing: Element, diff: ElementDiff): Element {
-  // Với mỗi field trong diff: so sánh diff.prev với existing[field]
-  // Nếu existing[field] === diff.prev → apply diff.next  (fast-forward, không conflict)
-  // Nếu existing[field] !== diff.prev → concurrent edit cùng field
-  //   → LWW-Register: giữ giá trị có updatedAt cao hơn (hoặc nonce nhỏ hơn nếu bằng nhau)
-  // Trả về element đã merge
-}
-```
-
-Server không cần hiểu "ý nghĩa" của từng field — chỉ cần biết merge rule (LWW-Register per field).
-
-Ack thay đổi: `ELEMENT_UPDATE_ACK` với `action: 'rebase'` trả về **diff thực tế đã apply** (có thể khác diff client gửi nếu có conflict per-field).
-
-### [P6-04] `applyRemoteElements` → `applyRemoteDiffs`
-
-```ts
-// Hiện tại: nhận Element[], so sánh version/nonce toàn bộ
-applyRemoteElements(incoming: Element[])
-
-// Sau refactor: nhận ElementDiff[], merge per-field
-applyRemoteDiffs(diffs: ElementDiff[])
-```
-
-Không còn skip element vì "đang kéo" — thay vào đó skip **từng field** đang active (ví dụ: đang kéo → bỏ qua `x`, `y` từ remote nhưng vẫn apply `strokeColor` nếu peer vừa đổi màu).
-
-### [P6-05] Undo/redo với diffs
-
-Với LWW: undo = `patchElement(id, before)` → đơn giản.
-
-Với diffs: undo = apply inverse diff `{ prev: next, next: prev }` cho từng field. Nếu trong lúc đó peer đã thay đổi field khác → inverse diff không đụng field đó → không mất thay đổi của peer. Tốt hơn LWW nhưng cần cẩn thận với thứ tự apply.
-
-### Tóm tắt delta so với LWW hiện tại
-
-| Thành phần            | LWW (hiện tại)                                                               | CRDT diffs (P6)                  |
-| --------------------- | ---------------------------------------------------------------------------- | -------------------------------- |
-| Đơn vị sync           | `Element` (whole)                                                            | `ElementDiff` (per-field)        |
-| Conflict unit         | Element                                                                      | Field                            |
-| Server logic          | `map.set(id, el)`                                                            | `applyDiff(existing, diff)`      |
-| Ack rebase payload    | `Element[]`                                                                  | `ElementDiff[]`                  |
-| `applyRemoteElements` | skip element nếu đang active                                                 | skip field nếu field đang active |
-| Undo                  | restore `before` element                                                     | apply inverse diff per-field     |
-| Complexity            | thấp                                                                         | trung bình–cao                   |
-| Khi nào upgrade       | conflict per-field xảy ra thường xuyên, hoặc yêu cầu "không ai mất thay đổi" | —                                |
+- Element lock / unlock.
+- Align / distribute + flip.
+- Snap to grid, alignment guides và grid background.
+- Zoom to fit / selection / reset.
+- Idle/away + follow viewport.
+- Sticky note + embed/iframe/video.
+- Roughness rendering.
+- Context menu + keyboard shortcuts mở rộng.
 
 ---
 
