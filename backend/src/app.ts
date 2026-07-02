@@ -5,6 +5,7 @@ import type { PrismaClient } from '@prisma/client';
 import type { AppUserRepository, AuthVerifier } from './auth/index.js';
 import { createDocumentDashboardRouter } from './documents/document-dashboard.js';
 import { createLocalBoardSaveRouter } from './rooms/local-board-save.js';
+import { createNativeFileExportRouter } from './rooms/native-file-export.js';
 import { createNativeFileImportRouter } from './rooms/native-file-import.js';
 import { createRoomSharingRouter } from './rooms/room-sharing.js';
 import type { SyncRoom } from './sync/index.js';
@@ -43,6 +44,14 @@ export function createAppServer(options: AppServerOptions = {}) {
         authVerifier: options.authVerifier,
         appUserRepository: options.appUserRepository,
         db: options.db,
+      }),
+    );
+    app.use(
+      createNativeFileExportRouter({
+        authVerifier: options.authVerifier,
+        appUserRepository: options.appUserRepository,
+        db: options.db,
+        syncRooms: options.syncRooms,
       }),
     );
     app.use(

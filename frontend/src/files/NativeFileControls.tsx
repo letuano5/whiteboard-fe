@@ -10,7 +10,7 @@ import {
   downloadNativeFile,
   parseNativeFileText,
 } from './native-file';
-import { importNativeFileToRoom } from './file-lifecycle-api';
+import { exportNativeFileFromRoom, importNativeFileToRoom } from './file-lifecycle-api';
 
 interface NativeFileControlsProps {
   mode: 'local' | 'saved';
@@ -24,10 +24,31 @@ export function NativeFileControls({ mode, roomId, canImport }: NativeFileContro
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [pendingDocument, setPendingDocument] = useState<NativeFileDocument | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
 
-  function handleExport() {
+  async function handleExport() {
     setErrorMessage(null);
+    if (mode === 'saved') {
+      if (!roomId) {
+        setErrorMessage('Saved document room is missing.');
+        return;
+      }
+      setIsExporting(true);
+      try {
+        const result = await exportNativeFileFromRoom(roomId);
+        downloadNativeFile(
+          result.document,
+          createNativeFileName(result.document.room.name, result.document.room.source),
+        );
+      } catch (error) {
+        setErrorMessage(error instanceof Error ? error.message : 'Could not export native file.');
+      } finally {
+        setIsExporting(false);
+      }
+      return;
+    }
+
     const document = buildNativeFileDocument({
       elements,
       camera,
@@ -102,12 +123,17 @@ export function NativeFileControls({ mode, roomId, canImport }: NativeFileContro
     <div className="relative flex items-center gap-2">
       <button
         type="button"
-        onClick={handleExport}
-        className="flex h-10 w-10 items-center justify-center rounded-lg border border-[#cbd9cb] bg-white text-[#173f35] shadow-[0_8px_24px_rgba(23,63,53,0.12)] hover:bg-[#edf5ef] focus:outline-none focus:ring-2 focus:ring-[#2457c5] focus:ring-offset-2"
+        onClick={() => void handleExport()}
+        disabled={isExporting}
+        className="flex h-10 w-10 items-center justify-center rounded-lg border border-[#cbd9cb] bg-white text-[#173f35] shadow-[0_8px_24px_rgba(23,63,53,0.12)] hover:bg-[#edf5ef] focus:outline-none focus:ring-2 focus:ring-[#2457c5] focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
         aria-label="Export native file"
         title="Export native file"
       >
-        <Download className="h-4 w-4" />
+        {isExporting ? (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        ) : (
+          <Download className="h-4 w-4" />
+        )}
       </button>
       <button
         type="button"

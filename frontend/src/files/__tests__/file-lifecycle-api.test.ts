@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { authenticatedFetch } from '../../auth/authenticated-fetch';
-import { importNativeFileToRoom } from '../file-lifecycle-api';
+import { exportNativeFileFromRoom, importNativeFileToRoom } from '../file-lifecycle-api';
 import { buildNativeFileDocument } from '../native-file';
 
 vi.mock('../../auth/authenticated-fetch', () => ({
@@ -26,7 +26,10 @@ describe('native file import API client', () => {
       }),
     );
 
-    await importNativeFileToRoom('room-1', document, 'merge');
+    await expect(importNativeFileToRoom('room-1', document, 'merge')).resolves.toEqual({
+      importedElementCount: 0,
+      documentClock: null,
+    });
 
     expect(authenticatedFetch).toHaveBeenCalledWith('/api/rooms/room-1/import-native', {
       method: 'POST',
@@ -49,5 +52,19 @@ describe('native file import API client', () => {
     await expect(importNativeFileToRoom('room-1', document, 'merge')).rejects.toThrow(
       'Editor or owner access is required to import into this document.',
     );
+  });
+
+  it('fetches saved native exports from the backend server-truth endpoint', async () => {
+    // @covers AC-1
+    vi.mocked(authenticatedFetch).mockResolvedValue(
+      new Response(JSON.stringify({ document, documentClock: '7' }), { status: 200 }),
+    );
+
+    await expect(exportNativeFileFromRoom('room-1')).resolves.toEqual({
+      document,
+      documentClock: '7',
+    });
+
+    expect(authenticatedFetch).toHaveBeenCalledWith('/api/rooms/room-1/export-native');
   });
 });

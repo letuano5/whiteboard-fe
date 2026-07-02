@@ -3,6 +3,7 @@ import type { Camera, Element } from '../../types/shared';
 import {
   buildNativeFileDocument,
   createNativeFileName,
+  parseNativeFileTextWithReport,
   parseNativeFileText,
   serializeNativeFile,
 } from '../native-file';
@@ -12,6 +13,7 @@ const camera: Camera = { x: 12, y: 34, zoom: 1.5 };
 describe('native file helpers', () => {
   it('round-trips existing element metadata through the native schema', () => {
     // @covers AC-1
+    // @covers AC-3
     const elements: Element[] = [
       makeElement({
         id: 'arrow-1',
@@ -59,9 +61,42 @@ describe('native file helpers', () => {
         source: 'saved',
         exportedAt: '2026-07-01T00:00:00.000Z',
       },
+      assets: [{ id: 'image-1', src: 'data:image/png;base64,AAAA', mimeType: 'image/png' }],
     });
 
     expect(parseNativeFileText(serializeNativeFile(document))).toEqual(document);
+  });
+
+  it('skips unsupported element objects with a normalization report', () => {
+    // @covers AC-4
+    const document = buildNativeFileDocument({
+      elements: [makeElement({ id: 'valid-1' })],
+      camera,
+      room: {
+        id: 'room-1',
+        name: 'Ops Map',
+        source: 'saved',
+        exportedAt: '2026-07-01T00:00:00.000Z',
+      },
+    });
+    const parsed = JSON.parse(serializeNativeFile(document)) as Record<string, unknown>;
+    parsed.elements = [
+      document.elements[0],
+      {
+        ...document.elements[0],
+        id: 'unsupported-1',
+        type: 'unsupported-shape',
+      },
+    ];
+
+    const result = parseNativeFileTextWithReport(JSON.stringify(parsed));
+
+    expect(result.document.elements).toEqual(document.elements);
+    expect(result.report).toEqual({
+      importedCount: 1,
+      skippedCount: 1,
+      skipped: [{ index: 1, reason: 'Element type "unsupported-shape" is unsupported.' }],
+    });
   });
 
   it('rejects malformed JSON and unsupported schemas with clear errors', () => {

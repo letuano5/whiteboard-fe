@@ -90,6 +90,11 @@ describe('native file import', () => {
       importedElementCount: 1,
       documentClock: '3',
       roomEpoch: 2,
+      report: {
+        importedCount: 1,
+        skippedCount: 0,
+        skipped: [],
+      },
     });
 
     expect(executeSyncCommand).toHaveBeenCalledWith(
@@ -120,11 +125,41 @@ describe('native file import', () => {
     expect(readNativeFileImportPayload({ document, mode: 'merge' })).toEqual({
       document,
       mode: 'merge',
+      report: {
+        importedCount: 1,
+        skippedCount: 0,
+        skipped: [],
+      },
     });
     expect(
       readNativeFileImportPayload({ document: { ...document, schemaVersion: 2 }, mode: 'merge' }),
     ).toBeNull();
     expect(readNativeFileImportPayload({ document, mode: 'overwrite' })).toBeNull();
+  });
+
+  it('skips unsupported element objects with a report before replace execution', () => {
+    // @covers AC-4
+    const payload = readNativeFileImportPayload({
+      document: {
+        ...document,
+        elements: [
+          document.elements[0],
+          {
+            ...document.elements[0],
+            id: 'unsupported-1',
+            type: 'unsupported-shape',
+          },
+        ],
+      },
+      mode: 'replace',
+    });
+
+    expect(payload?.document.elements).toEqual(document.elements);
+    expect(payload?.report).toEqual({
+      importedCount: 1,
+      skippedCount: 1,
+      skipped: [{ index: 1, reason: 'Element type "unsupported-shape" is unsupported.' }],
+    });
   });
 });
 

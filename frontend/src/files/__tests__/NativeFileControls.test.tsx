@@ -5,9 +5,10 @@ import { useCameraStore } from '../../store/camera.store';
 import { useElementsStore } from '../../store/elements.store';
 import { NativeFileControls } from '../NativeFileControls';
 import { buildNativeFileDocument, serializeNativeFile } from '../native-file';
-import { importNativeFileToRoom } from '../file-lifecycle-api';
+import { exportNativeFileFromRoom, importNativeFileToRoom } from '../file-lifecycle-api';
 
 vi.mock('../file-lifecycle-api', () => ({
+  exportNativeFileFromRoom: vi.fn(),
   importNativeFileToRoom: vi.fn(),
 }));
 
@@ -31,6 +32,7 @@ const localStorageMock = makeLocalStorageMock();
 vi.stubGlobal('localStorage', localStorageMock);
 
 const existingElement = makeElement({ id: 'existing', zIndex: 1 });
+const serverElement = makeElement({ id: 'server-truth', zIndex: 9 });
 const importedElement = makeElement({
   id: 'imported',
   type: 'text',
@@ -53,6 +55,19 @@ beforeEach(() => {
   localStorage.removeItem('VDT_WHITEBOARD_SCENE');
   useElementsStore.setState({ elements: [existingElement] });
   useCameraStore.setState({ camera: { x: 1, y: 2, zoom: 1 } });
+  vi.mocked(exportNativeFileFromRoom).mockResolvedValue({
+    document: buildNativeFileDocument({
+      elements: [serverElement],
+      camera: { x: 0, y: 0, zoom: 1 },
+      room: {
+        id: 'room-1',
+        name: 'Server Board',
+        source: 'saved',
+        exportedAt: '2026-07-02T00:00:00.000Z',
+      },
+    }),
+    documentClock: '9',
+  });
   vi.mocked(importNativeFileToRoom).mockResolvedValue({
     importedElementCount: 1,
     documentClock: '2',
@@ -60,6 +75,33 @@ beforeEach(() => {
 });
 
 describe('NativeFileControls', () => {
+  it('exports saved documents from the backend instead of stale local state', async () => {
+    // @covers AC-1
+    let exportedBlob: Blob | null = null;
+    const originalCreateObjectUrl = URL.createObjectURL;
+    const originalRevokeObjectUrl = URL.revokeObjectURL;
+    URL.createObjectURL = vi.fn((blob: Blob | MediaSource) => {
+      exportedBlob = blob as Blob;
+      return 'blob:native-file';
+    });
+    URL.revokeObjectURL = vi.fn();
+
+    render(<NativeFileControls mode="saved" roomId="room-1" canImport />);
+
+    fireEvent.click(screen.getByRole('button', { name: /export native file/i }));
+
+    await waitFor(() => {
+      expect(exportNativeFileFromRoom).toHaveBeenCalledWith('room-1');
+    });
+    await waitFor(() => expect(exportedBlob).not.toBeNull());
+    const exportedText = await exportedBlob!.text();
+    expect(exportedText).toContain('server-truth');
+    expect(exportedText).not.toContain('existing');
+
+    URL.createObjectURL = originalCreateObjectUrl;
+    URL.revokeObjectURL = originalRevokeObjectUrl;
+  });
+
   it('requires confirmation before replacing a non-empty local board and keeps import local-only', async () => {
     // @covers AC-2
     // @covers AC-5

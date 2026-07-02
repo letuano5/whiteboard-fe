@@ -23,6 +23,7 @@ project roadmap, phase order, and product scope remain canonical in `docs/SPECS.
 - Repo roadmap ID `P5-07` maps to GSD Phase `5.7`.
 - Repo roadmap ID `P5-08` maps to GSD Phase `5.8`.
 - Repo roadmap ID `P5-09` maps to GSD Phase `5.9`.
+- Repo roadmap ID `P5-10` maps to GSD Phase `5.10`.
 - The source of truth is `docs/SPECS.md` feature sections.
 
 - [x] **Phase 4.0: P4-00 Anonymous local board + Login to save** - Anonymous local-only board can be converted into a private saved document after login.
@@ -39,6 +40,7 @@ project roadmap, phase order, and product scope remain canonical in `docs/SPECS.
 - [x] **Phase 5.7: P5-07 Load, reconnect & diff** - Saved-room load and reconnect hydrate/apply server-authoritative snapshot/diff payloads with room epoch, slot clocks, pending request statuses, and wipe-all fallback.
 - [x] **Phase 5.8: P5-08 Delete, tombstone & binding repair** - Saved-room deletes write tombstones and repair arrow bindings/geometry in the same authoritative change set.
 - [x] **Phase 5.9: P5-09 Replace document for import/restore** - Saved-room import/restore replaces the document through the authoritative sync room path, bumps room epoch, and broadcasts one server truth.
+- [x] **Phase 5.10: P5-10 Export adapters use materialized server truth** - Saved-room native export reads a materialized server snapshot and shared import/export normalization reports unsupported objects without partial mutation.
 
 ## Phase Details
 
@@ -343,6 +345,26 @@ Plans:
 - [x] 05.9-01: Backend replace document command and import adapter path.
 - [x] 05.9-02: Frontend ROOM_REPLACED reconciliation and verification.
 
+### Phase 5.10: P5-10 Export adapters use materialized server truth
+
+**Goal**: Saved-document native export reads materialized server truth instead of stale frontend
+state, while native import/export adapters share normalization and reporting.
+**Depends on**: Phase 5.9
+**Source**: `docs/SPECS.md` `[P5-10]`
+**Canonical refs**: `docs/SPECS.md`, `specs/039-p5-10-export-server-truth/acceptance.md`
+**Requirements**: [P5-10-AC-1, P5-10-AC-2, P5-10-AC-3, P5-10-AC-4]
+**Success Criteria** (what must be TRUE):
+
+1. Saved-document export fetches the materialized server snapshot from the SyncRoom/repository path.
+2. Export reflects latest committed server edits without mutating documentClock.
+3. Native round-trip preserves element metadata, camera, room metadata, and asset references.
+4. Unsupported malformed element objects are skipped with report data and do not half-mutate a saved document.
+   **Plans**: 1 plan
+
+Plans:
+
+- [x] 05.10-01: Implement saved native export server truth, shared normalization/reporting, and AC tests.
+
 ## Progress
 
 **Execution Order:**
@@ -364,3 +386,4 @@ Follow `docs/SPECS.md`; this bootstrap tracks active Phase 4 feature slices.
 | 5.7. P5-07 Load, reconnect & diff                | 1/1            | Complete | 2026-07-02 |
 | 5.8. P5-08 Delete, tombstone & binding repair    | 1/1            | Complete | 2026-07-02 |
 | 5.9. P5-09 Replace document import/restore       | 2/2            | Complete | 2026-07-02 |
+| 5.10. P5-10 Export adapters server truth         | 1/1            | Complete | 2026-07-02 |

@@ -30,6 +30,21 @@ export interface NativeFileDocument {
   assets?: NativeFileAssetMetadata[];
 }
 
+export interface NativeFileSkippedObject {
+  index: number;
+  reason: string;
+}
+
+export interface NativeFileImportReport {
+  importedCount: number;
+  skippedCount: number;
+  skipped: NativeFileSkippedObject[];
+}
+
+export type NativeFileNormalizationResult =
+  | { ok: true; document: NativeFileDocument; report: NativeFileImportReport }
+  | { ok: false; error: string; report: NativeFileImportReport };
+
 const ELEMENT_TYPES = new Set<ElementType>([
   'rectangle',
   'ellipse',
@@ -48,6 +63,68 @@ const ELEMENT_TYPES = new Set<ElementType>([
 ]);
 
 export function getNativeFileValidationError(value: unknown): string | null {
+  const envelopeError = getNativeFileEnvelopeValidationError(value);
+  if (envelopeError) return envelopeError;
+  if (!isRecord(value)) return 'Native file must be a JSON object.';
+  if (!Array.isArray(value.elements) || !value.elements.every(isElement)) {
+    return 'Native file elements are invalid.';
+  }
+  return null;
+}
+
+export function isNativeFileDocument(value: unknown): value is NativeFileDocument {
+  return getNativeFileValidationError(value) === null;
+}
+
+export function normalizeNativeFileDocument(value: unknown): NativeFileNormalizationResult {
+  const emptyReport = makeNativeFileReport([]);
+  const envelopeError = getNativeFileEnvelopeValidationError(value);
+  if (envelopeError || !isRecord(value)) {
+    return {
+      ok: false,
+      error: envelopeError ?? 'Native file must be a JSON object.',
+      report: emptyReport,
+    };
+  }
+
+  const elements: Element[] = [];
+  const skipped: NativeFileSkippedObject[] = [];
+  const rawElements = value.elements as unknown[];
+  rawElements.forEach((element, index) => {
+    const reason = getElementValidationError(element);
+    if (reason) {
+      skipped.push({ index, reason });
+      return;
+    }
+    elements.push(element as Element);
+  });
+
+  return {
+    ok: true,
+    document: {
+      kind: NATIVE_FILE_KIND,
+      schemaVersion: NATIVE_FILE_SCHEMA_VERSION,
+      room: value.room as NativeFileRoomMetadata,
+      camera: value.camera as Camera,
+      elements,
+      assets: value.assets as NativeFileAssetMetadata[] | undefined,
+    },
+    report: makeNativeFileReport(skipped, elements.length),
+  };
+}
+
+function makeNativeFileReport(
+  skipped: NativeFileSkippedObject[],
+  importedCount = 0,
+): NativeFileImportReport {
+  return {
+    importedCount,
+    skippedCount: skipped.length,
+    skipped,
+  };
+}
+
+function getNativeFileEnvelopeValidationError(value: unknown): string | null {
   if (!isRecord(value)) return 'Native file must be a JSON object.';
   if (value.kind !== NATIVE_FILE_KIND) return 'Native file kind is not supported.';
   if (value.schemaVersion !== NATIVE_FILE_SCHEMA_VERSION) {
@@ -55,9 +132,7 @@ export function getNativeFileValidationError(value: unknown): string | null {
   }
   if (!isNativeFileRoomMetadata(value.room)) return 'Native file room metadata is invalid.';
   if (!isCamera(value.camera)) return 'Native file camera is invalid.';
-  if (!Array.isArray(value.elements) || !value.elements.every(isElement)) {
-    return 'Native file elements are invalid.';
-  }
+  if (!Array.isArray(value.elements)) return 'Native file elements are invalid.';
   if (
     value.assets !== undefined &&
     (!Array.isArray(value.assets) || !value.assets.every(isAsset))
@@ -65,10 +140,6 @@ export function getNativeFileValidationError(value: unknown): string | null {
     return 'Native file asset metadata is invalid.';
   }
   return null;
-}
-
-export function isNativeFileDocument(value: unknown): value is NativeFileDocument {
-  return getNativeFileValidationError(value) === null;
 }
 
 function isNativeFileRoomMetadata(value: unknown): value is NativeFileRoomMetadata {
@@ -87,26 +158,35 @@ function isCamera(value: unknown): value is Camera {
 }
 
 function isElement(value: unknown): value is Element {
-  if (!isRecord(value) || typeof value.type !== 'string') return false;
-  return (
-    typeof value.id === 'string' &&
-    ELEMENT_TYPES.has(value.type as ElementType) &&
-    isFiniteNumber(value.x) &&
-    isFiniteNumber(value.y) &&
-    isFiniteNumber(value.width) &&
-    isFiniteNumber(value.height) &&
-    isFiniteNumber(value.angle) &&
-    isFiniteNumber(value.zIndex) &&
-    isElementProps(value.props) &&
-    isFiniteNumber(value.version) &&
-    isFiniteNumber(value.versionNonce) &&
-    isFiniteNumber(value.updatedAt) &&
-    typeof value.isDeleted === 'boolean' &&
-    (typeof value.groupId === 'string' || value.groupId === null) &&
-    (typeof value.frameId === 'string' || value.frameId === null) &&
-    typeof value.locked === 'boolean' &&
-    typeof value.createdBy === 'string'
-  );
+  return getElementValidationError(value) === null;
+}
+
+function getElementValidationError(value: unknown): string | null {
+  if (!isRecord(value) || typeof value.type !== 'string') return 'Element type is invalid.';
+  if (typeof value.id !== 'string') return 'Element id is invalid.';
+  if (!ELEMENT_TYPES.has(value.type as ElementType)) {
+    return `Element type "${value.type}" is unsupported.`;
+  }
+  if (!isFiniteNumber(value.x)) return 'Element x is invalid.';
+  if (!isFiniteNumber(value.y)) return 'Element y is invalid.';
+  if (!isFiniteNumber(value.width)) return 'Element width is invalid.';
+  if (!isFiniteNumber(value.height)) return 'Element height is invalid.';
+  if (!isFiniteNumber(value.angle)) return 'Element angle is invalid.';
+  if (!isFiniteNumber(value.zIndex)) return 'Element zIndex is invalid.';
+  if (!isElementProps(value.props)) return 'Element props are invalid.';
+  if (!isFiniteNumber(value.version)) return 'Element version is invalid.';
+  if (!isFiniteNumber(value.versionNonce)) return 'Element versionNonce is invalid.';
+  if (!isFiniteNumber(value.updatedAt)) return 'Element updatedAt is invalid.';
+  if (typeof value.isDeleted !== 'boolean') return 'Element isDeleted is invalid.';
+  if (typeof value.groupId !== 'string' && value.groupId !== null) {
+    return 'Element groupId is invalid.';
+  }
+  if (typeof value.frameId !== 'string' && value.frameId !== null) {
+    return 'Element frameId is invalid.';
+  }
+  if (typeof value.locked !== 'boolean') return 'Element locked is invalid.';
+  if (typeof value.createdBy !== 'string') return 'Element createdBy is invalid.';
+  return null;
 }
 
 function isElementProps(value: unknown): value is ElementProps {

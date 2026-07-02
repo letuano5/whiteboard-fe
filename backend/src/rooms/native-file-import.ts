@@ -4,8 +4,9 @@ import type { Server } from 'socket.io';
 import type { PrismaClient } from '@prisma/client';
 import {
   WS_EVENTS,
-  isNativeFileDocument,
+  normalizeNativeFileDocument,
   type NativeFileDocument,
+  type NativeFileImportReport,
   type NativeFileImportMode,
 } from '@vdt/shared';
 import type { AuthVerifier } from '../auth/index.js';
@@ -39,12 +40,14 @@ type RoomStateMirrors = Pick<
 interface NativeFileImportPayload {
   document: NativeFileDocument;
   mode: NativeFileImportMode;
+  report: NativeFileImportReport;
 }
 
 interface NativeFileImportResponse {
   importedElementCount: number;
   documentClock: string | null;
   roomEpoch: number;
+  report: NativeFileImportReport;
 }
 
 interface NativeFileImportHttpError {
@@ -81,9 +84,10 @@ export async function importNativeFileIntoRoom(
   roomId: string,
   user: AppUser | undefined,
   document: NativeFileDocument,
+  report?: NativeFileImportReport,
 ): Promise<NativeFileImportResponse> {
   const authorizedUser = await assertCanImportNativeFile(db, roomId, user);
-  return executeNativeFileReplace(db, roomId, authorizedUser, document);
+  return executeNativeFileReplace(db, roomId, authorizedUser, document, {}, report);
 }
 
 export async function assertCanImportNativeFile(
@@ -115,6 +119,7 @@ async function executeNativeFileReplace(
   user: AppUser,
   document: NativeFileDocument,
   opts: RoomStateMirrors = {},
+  report: NativeFileImportReport = createNativeFileReport(document.elements.length),
 ): Promise<NativeFileImportResponse> {
   const result = await executeSyncCommand(
     {
@@ -144,6 +149,7 @@ async function executeNativeFileReplace(
     importedElementCount: result.importedElementCount,
     documentClock: result.documentClock,
     roomEpoch: result.roomEpoch,
+    report,
   };
 }
 
@@ -151,10 +157,12 @@ export function readNativeFileImportPayload(value: unknown): NativeFileImportPay
   if (typeof value !== 'object' || value === null) return null;
   const payload = value as Record<string, unknown>;
   if (payload.mode !== 'replace' && payload.mode !== 'merge') return null;
-  if (!isNativeFileDocument(payload.document)) return null;
+  const normalized = normalizeNativeFileDocument(payload.document);
+  if (!normalized.ok) return null;
   return {
-    document: payload.document,
+    document: normalized.document,
     mode: payload.mode,
+    report: normalized.report,
   };
 }
 
@@ -190,16 +198,31 @@ async function handleNativeFileImport(
 
   try {
     response.json(
-      await executeNativeFileReplace(deps.db, roomId, user, payload.document, {
-        ioServer: deps.ioServer,
-        syncRooms: deps.syncRooms,
-        roomElements: deps.roomElements,
-        roomClocks: deps.roomClocks,
-      }),
+      await executeNativeFileReplace(
+        deps.db,
+        roomId,
+        user,
+        payload.document,
+        {
+          ioServer: deps.ioServer,
+          syncRooms: deps.syncRooms,
+          roomElements: deps.roomElements,
+          roomClocks: deps.roomClocks,
+        },
+        payload.report,
+      ),
     );
   } catch (error) {
     sendKnownImportError(response, error);
   }
+}
+
+function createNativeFileReport(importedCount: number): NativeFileImportReport {
+  return {
+    importedCount,
+    skippedCount: 0,
+    skipped: [],
+  };
 }
 
 function readRoomId(request: Request): string {

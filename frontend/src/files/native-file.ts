@@ -1,11 +1,12 @@
 import {
-  getNativeFileValidationError,
-  isNativeFileDocument,
   NATIVE_FILE_KIND,
   NATIVE_FILE_SCHEMA_VERSION,
+  normalizeNativeFileDocument,
   type Camera,
   type Element,
+  type NativeFileAssetMetadata,
   type NativeFileDocument,
+  type NativeFileImportReport,
   type NativeFileRoomMetadata,
 } from '../types/shared';
 
@@ -20,6 +21,7 @@ export interface BuildNativeFileInput {
   elements: Element[];
   camera: Camera;
   room: Omit<NativeFileRoomMetadata, 'exportedAt'> & { exportedAt?: string };
+  assets?: NativeFileAssetMetadata[];
 }
 
 export function buildNativeFileDocument(input: BuildNativeFileInput): NativeFileDocument {
@@ -32,7 +34,7 @@ export function buildNativeFileDocument(input: BuildNativeFileInput): NativeFile
     },
     camera: input.camera,
     elements: input.elements,
-    assets: [],
+    assets: input.assets ?? [],
   };
 }
 
@@ -41,6 +43,13 @@ export function serializeNativeFile(document: NativeFileDocument): string {
 }
 
 export function parseNativeFileText(text: string): NativeFileDocument {
+  return parseNativeFileTextWithReport(text).document;
+}
+
+export function parseNativeFileTextWithReport(text: string): {
+  document: NativeFileDocument;
+  report: NativeFileImportReport;
+} {
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
@@ -48,11 +57,12 @@ export function parseNativeFileText(text: string): NativeFileDocument {
     throw new NativeFileError('File is not valid JSON.');
   }
 
-  if (!isNativeFileDocument(parsed)) {
-    throw new NativeFileError(getNativeFileValidationError(parsed) ?? 'Native file is invalid.');
+  const normalized = normalizeNativeFileDocument(parsed);
+  if (!normalized.ok) {
+    throw new NativeFileError(normalized.error);
   }
 
-  return parsed;
+  return { document: normalized.document, report: normalized.report };
 }
 
 export function createNativeFileName(roomName: string | null, source: 'local' | 'saved'): string {
