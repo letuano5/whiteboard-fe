@@ -13,7 +13,8 @@ import { useRoomAccessStore } from '../../rooms/room-access.store';
 import { applyRemoteElements } from '../apply-remote';
 import { saveCamera } from '../camera-persistence';
 import { LOCAL_PRESENCE } from '../presence';
-import { clearPendingQueue, replayPendingQueue } from './pending-queue';
+import { clearPendingQueue } from './pending-queue';
+import { flushPendingSyncCommands } from './p5-command-queue';
 import {
   applyRoomDiff,
   applyRoomReplaced,
@@ -73,7 +74,9 @@ export function registerSocketEventHandlers(): void {
     applyRoomDiff(normalizeDiffPayload(data));
     current.reconnectPending = false;
     replayBufferedSyncEvents({ localActorId: getLocalActorId() });
-    replayPendingQueue();
+    if (!getSocketState().pausedForResync) {
+      flushPendingSyncCommands(true);
+    }
   });
 
   state.socket.on(WS_EVENTS.SYNC_ACK, (data: SyncAck) => {

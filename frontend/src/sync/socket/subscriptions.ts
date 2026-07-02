@@ -5,7 +5,7 @@ import { useInteractionStore } from '../../store/interaction.store';
 import { registerMutationHook } from '../../store/mutation-pipeline';
 import { isApplyingRemote } from '../apply-remote';
 import { LOCAL_PRESENCE } from '../presence';
-import { queuePendingElements } from './pending-queue';
+import { enqueueMutationSyncCommands, PRESENCE_PREVIEW_THROTTLE_MS } from './p5-command-queue';
 import { getSocketState } from './state';
 
 export function registerSocketSubscriptions(roomId: string): void {
@@ -15,11 +15,7 @@ export function registerSocketSubscriptions(roomId: string): void {
     const current = getSocketState();
     if (isApplyingRemote()) return;
     if (!current.socket) return;
-    if (current.socket.connected) {
-      current.socket.emit(WS_EVENTS.ELEMENT_UPDATE, { roomId, elements: event.elements });
-    } else {
-      queuePendingElements(event.elements);
-    }
+    enqueueMutationSyncCommands(event, roomId, { final: event.sync?.final ?? true });
   });
 
   state.unsubCamera = useCameraStore.subscribe((cameraState, prevState) => {
@@ -54,7 +50,7 @@ export function registerSocketSubscriptions(roomId: string): void {
         viewport: useCameraStore.getState().camera,
         selectedIds: useInteractionStore.getState().selectedIds,
       });
-    }, 50);
+    }, PRESENCE_PREVIEW_THROTTLE_MS);
   });
 
   state.unsubDraft = useInteractionStore.subscribe((interactionState, prevState) => {
@@ -84,7 +80,7 @@ export function registerSocketSubscriptions(roomId: string): void {
         sessionId: LOCAL_PRESENCE.sessionId,
         elements: combined,
       });
-    }, 50);
+    }, PRESENCE_PREVIEW_THROTTLE_MS);
   });
 }
 
@@ -110,5 +106,9 @@ export function clearSocketSubscriptions(): void {
   if (state.draftThrottle !== null) {
     clearTimeout(state.draftThrottle);
     state.draftThrottle = null;
+  }
+  if (state.syncFlushTimer !== null) {
+    clearTimeout(state.syncFlushTimer);
+    state.syncFlushTimer = null;
   }
 }

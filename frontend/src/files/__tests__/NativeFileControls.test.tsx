@@ -135,7 +135,7 @@ describe('NativeFileControls', () => {
     expect(useElementsStore.getState().elements).toEqual([existingElement]);
   });
 
-  it('confirms before merging a native file into a saved document', async () => {
+  it('confirms before replacing a saved document through the server', async () => {
     // @covers AC-1
     // @covers AC-3
     // @covers AC-5
@@ -147,9 +147,9 @@ describe('NativeFileControls', () => {
     fireEvent.click(screen.getByRole('button', { name: /^import$/i }));
 
     await waitFor(() => {
-      expect(importNativeFileToRoom).toHaveBeenCalledWith('room-1', nativeDocument, 'merge');
+      expect(importNativeFileToRoom).toHaveBeenCalledWith('room-1', nativeDocument, 'replace');
     });
-    expect(useElementsStore.getState().elements).toEqual([existingElement, importedElement]);
+    expect(useElementsStore.getState().elements).toEqual([existingElement]);
     expect(useCameraStore.getState().camera).toEqual({ x: 30, y: 40, zoom: 2 });
   });
 

@@ -24,6 +24,7 @@ project roadmap, phase order, and product scope remain canonical in `docs/SPECS.
 - Repo roadmap ID `P5-08` maps to GSD Phase `5.8`.
 - Repo roadmap ID `P5-09` maps to GSD Phase `5.9`.
 - Repo roadmap ID `P5-10` maps to GSD Phase `5.10`.
+- Repo roadmap ID `P5-11` maps to GSD Phase `5.11`.
 - The source of truth is `docs/SPECS.md` feature sections.
 
 - [x] **Phase 4.0: P4-00 Anonymous local board + Login to save** - Anonymous local-only board can be converted into a private saved document after login.
@@ -41,6 +42,7 @@ project roadmap, phase order, and product scope remain canonical in `docs/SPECS.
 - [x] **Phase 5.8: P5-08 Delete, tombstone & binding repair** - Saved-room deletes write tombstones and repair arrow bindings/geometry in the same authoritative change set.
 - [x] **Phase 5.9: P5-09 Replace document for import/restore** - Saved-room import/restore replaces the document through the authoritative sync room path, bumps room epoch, and broadcasts one server truth.
 - [x] **Phase 5.10: P5-10 Export adapters use materialized server truth** - Saved-room native export reads a materialized server snapshot and shared import/export normalization reports unsupported objects without partial mutation.
+- [x] **Phase 5.11: P5-11 Frontend reconciliation** - Saved-room frontend mutations use bounded P5 command queues, slot-aware reconciliation, reconnect-safe pending replay, and ephemeral presence/draft preview.
 
 ## Phase Details
 
@@ -365,6 +367,28 @@ Plans:
 
 - [x] 05.10-01: Implement saved native export server truth, shared normalization/reporting, and AC tests.
 
+### Phase 5.11: P5-11 Frontend reconciliation
+
+**Goal**: Saved-room frontend mutation capture and reconciliation use P5 `SyncCommand` queues with
+bounded durable drag flushing, slot-aware ACK/broadcast/diff application, reconnect-safe pending
+replay, and ephemeral presence/draft previews.
+**Depends on**: Phase 5.10
+**Source**: `docs/SPECS.md` `[P5-11]`
+**Canonical refs**: `docs/SPECS.md`, `specs/040-p5-11-frontend-reconciliation/acceptance.md`
+**Requirements**: [P5-11-AC-1, P5-11-AC-2, P5-11-AC-3, P5-11-AC-4, P5-11-AC-5, P5-11-AC-6, P5-11-AC-7, P5-11-AC-8]
+**Success Criteria** (what must be TRUE):
+
+1. Continuous drag produces bounded durable P5 patch commands and always sends the final pointerup patch.
+2. Backpressure squashes only eligible unsent patch slots while preserving first inverseChanges and never dropping create/delete/replace/binding commands.
+3. Slot-aware reconciliation preserves independent peer slot changes, ignores stale ACK payloads, and applies reconnect pending statuses without double-applying processed commands.
+4. Initial undo emits only safe single-slot inverse patches when the slot clock still matches the recorded after clock.
+5. Presence, cursor, selection, and draft preview remain ephemeral and do not become persisted SyncCommands.
+   **Plans**: 1 plan
+
+Plans:
+
+- [x] 05.11-01: Implement frontend P5 command queue, reconciliation lifecycle, and AC tests.
+
 ## Progress
 
 **Execution Order:**
@@ -387,3 +411,4 @@ Follow `docs/SPECS.md`; this bootstrap tracks active Phase 4 feature slices.
 | 5.8. P5-08 Delete, tombstone & binding repair    | 1/1            | Complete | 2026-07-02 |
 | 5.9. P5-09 Replace document import/restore       | 2/2            | Complete | 2026-07-02 |
 | 5.10. P5-10 Export adapters server truth         | 1/1            | Complete | 2026-07-02 |
+| 5.11. P5-11 Frontend reconciliation              | 1/1            | Complete | 2026-07-02 |

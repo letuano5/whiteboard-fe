@@ -44,6 +44,14 @@ export async function handleElementUpdate(
     return;
   }
 
+  if (await isPersistedRoom(db, roomId)) {
+    socket.emit(WS_EVENTS.ROOM_ACCESS_ERROR, {
+      code: 'room-access/forbidden',
+      message: 'Saved documents must use the P5 sync command protocol.',
+    });
+    return;
+  }
+
   const result = executeSyncCommand(
     {
       kind: 'legacy-element-update',
@@ -66,6 +74,26 @@ export async function handleElementUpdate(
   }
 
   emitCommittedElementUpdate(socket, result);
+}
+
+async function isPersistedRoom(
+  db: ResolvedWhiteboardServerDeps['db'],
+  roomId: string,
+): Promise<boolean> {
+  const roomDelegate = db.room as unknown as {
+    findUnique?: (args: {
+      where: { id: string };
+      select: { id: true };
+    }) => Promise<{ id: string } | null>;
+  };
+  if (!roomDelegate.findUnique) return false;
+  try {
+    return (
+      (await roomDelegate.findUnique({ where: { id: roomId }, select: { id: true } })) !== null
+    );
+  } catch {
+    return false;
+  }
 }
 
 function emitCommittedElementUpdate(socket: Socket, result: LegacyElementUpdateResult): void {

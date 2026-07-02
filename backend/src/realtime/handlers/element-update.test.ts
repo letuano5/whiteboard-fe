@@ -89,7 +89,7 @@ describe('handleElementUpdate room role authorization', () => {
     });
   });
 
-  it('allows editor mutations and broadcasts the committed update', async () => {
+  it('rejects legacy element updates for persisted rooms', async () => {
     // @covers AC-1
     // @covers AC-2
     const emit = vi.fn();
@@ -105,13 +105,6 @@ describe('handleElementUpdate room role authorization', () => {
     autosave.markDirty = markDirty;
     const roomElements = new Map<string, Map<string, Element>>();
     const element = makeElement({ id: 'allowed-el' });
-    executeSyncCommandMock().mockReturnValue({
-      kind: 'legacy-element-update',
-      roomId: 'room-1',
-      elements: [element],
-      sessionId: 'session-1',
-      documentClock: 5,
-    });
 
     await handleElementUpdate(
       socket,
@@ -128,25 +121,11 @@ describe('handleElementUpdate room role authorization', () => {
 
     expect(roomElements.get('room-1')).toBeUndefined();
     expect(markDirty).not.toHaveBeenCalled();
-    expect(executeSyncCommandMock()).toHaveBeenCalledWith(
-      {
-        kind: 'legacy-element-update',
-        roomId: 'room-1',
-        elements: [element],
-        sessionId: 'session-1',
-      },
-      {
-        actorId: editorUser.id,
-        db,
-        roomElements,
-        roomClocks: expect.any(Map),
-        autosave,
-      },
-    );
-    expect(peerEmit).toHaveBeenCalledWith(WS_EVENTS.ELEMENT_UPDATE, {
-      elements: [element],
-      sessionId: 'session-1',
-      documentClock: 5,
+    expect(executeSyncCommandMock()).not.toHaveBeenCalled();
+    expect(peerEmit).not.toHaveBeenCalled();
+    expect(emit).toHaveBeenCalledWith(WS_EVENTS.ROOM_ACCESS_ERROR, {
+      code: 'room-access/forbidden',
+      message: 'Saved documents must use the P5 sync command protocol.',
     });
   });
 });

@@ -2,10 +2,10 @@
 gsd_state_version: '1.0'
 status: complete
 progress:
-  total_phases: 15
-  completed_phases: 15
-  total_plans: 18
-  completed_plans: 18
+  total_phases: 16
+  completed_phases: 16
+  total_plans: 19
+  completed_plans: 19
   percent: 100
 ---
 
@@ -16,14 +16,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-30)
 
 **Core value:** Users can create tactical whiteboards without losing work, then collaborate or persist documents when the workflow calls for it.
-**Current focus:** Phase 5.10: P5-10 Export adapters use materialized server truth (completed)
+**Current focus:** Phase 5.11: P5-11 Frontend reconciliation (completed)
 
 ## Current Position
 
-Phase: 5.10 of active GSD bootstrap (P5-10 Export adapters use materialized server truth)
+Phase: 5.11 of active GSD bootstrap (P5-11 Frontend reconciliation)
 Plan: 1 of 1 in current phase
 Status: Complete
-Last activity: 2026-07-02 - Completed P5-10 saved export server-truth workflow and verification.
+Last activity: 2026-07-02 - Completed P5-11 frontend command queue and reconciliation verification.
 
 Progress: [##########] 100%
 
@@ -63,6 +63,8 @@ Progress: [##########] 100%
   `SyncRoom`; direct repository writes remain legacy/bypass and are not authoritative.
 - [Phase 5.10]: Local-board export can still use frontend local state, but saved-document export
   must materialize from the backend SyncRoom/repository path and remain read-only.
+- [Phase 5.11]: Saved-room frontend mutations use P5 `SyncCommand` queues; presence/cursor,
+  selection, and draft preview remain ephemeral and must not persist or advance documentClock.
 
 ### Pending Todos
 
@@ -82,6 +84,7 @@ Progress: [##########] 100%
 - P5-08 delete, tombstone, and binding repair implemented and verified against 8 acceptance criteria.
 - P5-09 replace document/import/restore implemented and verified.
 - P5-10 export adapters use materialized server truth implemented and verified against 4 acceptance criteria.
+- P5-11 frontend reconciliation implemented and verified against 8 acceptance criteria.
 
 ### Blockers/Concerns
 

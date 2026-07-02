@@ -4,6 +4,7 @@ import type {
   SyncAck,
   SyncBroadcast,
   SyncClock,
+  SyncCommand,
   SyncSlot,
 } from '../../types/shared';
 import type { WhiteboardSocket } from './types';
@@ -25,6 +26,12 @@ interface SocketClientState {
   reconnectPending: boolean;
   pendingQueue: Element[];
   pendingSyncRequests: PendingSyncRequest[];
+  queuedSyncCommands: QueuedSyncCommand[];
+  inFlightSyncCommands: QueuedSyncCommand[];
+  syncFlushTimer: ReturnType<typeof setTimeout> | null;
+  pausedForResync: boolean;
+  serverElements: Element[];
+  hasServerState: boolean;
   staleAckRequestIds: Set<string>;
   bufferedSyncEvents: Array<SyncAck | SyncBroadcast>;
 }
@@ -32,6 +39,13 @@ interface SocketClientState {
 export interface PendingSyncRequest {
   requestId: string;
   actorId: string | null;
+}
+
+export interface QueuedSyncCommand {
+  command: SyncCommand;
+  dependsOnRequestId?: string;
+  sendAfter: number;
+  createdAt: number;
 }
 
 const state: SocketClientState = {
@@ -51,6 +65,12 @@ const state: SocketClientState = {
   reconnectPending: false,
   pendingQueue: [],
   pendingSyncRequests: [],
+  queuedSyncCommands: [],
+  inFlightSyncCommands: [],
+  syncFlushTimer: null,
+  pausedForResync: false,
+  serverElements: [],
+  hasServerState: false,
   staleAckRequestIds: new Set(),
   bufferedSyncEvents: [],
 };
@@ -105,6 +125,7 @@ export function markPendingRequestsStale(): string[] {
     state.staleAckRequestIds.add(requestId);
   }
   state.pendingSyncRequests = [];
+  state.inFlightSyncCommands = [];
   return requestIds;
 }
 
@@ -117,6 +138,15 @@ export function resetReconnectState(): void {
   state.lastServerClock = 0;
   state.pendingQueue = [];
   state.pendingSyncRequests = [];
+  state.queuedSyncCommands = [];
+  state.inFlightSyncCommands = [];
+  if (state.syncFlushTimer !== null) {
+    clearTimeout(state.syncFlushTimer);
+    state.syncFlushTimer = null;
+  }
+  state.pausedForResync = false;
+  state.serverElements = [];
+  state.hasServerState = false;
   state.staleAckRequestIds = new Set();
   state.bufferedSyncEvents = [];
   state.knownSlotClocks = new Map();

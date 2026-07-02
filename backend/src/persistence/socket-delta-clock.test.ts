@@ -105,7 +105,7 @@ describe('socket delta clock — ELEMENT_UPDATE broadcast clock', () => {
   });
 
   // @covers AC-4
-  it('initializes a missing warm-path room clock from persisted Room.documentClock before update', async () => {
+  it('rejects legacy updates for a warm persisted room', async () => {
     const roomPresence = new Map<string, Map<string, Presence>>();
     const roomElements = new Map<string, Map<string, Element>>();
     const roomClocks = new Map<string, number>();
@@ -144,10 +144,11 @@ describe('socket delta clock — ELEMENT_UPDATE broadcast clock', () => {
     }) => Promise<void>;
     await updateHandler({ roomId, elements: [makeElement({ id: 'new-el' })] });
 
-    expect(peerEmit).toHaveBeenCalledWith(
-      WS_EVENTS.ELEMENT_UPDATE,
-      expect.objectContaining({ documentClock: 10 }),
-    );
+    expect(peerEmit).not.toHaveBeenCalledWith(WS_EVENTS.ELEMENT_UPDATE, expect.anything());
+    expect(socket.emit).toHaveBeenCalledWith(WS_EVENTS.ROOM_ACCESS_ERROR, {
+      code: 'room-access/forbidden',
+      message: 'Saved documents must use the P5 sync command protocol.',
+    });
   });
 
   // @covers AC-4
@@ -166,7 +167,7 @@ describe('socket delta clock — ELEMENT_UPDATE broadcast clock', () => {
   });
 
   // @covers AC-4
-  it('loads persisted Room.documentClock before a first update when no in-memory clock exists', async () => {
+  it('rejects legacy updates for a cold persisted room', async () => {
     const roomPresence = new Map<string, Map<string, Presence>>();
     const roomElements = new Map<string, Map<string, Element>>();
     const roomClocks = new Map<string, number>();
@@ -196,10 +197,11 @@ describe('socket delta clock — ELEMENT_UPDATE broadcast clock', () => {
     }) => Promise<void>;
     await updateHandler({ roomId, elements: [makeElement({ id: 'first-update-el' })] });
 
-    expect(peerEmit).toHaveBeenCalledWith(
-      WS_EVENTS.ELEMENT_UPDATE,
-      expect.objectContaining({ documentClock: 13 }),
-    );
+    expect(peerEmit).not.toHaveBeenCalledWith(WS_EVENTS.ELEMENT_UPDATE, expect.anything());
+    expect(socket.emit).toHaveBeenCalledWith(WS_EVENTS.ROOM_ACCESS_ERROR, {
+      code: 'room-access/forbidden',
+      message: 'Saved documents must use the P5 sync command protocol.',
+    });
   });
 });
 

@@ -7,6 +7,15 @@ export interface MutationEvent {
   type: 'create' | 'patch' | 'delete' | 'update';
   elements: Element[];
   before: Element[];
+  sync?: MutationSyncOptions;
+}
+
+export interface MutationSyncOptions {
+  final?: boolean;
+}
+
+interface MutationOptions {
+  sync?: MutationSyncOptions;
 }
 
 type MutationHook = (event: MutationEvent) => void;
@@ -95,6 +104,7 @@ export function createElement(draft: ElementDraft): Element {
 export function patchElement(
   id: string,
   patch: Partial<Omit<Element, 'id' | 'version' | 'versionNonce' | 'updatedAt'>>,
+  options: MutationOptions = {},
 ): void {
   const { elements } = useElementsStore.getState();
   const existing = elements.find((e) => e.id === id);
@@ -110,7 +120,7 @@ export function patchElement(
   });
 
   useElementsStore.getState().updateElement(updated);
-  fireHooks({ type: 'patch', elements: [updated], before: [existing] });
+  fireHooks({ type: 'patch', elements: [updated], before: [existing], sync: options.sync });
 }
 
 export function deleteElements(ids: string[]): void {
@@ -138,6 +148,7 @@ export function updateElements(
     id: string;
     patch: Partial<Omit<Element, 'id' | 'version' | 'versionNonce' | 'updatedAt'>>;
   }[],
+  options: MutationOptions = {},
 ): void {
   const { elements } = useElementsStore.getState();
   const now = Date.now();
@@ -163,7 +174,7 @@ export function updateElements(
 
   const before = updated.map((el) => beforeMap.get(el.id)!);
   useElementsStore.getState().updateElements(updated);
-  fireHooks({ type: 'update', elements: updated, before });
+  fireHooks({ type: 'update', elements: updated, before, sync: options.sync });
 }
 
 export function applySnapshot(elements: Element[]): void {

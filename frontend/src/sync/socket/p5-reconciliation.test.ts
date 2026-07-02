@@ -10,6 +10,7 @@ import {
   processSyncBroadcast,
   queuePendingSyncRequest,
 } from './p5-reconciliation';
+import { enqueueMutationSyncCommands } from './p5-command-queue';
 import { getKnownSlotClock, getSocketState, setLastServerClock, setRoomEpoch } from './state';
 
 beforeEach(() => {
@@ -17,9 +18,14 @@ beforeEach(() => {
   setLastServerClock(0);
   const state = getSocketState();
   state.pendingSyncRequests = [];
+  state.queuedSyncCommands = [];
+  state.inFlightSyncCommands = [];
+  state.serverElements = [];
+  state.hasServerState = false;
   state.staleAckRequestIds = new Set();
   state.bufferedSyncEvents = [];
   state.socket = null;
+  state.roomId = 'room-1';
   setRoomEpoch(0);
 });
 
@@ -311,6 +317,192 @@ describe('P5 reconciliation pending and change-set handling', () => {
     expect(updated?.props.strokeColor).toBe('#000000');
     expect(getSocketState().lastServerClock).toBe(5);
     expect(getKnownSlotClock('shape-1', 'style.fillColor')).toBe(5);
+  });
+
+  it('replays local optimistic drag over an independent peer color change', () => {
+    // @covers AC-3
+    const initial = makeElement({ id: 'shape-1', x: 0 });
+    applyRoomSnapshot({
+      protocolVersion: SYNC_PROTOCOL_VERSION,
+      schemaVersion: SYNC_SCHEMA_VERSION,
+      roomId: 'room-1',
+      serverClock: 0,
+      roomEpoch: 0,
+      elements: [initial],
+      slotClocks: [
+        { elementId: 'shape-1', slot: 'transform.position', clock: 0 },
+        { elementId: 'shape-1', slot: 'style.fillColor', clock: 0 },
+      ],
+    });
+    getSocketState().socket = { emit: vi.fn(), connected: false } as never;
+
+    enqueueMutationSyncCommands(
+      {
+        type: 'patch',
+        before: [initial],
+        elements: [makeElement({ id: 'shape-1', x: 30 })],
+      },
+      'room-1',
+      { now: 0 },
+    );
+    useElementsStore.setState({ elements: [makeElement({ id: 'shape-1', x: 30 })] });
+
+    processSyncBroadcast(
+      broadcast(
+        changeSet({
+          requestId: 'peer-color',
+          serverClock: 1,
+          slotPatches: [
+            {
+              elementId: 'shape-1',
+              slot: 'style.fillColor',
+              baseClock: 0,
+              clock: 1,
+              changes: { fillColor: '#ff0000' },
+            },
+          ],
+          slotClocks: [{ elementId: 'shape-1', slot: 'style.fillColor', clock: 1 }],
+        }),
+      ),
+    );
+
+    const reconciled = useElementsStore.getState().elements[0];
+    expect(reconciled).toMatchObject({ id: 'shape-1', x: 30 });
+    expect(reconciled?.props.fillColor).toBe('#ff0000');
+  });
+
+  it('clears a matching late ACK without overwriting newer optimistic state', () => {
+    // @covers AC-4
+    setLastServerClock(4);
+    useElementsStore.setState({ elements: [makeElement({ id: 'shape-1', x: 50 })] });
+    getSocketState().serverElements = [makeElement({ id: 'shape-1', x: 40 })];
+    queuePendingSyncRequest({ requestId: 'late-ack', actorId: 'actor-1' });
+
+    const result = processSyncAck({
+      status: 'commit',
+      ...ackBase('late-ack', 3),
+      changeSet: changeSet({
+        requestId: 'late-ack',
+        serverClock: 3,
+        slotPatches: [
+          {
+            elementId: 'shape-1',
+            slot: 'transform.position',
+            baseClock: 0,
+            clock: 3,
+            changes: { x: 5, y: 0 },
+          },
+        ],
+      }),
+    });
+
+    expect(result.status).toBe('ignored-stale');
+    expect(getSocketState().pendingSyncRequests).toEqual([]);
+    expect(useElementsStore.getState().elements[0]?.x).toBe(50);
+  });
+
+  it('drops processed reconnect requests without double-applying them', () => {
+    // @covers AC-5
+    const emit = vi.fn();
+    getSocketState().socket = { emit, connected: true } as never;
+    getSocketState().roomId = 'room-1';
+    enqueueMutationSyncCommands(
+      { type: 'create', before: [], elements: [makeElement({ id: 'created-1' })] },
+      'room-1',
+      { now: 0 },
+    );
+    const requestId = getSocketState().inFlightSyncCommands[0]?.command.requestId;
+    expect(requestId).toBeDefined();
+
+    applyRoomDiff({
+      protocolVersion: SYNC_PROTOCOL_VERSION,
+      schemaVersion: SYNC_SCHEMA_VERSION,
+      roomId: 'room-1',
+      fromClock: 0,
+      toClock: 1,
+      serverClock: 1,
+      roomEpoch: 0,
+      changed: [makeElement({ id: 'created-1' })],
+      deleted: [],
+      slotClocks: [{ elementId: 'created-1', slot: 'style.fillColor', clock: 1 }],
+      hasMore: false,
+      pendingRequests: [{ requestId: requestId!, status: 'processed', serverClock: 1 }],
+    });
+
+    expect(getSocketState().inFlightSyncCommands).toEqual([]);
+    expect(getSocketState().pendingSyncRequests).toEqual([]);
+    expect(
+      useElementsStore.getState().elements.filter((element) => element.id === 'created-1'),
+    ).toHaveLength(1);
+  });
+
+  it('does not resurrect stale local elements when server truth is empty', () => {
+    useElementsStore.setState({ elements: [makeElement({ id: 'stale-local' })] });
+    getSocketState().serverElements = [];
+    getSocketState().hasServerState = true;
+
+    applyRoomDiff({
+      protocolVersion: SYNC_PROTOCOL_VERSION,
+      schemaVersion: SYNC_SCHEMA_VERSION,
+      roomId: 'room-1',
+      fromClock: 1,
+      toClock: 2,
+      serverClock: 2,
+      roomEpoch: 0,
+      changed: [],
+      deleted: [],
+      slotClocks: [],
+      hasMore: false,
+    });
+
+    expect(useElementsStore.getState().elements).toEqual([]);
+    expect(getSocketState().serverElements).toEqual([]);
+  });
+
+  it('does not resend unknown pending commands after slot clocks changed', () => {
+    const emit = vi.fn();
+    const initial = makeElement({ id: 'shape-1', x: 0 });
+    applyRoomSnapshot({
+      protocolVersion: SYNC_PROTOCOL_VERSION,
+      schemaVersion: SYNC_SCHEMA_VERSION,
+      roomId: 'room-1',
+      serverClock: 0,
+      roomEpoch: 0,
+      elements: [initial],
+      slotClocks: [{ elementId: 'shape-1', slot: 'transform.position', clock: 0 }],
+    });
+    getSocketState().socket = { emit, connected: true } as never;
+    enqueueMutationSyncCommands(
+      {
+        type: 'patch',
+        before: [initial],
+        elements: [makeElement({ id: 'shape-1', x: 30 })],
+      },
+      'room-1',
+      { final: true, now: 0 },
+    );
+    const requestId = getSocketState().inFlightSyncCommands[0]?.command.requestId;
+    expect(requestId).toBeDefined();
+
+    applyRoomDiff({
+      protocolVersion: SYNC_PROTOCOL_VERSION,
+      schemaVersion: SYNC_SCHEMA_VERSION,
+      roomId: 'room-1',
+      fromClock: 0,
+      toClock: 1,
+      serverClock: 1,
+      roomEpoch: 0,
+      changed: [makeElement({ id: 'shape-1', x: 10 })],
+      deleted: [],
+      slotClocks: [{ elementId: 'shape-1', slot: 'transform.position', clock: 1 }],
+      hasMore: false,
+      pendingRequests: [{ requestId: requestId!, status: 'unknown' }],
+    });
+
+    expect(getSocketState().inFlightSyncCommands).toEqual([]);
+    expect(getSocketState().queuedSyncCommands).toEqual([]);
+    expect(getSocketState().pendingSyncRequests).toEqual([]);
+    expect(emit).toHaveBeenCalledTimes(1);
   });
 });
 

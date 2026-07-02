@@ -6,6 +6,8 @@ import {
   type Element,
   type PatchSlotsCommand,
   type PointTuple,
+  type ReorderElementMove,
+  type ReorderElementsCommand,
   type SlotPatch,
   type SyncSlot,
   type UpdateArrowBindingCommand,
@@ -63,6 +65,8 @@ export function defaultSyncRoomPlanner(context: SyncRoomPlannerContext): SyncRoo
       return planPatchSlots(context, context.command);
     case 'delete-elements':
       return planDeleteElements(context, context.command);
+    case 'reorder-elements':
+      return planReorderElements(context, context.command);
     case 'update-arrow-binding':
       return planUpdateArrowBinding(context, context.command);
     case 'replace-document': {
@@ -87,7 +91,7 @@ export function defaultSyncRoomPlanner(context: SyncRoomPlannerContext): SyncRoo
     default:
       throw new SyncRoomCommandError(
         'UNSUPPORTED_COMMAND',
-        `${context.command.kind} planning is owned by later P5 phases.`,
+        'Command planning is owned by later P5 phases.',
       );
   }
 }
@@ -128,6 +132,72 @@ function mapValidationErrors(errors: readonly string[]): SyncRoomErrorCode {
   if (errors.some((error) => error.includes('invalid value'))) return 'INVALID_VALUE';
   if (errors.some((error) => error.includes('not supported'))) return 'UNSUPPORTED_COMMAND';
   return 'INVALID_VALUE';
+}
+
+function planReorderElements(
+  context: SyncRoomPlannerContext,
+  command: ReorderElementsCommand,
+): SyncRoomPlan {
+  const order = [...context.state.elements.values()].sort(compareOrder);
+  for (const move of command.moves) {
+    getActiveElement(context, move.elementId);
+    if (move.afterElementId) getActiveElement(context, move.afterElementId);
+    if (move.beforeElementId) getActiveElement(context, move.beforeElementId);
+    const currentOrderClock = currentSlotClock(context, move.elementId, 'order');
+    if (move.baseOrderClock !== undefined && move.baseOrderClock > currentOrderClock) {
+      throw new SyncRoomCommandError('STALE_CLIENT_STATE');
+    }
+    applyOrderMove(order, move);
+  }
+
+  const patched = order.flatMap((element, index) => {
+    const zIndex = index + 1;
+    if (element.zIndex === zIndex) return [];
+    const patch: SlotPatch<'order'> = {
+      elementId: element.id,
+      slot: 'order',
+      baseClock: currentSlotClock(context, element.id, 'order'),
+      changes: { zIndex },
+      inverseChanges: { zIndex: element.zIndex },
+    };
+    return [{ elementId: element.id, patches: [patch], element: { ...element, zIndex } }];
+  });
+
+  return {
+    reason: 'reorder',
+    patched,
+    slotClocks: patched.map((entry) => ({
+      elementId: entry.elementId,
+      slot: 'order',
+      clock: context.serverClock,
+    })),
+    normalizedOrder: patched.map((entry) => ({
+      elementId: entry.elementId,
+      zIndex: entry.element.zIndex,
+    })),
+  };
+}
+
+function applyOrderMove(order: Element[], move: ReorderElementMove): void {
+  const moving = order.find((element) => element.id === move.elementId);
+  if (!moving) return;
+
+  const withoutMoving = order.filter((element) => element.id !== move.elementId);
+  let insertIndex = withoutMoving.length;
+  if (move.afterElementId) {
+    const afterIndex = withoutMoving.findIndex((element) => element.id === move.afterElementId);
+    if (afterIndex !== -1) insertIndex = afterIndex + 1;
+  } else if (move.beforeElementId) {
+    const beforeIndex = withoutMoving.findIndex((element) => element.id === move.beforeElementId);
+    if (beforeIndex !== -1) insertIndex = beforeIndex;
+  }
+
+  withoutMoving.splice(insertIndex, 0, moving);
+  order.splice(0, order.length, ...withoutMoving);
+}
+
+function compareOrder(a: Element, b: Element): number {
+  return a.zIndex - b.zIndex || a.id.localeCompare(b.id);
 }
 
 function planPatchSlots(context: SyncRoomPlannerContext, command: PatchSlotsCommand): SyncRoomPlan {

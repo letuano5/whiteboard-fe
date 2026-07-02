@@ -156,7 +156,7 @@ async function executeNativeFileReplace(
 export function readNativeFileImportPayload(value: unknown): NativeFileImportPayload | null {
   if (typeof value !== 'object' || value === null) return null;
   const payload = value as Record<string, unknown>;
-  if (payload.mode !== 'replace' && payload.mode !== 'merge') return null;
+  if (payload.mode !== 'replace') return null;
   const normalized = normalizeNativeFileDocument(payload.document);
   if (!normalized.ok) return null;
   return {

@@ -1,5 +1,6 @@
 import type {
   CommittedChangeSet,
+  Element,
   PendingRequestStatus,
   RoomDiff,
   RoomReplacedPayload,
@@ -13,6 +14,12 @@ import { WS_EVENTS } from '../../types/shared';
 import { useElementsStore } from '../../store/elements.store';
 import { applyChangeSetToElements, applySlotPatch, slotValueFromElement } from './p5-change-set';
 import { clearPendingQueue } from './pending-queue';
+import {
+  clearPendingSyncCommands,
+  materializeOptimisticElements,
+  reconcilePendingCommandStatuses,
+  settleSyncCommandRequest,
+} from './p5-command-queue';
 import {
   applyKnownSlotClocks,
   consumeStaleAckRequest,
@@ -55,6 +62,7 @@ export function processSyncAck(
   }
 
   clearPendingRequest(ack.requestId);
+  settleSyncCommandRequest(ack.requestId);
 
   if (ack.status === 'reject') {
     if (ack.serverChangeSet) {
@@ -76,6 +84,7 @@ export function processSyncBroadcast(
   ) {
     for (const requestId of broadcast.changeSet.originRequestIds) {
       clearPendingRequest(requestId);
+      settleSyncCommandRequest(requestId);
     }
   }
 
@@ -97,7 +106,11 @@ export function replayBufferedSyncEvents(options: ReconciliationOptions = {}): v
 }
 
 export function applyRoomSnapshot(snapshot: RoomSnapshot): void {
-  useElementsStore.getState().setElements(snapshot.elements);
+  const state = getSocketState();
+  state.serverElements = snapshot.elements;
+  state.hasServerState = true;
+  state.pausedForResync = false;
+  useElementsStore.getState().setElements(materializeOptimisticElements(snapshot.elements));
   hydrateKnownSlotClocks(snapshot.slotClocks);
   setRoomEpoch(snapshot.roomEpoch);
   setLastServerClock(snapshot.serverClock);
@@ -110,7 +123,10 @@ export function applyRoomReplaced(payload: RoomReplacedPayload): void {
   const state = getSocketState();
   markPendingRequestsStale();
   clearPendingQueue();
+  clearPendingSyncCommands();
   state.bufferedSyncEvents = [];
+  state.serverElements = payload.elements;
+  state.hasServerState = true;
   useElementsStore.getState().setElements(payload.elements);
   hydrateKnownSlotClocks(payload.slotClocks);
   setRoomEpoch(payload.roomEpoch);
@@ -118,11 +134,11 @@ export function applyRoomReplaced(payload: RoomReplacedPayload): void {
 }
 
 export function applyRoomDiff(diff: RoomDiff): void {
-  const previousLastServerClock = getSocketState().lastServerClock;
+  const state = getSocketState();
+  const previousLastServerClock = state.lastServerClock;
   const deletedIds = diff.deleted.map((deleted) => deleted.id);
-  const currentById = new Map(
-    useElementsStore.getState().elements.map((element) => [element.id, element]),
-  );
+  const serverElements = getCurrentServerElements();
+  const currentById = new Map(serverElements.map((element) => [element.id, element]));
   const slotClocksByElement = groupSlotClocks(diff.slotClocks);
   const nextById = new Map(currentById);
 
@@ -153,7 +169,11 @@ export function applyRoomDiff(diff: RoomDiff): void {
     nextById.set(incoming.id, next);
   }
 
-  useElementsStore.getState().setElements([...nextById.values()]);
+  const nextServerElements = [...nextById.values()];
+  state.serverElements = nextServerElements;
+  state.hasServerState = true;
+  state.pausedForResync = false;
+  useElementsStore.getState().setElements(materializeOptimisticElements(nextServerElements));
   removeKnownSlotClocks(deletedIds);
   applyKnownSlotClocks(diff.slotClocks);
   setRoomEpoch(diff.roomEpoch);
@@ -216,10 +236,19 @@ function requestRoomDiff(changeSet: CommittedChangeSet, options: ReconciliationO
 }
 
 function applyChangeSetToStore(changeSet: CommittedChangeSet): void {
-  const elements = useElementsStore.getState().elements;
-  useElementsStore.getState().setElements(applyChangeSetToElements(elements, changeSet));
+  const state = getSocketState();
+  const serverElements = getCurrentServerElements();
+  const nextServerElements = applyChangeSetToElements(serverElements, changeSet);
+  state.serverElements = nextServerElements;
+  state.hasServerState = true;
+  useElementsStore.getState().setElements(materializeOptimisticElements(nextServerElements));
   applyKnownSlotClocks(changeSet.slotClocks);
   setRoomEpoch(changeSet.roomEpoch);
+}
+
+function getCurrentServerElements(): Element[] {
+  const state = getSocketState();
+  return state.hasServerState ? state.serverElements : useElementsStore.getState().elements;
 }
 
 function groupSlotClocks(slotClocks: SlotClockUpdate[]): Map<string, SlotClockUpdate[]> {
@@ -240,6 +269,7 @@ function reconcilePendingRequests(pendingRequests: PendingRequestStatus[]): void
         state.pendingSyncRequests = state.pendingSyncRequests.filter(
           (r) => r.requestId !== status.requestId,
         );
+        reconcilePendingCommandStatuses([status]);
         break;
       case 'conflict':
       case 'expired':
@@ -248,12 +278,12 @@ function reconcilePendingRequests(pendingRequests: PendingRequestStatus[]): void
           (r) => r.requestId !== status.requestId,
         );
         state.staleAckRequestIds.add(status.requestId);
+        reconcilePendingCommandStatuses([status]);
         break;
       case 'unknown':
-        // Server never saw this request. Per P5-07 it may only be resent after the
-        // client re-verifies element existence, slot clocks and roomEpoch — which
-        // requires the P5-11 command store. Until then we keep the entry pending
-        // (so it is re-declared on the next reconnect) but never resend blindly.
+        // Server never saw this request. P5-07 allows resend only after the
+        // command is still relevant against the freshly hydrated server truth.
+        reconcilePendingCommandStatuses([status]);
         break;
     }
   }

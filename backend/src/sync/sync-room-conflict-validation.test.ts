@@ -3,6 +3,7 @@ import type {
   DeleteElementsCommand,
   Element,
   PatchSlotsCommand,
+  ReorderElementsCommand,
   SlotClockUpdate,
   SlotPatch,
   SyncSlot,
@@ -262,6 +263,30 @@ describe('P5-04 SyncRoom conflict resolution and validation', () => {
     expect(updated).toMatchObject({ x: 10, y: 20, width: 60, height: 70 });
   });
 
+  it('commits reorder commands through the order slot', async () => {
+    const room = createRoomWithElements(
+      [makeElement({ id: 'bottom', zIndex: 1 }), makeElement({ id: 'top', zIndex: 2 })],
+      [slotClock('bottom', 'order', 1), slotClock('top', 'order', 1)],
+    );
+
+    const result = await room.execute(
+      reorderCommand('bring-bottom-to-front', [
+        { elementId: 'bottom', afterElementId: 'top', baseOrderClock: 1 },
+      ]),
+      editor,
+    );
+
+    expect(result.changeSet.reason).toBe('reorder');
+    expect(getElement(room, 'top').zIndex).toBe(1);
+    expect(getElement(room, 'bottom').zIndex).toBe(2);
+    expect(room.getStateSnapshot().slotClocks.get('bottom:order')).toBe(2);
+    expect(room.getStateSnapshot().slotClocks.get('top:order')).toBe(2);
+    expect(result.changeSet.slotPatches.map((patchValue) => patchValue.slot)).toEqual([
+      'order',
+      'order',
+    ]);
+  });
+
   it('rejects commands exceeding patch, delete, or change-set limits', async () => {
     // @covers AC-12
     const tooManyPatches = Array.from({ length: MAX_PATCHES_PER_COMMAND + 1 }, (_, index) =>
@@ -347,6 +372,17 @@ function deleteCommand(requestId: string, elementIds: string[]): DeleteElementsC
     ...envelope(requestId),
     kind: 'delete-elements',
     elementIds,
+  };
+}
+
+function reorderCommand(
+  requestId: string,
+  moves: ReorderElementsCommand['moves'],
+): ReorderElementsCommand {
+  return {
+    ...envelope(requestId),
+    kind: 'reorder-elements',
+    moves,
   };
 }
 

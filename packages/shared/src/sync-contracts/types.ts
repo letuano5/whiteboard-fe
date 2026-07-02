@@ -242,6 +242,7 @@ export type ChangeSetReason =
   | 'patch_clean'
   | 'patch_lww_conflict'
   | 'binding_update'
+  | 'reorder'
   | 'delete'
   | 'replace_document'
   | 'repair';

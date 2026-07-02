@@ -167,7 +167,7 @@ describe('socket-client — 014/AC-2 (element-update delivery)', () => {
 });
 
 describe('socket-client — 014/AC-4 (room isolation via roomId in emit)', () => {
-  it('element-update mutations are emitted with the joined roomId', async () => {
+  it('saved-room mutations are emitted as sync commands with the joined roomId', async () => {
     const { initSocketClient } = await import('../socket-client');
     const { dispatchMutationEvent } = await import('../../store/mutation-pipeline');
 
@@ -200,12 +200,16 @@ describe('socket-client — 014/AC-4 (room isolation via roomId in emit)', () =>
     };
 
     mockEmit.mockClear();
-    dispatchMutationEvent({ type: 'update', elements: [fakeElement], before: [] });
+    dispatchMutationEvent({ type: 'create', elements: [fakeElement], before: [] });
 
-    expect(mockEmit).toHaveBeenCalledWith(WS_EVENTS.ELEMENT_UPDATE, {
-      roomId: 'room-xyz',
-      elements: [fakeElement],
-    });
+    expect(mockEmit).toHaveBeenCalledWith(
+      WS_EVENTS.SYNC_COMMAND,
+      expect.objectContaining({
+        roomId: 'room-xyz',
+        kind: 'create-element',
+        element: fakeElement,
+      }),
+    );
   });
 });
 
@@ -524,7 +528,7 @@ describe('socket-client — P3A-04/AC-6 legacy ELEMENT_UPDATE keeps lastServerCl
 
 describe('socket-client — P3A-04/AC-8 outbound clock ownership', () => {
   // @covers AC-8
-  it('outbound ELEMENT_UPDATE payload does not include a client-authored documentClock', async () => {
+  it('outbound sync command does not include a client-authored documentClock', async () => {
     const { initSocketClient } = await import('../socket-client');
     const { dispatchMutationEvent } = await import('../../store/mutation-pipeline');
     initSocketClient('room-abc');
@@ -532,17 +536,14 @@ describe('socket-client — P3A-04/AC-8 outbound clock ownership', () => {
     mockEmit.mockClear();
     const el = makeFakeElement('outbound-no-clock');
     dispatchMutationEvent({
-      type: 'update',
+      type: 'create',
       elements: [el],
       before: [],
     });
 
-    const updateCall = mockEmit.mock.calls.find((call) => call[0] === WS_EVENTS.ELEMENT_UPDATE);
+    const updateCall = mockEmit.mock.calls.find((call) => call[0] === WS_EVENTS.SYNC_COMMAND);
     expect(updateCall).toBeDefined();
-    expect(updateCall?.[1]).toEqual({
-      roomId: 'room-abc',
-      elements: [el],
-    });
+    expect(updateCall?.[1]).toMatchObject({ roomId: 'room-abc', kind: 'create-element' });
     expect(updateCall?.[1]).not.toHaveProperty('documentClock');
     expect(updateCall?.[1]).not.toHaveProperty('sentVersion');
   });
@@ -1100,9 +1101,9 @@ describe('socket-client — P3A-03/AC-6 (T014) mutation while disconnected → q
   });
 });
 
-describe('socket-client — P3A-03/AC-5 (T014) ROOM_DIFF replays pending queue via ELEMENT_UPDATE', () => {
+describe('socket-client — P3A-03/AC-5 (T014) ROOM_DIFF replays pending queue via SYNC_COMMAND', () => {
   // @covers AC-5
-  it('after ROOM_DIFF is applied, pending offline mutations are re-emitted via ELEMENT_UPDATE', async () => {
+  it('after ROOM_DIFF is applied, pending offline mutations are re-emitted via SYNC_COMMAND', async () => {
     const { initSocketClient } = await import('../socket-client');
     const { dispatchMutationEvent } = await import('../../store/mutation-pipeline');
     initSocketClient('room-abc');
@@ -1111,8 +1112,16 @@ describe('socket-client — P3A-03/AC-5 (T014) ROOM_DIFF replays pending queue v
     mockSocket.connected = false;
     const el1 = makeFakeElement('offline-1');
     const el2 = makeFakeElement('offline-2');
-    dispatchMutationEvent({ type: 'update', elements: [el1], before: [] });
-    dispatchMutationEvent({ type: 'update', elements: [el2], before: [] });
+    dispatchMutationEvent({
+      type: 'patch',
+      elements: [{ ...el1, x: 10 }],
+      before: [el1],
+    });
+    dispatchMutationEvent({
+      type: 'patch',
+      elements: [{ ...el2, x: 20 }],
+      before: [el2],
+    });
 
     // Reconnect and receive ROOM_DIFF
     mockSocket.connected = true;
@@ -1121,13 +1130,16 @@ describe('socket-client — P3A-03/AC-5 (T014) ROOM_DIFF replays pending queue v
     const diffHandler = _handlers[WS_EVENTS.ROOM_DIFF];
     diffHandler({ changed: [], deleted: [], documentClock: 15 });
 
-    // Pending queue should be flushed via ELEMENT_UPDATE
-    const updateCalls = mockEmit.mock.calls.filter((c) => c[0] === WS_EVENTS.ELEMENT_UPDATE);
-    expect(updateCalls).toHaveLength(1);
-    const payload = updateCalls[0][1] as { elements: unknown[] };
-    expect(payload.elements).toHaveLength(2);
-    expect((payload.elements as Array<{ id: string }>).map((e) => e.id)).toContain('offline-1');
-    expect((payload.elements as Array<{ id: string }>).map((e) => e.id)).toContain('offline-2');
+    // Pending queue should be flushed via bounded P5 sync commands.
+    const updateCalls = mockEmit.mock.calls.filter((c) => c[0] === WS_EVENTS.SYNC_COMMAND);
+    expect(updateCalls).toHaveLength(2);
+    const commands = updateCalls.map(
+      (call) => call[1] as { patches: Array<{ elementId: string }> },
+    );
+    expect(commands.flatMap((command) => command.patches.map((patch) => patch.elementId))).toEqual([
+      'offline-1',
+      'offline-2',
+    ]);
   });
 });
 
@@ -1144,7 +1156,9 @@ describe('socket-client — P3A-03/AC-6 (T014) no pending → no ELEMENT_UPDATE 
     diffHandler({ changed: [], deleted: [], documentClock: 5 });
 
     const updateCalls = mockEmit.mock.calls.filter((c) => c[0] === WS_EVENTS.ELEMENT_UPDATE);
+    const syncCalls = mockEmit.mock.calls.filter((c) => c[0] === WS_EVENTS.SYNC_COMMAND);
     expect(updateCalls).toHaveLength(0);
+    expect(syncCalls).toHaveLength(0);
   });
 });
 
@@ -1191,8 +1205,9 @@ describe('socket-client — P3A-03/AC-7 (T014) LWW: pending changes not silently
 
     // Queue offline mutation: element X at version 7 (higher than server's version 5)
     mockSocket.connected = false;
-    const pendingEl = makeFakeElement('conflict-el', 7); // version 7
-    dispatchMutationEvent({ type: 'update', elements: [pendingEl], before: [] });
+    const baseEl = makeFakeElement('conflict-el', 5);
+    const pendingEl = { ...makeFakeElement('conflict-el', 7), x: 70 }; // version 7
+    dispatchMutationEvent({ type: 'patch', elements: [pendingEl], before: [baseEl] });
 
     mockSocket.connected = true;
     mockEmit.mockClear();
@@ -1202,12 +1217,14 @@ describe('socket-client — P3A-03/AC-7 (T014) LWW: pending changes not silently
     const diffHandler = _handlers[WS_EVENTS.ROOM_DIFF];
     diffHandler({ changed: [serverEl], deleted: [], documentClock: 10 });
 
-    // Pending element (version 7) must be re-emitted after diff — not silently dropped
-    const updateCalls = mockEmit.mock.calls.filter((c) => c[0] === WS_EVENTS.ELEMENT_UPDATE);
+    // Pending patch must be re-emitted after diff — not silently dropped.
+    const updateCalls = mockEmit.mock.calls.filter((c) => c[0] === WS_EVENTS.SYNC_COMMAND);
     expect(updateCalls).toHaveLength(1);
-    const payload = updateCalls[0][1] as { elements: Array<{ id: string; version: number }> };
-    const replayedEl = payload.elements.find((e) => e.id === 'conflict-el');
-    expect(replayedEl).toBeDefined();
-    expect(replayedEl!.version).toBe(7); // higher version preserved
+    const payload = updateCalls[0][1] as {
+      patches: Array<{ elementId: string; changes: { x?: number } }>;
+    };
+    const replayedPatch = payload.patches.find((patch) => patch.elementId === 'conflict-el');
+    expect(replayedPatch).toBeDefined();
+    expect(replayedPatch?.changes.x).toBe(70);
   });
 });

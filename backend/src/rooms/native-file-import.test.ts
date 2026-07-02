@@ -122,9 +122,9 @@ describe('native file import', () => {
 
   it('rejects invalid native payloads before handler execution', () => {
     // @covers AC-4
-    expect(readNativeFileImportPayload({ document, mode: 'merge' })).toEqual({
+    expect(readNativeFileImportPayload({ document, mode: 'replace' })).toEqual({
       document,
-      mode: 'merge',
+      mode: 'replace',
       report: {
         importedCount: 1,
         skippedCount: 0,
@@ -132,8 +132,9 @@ describe('native file import', () => {
       },
     });
     expect(
-      readNativeFileImportPayload({ document: { ...document, schemaVersion: 2 }, mode: 'merge' }),
+      readNativeFileImportPayload({ document: { ...document, schemaVersion: 2 }, mode: 'replace' }),
     ).toBeNull();
+    expect(readNativeFileImportPayload({ document, mode: 'merge' })).toBeNull();
     expect(readNativeFileImportPayload({ document, mode: 'overwrite' })).toBeNull();
   });
 

@@ -153,8 +153,9 @@ export function applySlotPatch(element: Element, patch: SlotPatch): Element {
       const changes = patch.changes as SlotValue<'state.locked'>;
       return { ...next, locked: changes.locked };
     }
-    case 'geometry.route':
     case 'order':
+      return { ...next, zIndex: (patch.changes as SlotValue<'order'>).zIndex };
+    case 'geometry.route':
       return next;
   }
 }

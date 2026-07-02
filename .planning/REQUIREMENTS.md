@@ -85,6 +85,14 @@
 - [ ] **P5-08-AC-6**: Concurrent updates to startBinding and endBinding on the same arrow preserve both terminals and recompute geometry from server-current arrow and target state.
 - [ ] **P5-08-AC-7**: Binding to a missing or deleted target rejects with INVALID_BINDING_TARGET before commit.
 - [ ] **P5-08-AC-8**: A new delete request for an already tombstoned element rejects with ELEMENT_DELETED, while retrying the original delete request with the same actor/request id replays the original ACK.
+- [x] **P5-11-AC-1**: Continuous drag sends durable sync patches no more often than the 100ms flush window, does not create an unbounded queue, and always sends the final pointerup patch.
+- [x] **P5-11-AC-2**: Squashing unsent slot patches keeps the latest changes but preserves inverseChanges from the first before-state in the window; backpressure never drops create/delete/replace/binding commands and pauses for resync when overload cannot be squashed.
+- [x] **P5-11-AC-3**: When client A drags a shape while client B changes a different slot such as fill color, reconciliation preserves B's committed color and A's final accepted drag.
+- [x] **P5-11-AC-4**: Late ACKs with an old serverClock clear only their matching pending request and never overwrite newer optimistic state.
+- [x] **P5-11-AC-5**: Reload/reconnect pending status handling does not double-apply commands already processed by the server.
+- [x] **P5-11-AC-6**: Initial undo support only emits an inverse single-slot patch when the slot clock still equals the original edit's afterSlotClock; if the slot changed, undo reports a conflict/manual retry instead of auto-applying.
+- [x] **P5-11-AC-7**: Pending create followed by patch/delete preserves dependency order after reconnect and never sends a patch/delete for an element before its create.
+- [x] **P5-11-AC-8**: Presence, cursor, selection, and draft preview remain ephemeral and are not sent as SlotPatch/SyncCommand persistence mutations.
 
 ## Out of Scope
 
@@ -96,62 +104,70 @@
 
 ## Traceability
 
-| Requirement | Phase     | Status   |
-| ----------- | --------- | -------- |
-| P4-00-AC-1  | Phase 4.0 | Complete |
-| P4-00-AC-2  | Phase 4.0 | Complete |
-| P4-00-AC-3  | Phase 4.0 | Complete |
-| P4-00-AC-4  | Phase 4.0 | Complete |
-| P4-00-AC-5  | Phase 4.0 | Complete |
-| P4-00-AC-6  | Phase 4.0 | Complete |
-| P4-00-AC-7  | Phase 4.0 | Complete |
-| P4-00-AC-8  | Phase 4.0 | Complete |
-| P4-00-AC-9  | Phase 4.0 | Complete |
-| P4-01-AC-1  | Phase 4.1 | Complete |
-| P4-01-AC-2  | Phase 4.1 | Complete |
-| P4-01-AC-3  | Phase 4.1 | Complete |
-| P4-01-AC-4  | Phase 4.1 | Complete |
-| P4-01-AC-5  | Phase 4.1 | Complete |
-| P4-01-AC-6  | Phase 4.1 | Complete |
-| P4-01-AC-7  | Phase 4.1 | Complete |
-| P4-02-AC-1  | Phase 4.2 | Complete |
-| P4-02-AC-2  | Phase 4.2 | Complete |
-| P4-02-AC-3  | Phase 4.2 | Complete |
-| P4-02-AC-4  | Phase 4.2 | Complete |
-| P4-02-AC-5  | Phase 4.2 | Complete |
-| P4-02-AC-6  | Phase 4.2 | Complete |
-| P4-02-AC-7  | Phase 4.2 | Complete |
-| P4-02-AC-8  | Phase 4.2 | Complete |
-| P4-02-AC-9  | Phase 4.2 | Complete |
-| P4-04-AC-1  | Phase 4.4 | Complete |
-| P4-04-AC-2  | Phase 4.4 | Complete |
-| P4-04-AC-3  | Phase 4.4 | Complete |
-| P4-04-AC-4  | Phase 4.4 | Complete |
-| P4-04-AC-5  | Phase 4.4 | Complete |
-| P5-07-AC-1  | Phase 5.7 | Complete |
-| P5-07-AC-2  | Phase 5.7 | Complete |
-| P5-07-AC-3  | Phase 5.7 | Complete |
-| P5-07-AC-4  | Phase 5.7 | Complete |
-| P5-07-AC-5  | Phase 5.7 | Complete |
-| P5-07-AC-6  | Phase 5.7 | Complete |
-| P5-07-AC-7  | Phase 5.7 | Complete |
-| P5-07-AC-8  | Phase 5.7 | Complete |
-| P5-08-AC-1  | Phase 5.8 | Complete |
-| P5-08-AC-2  | Phase 5.8 | Complete |
-| P5-08-AC-3  | Phase 5.8 | Complete |
-| P5-08-AC-4  | Phase 5.8 | Complete |
-| P5-08-AC-5  | Phase 5.8 | Complete |
-| P5-08-AC-6  | Phase 5.8 | Complete |
-| P5-08-AC-7  | Phase 5.8 | Complete |
-| P5-08-AC-8  | Phase 5.8 | Complete |
+| Requirement | Phase      | Status   |
+| ----------- | ---------- | -------- |
+| P4-00-AC-1  | Phase 4.0  | Complete |
+| P4-00-AC-2  | Phase 4.0  | Complete |
+| P4-00-AC-3  | Phase 4.0  | Complete |
+| P4-00-AC-4  | Phase 4.0  | Complete |
+| P4-00-AC-5  | Phase 4.0  | Complete |
+| P4-00-AC-6  | Phase 4.0  | Complete |
+| P4-00-AC-7  | Phase 4.0  | Complete |
+| P4-00-AC-8  | Phase 4.0  | Complete |
+| P4-00-AC-9  | Phase 4.0  | Complete |
+| P4-01-AC-1  | Phase 4.1  | Complete |
+| P4-01-AC-2  | Phase 4.1  | Complete |
+| P4-01-AC-3  | Phase 4.1  | Complete |
+| P4-01-AC-4  | Phase 4.1  | Complete |
+| P4-01-AC-5  | Phase 4.1  | Complete |
+| P4-01-AC-6  | Phase 4.1  | Complete |
+| P4-01-AC-7  | Phase 4.1  | Complete |
+| P4-02-AC-1  | Phase 4.2  | Complete |
+| P4-02-AC-2  | Phase 4.2  | Complete |
+| P4-02-AC-3  | Phase 4.2  | Complete |
+| P4-02-AC-4  | Phase 4.2  | Complete |
+| P4-02-AC-5  | Phase 4.2  | Complete |
+| P4-02-AC-6  | Phase 4.2  | Complete |
+| P4-02-AC-7  | Phase 4.2  | Complete |
+| P4-02-AC-8  | Phase 4.2  | Complete |
+| P4-02-AC-9  | Phase 4.2  | Complete |
+| P4-04-AC-1  | Phase 4.4  | Complete |
+| P4-04-AC-2  | Phase 4.4  | Complete |
+| P4-04-AC-3  | Phase 4.4  | Complete |
+| P4-04-AC-4  | Phase 4.4  | Complete |
+| P4-04-AC-5  | Phase 4.4  | Complete |
+| P5-07-AC-1  | Phase 5.7  | Complete |
+| P5-07-AC-2  | Phase 5.7  | Complete |
+| P5-07-AC-3  | Phase 5.7  | Complete |
+| P5-07-AC-4  | Phase 5.7  | Complete |
+| P5-07-AC-5  | Phase 5.7  | Complete |
+| P5-07-AC-6  | Phase 5.7  | Complete |
+| P5-07-AC-7  | Phase 5.7  | Complete |
+| P5-07-AC-8  | Phase 5.7  | Complete |
+| P5-08-AC-1  | Phase 5.8  | Complete |
+| P5-08-AC-2  | Phase 5.8  | Complete |
+| P5-08-AC-3  | Phase 5.8  | Complete |
+| P5-08-AC-4  | Phase 5.8  | Complete |
+| P5-08-AC-5  | Phase 5.8  | Complete |
+| P5-08-AC-6  | Phase 5.8  | Complete |
+| P5-08-AC-7  | Phase 5.8  | Complete |
+| P5-08-AC-8  | Phase 5.8  | Complete |
+| P5-11-AC-1  | Phase 5.11 | Complete |
+| P5-11-AC-2  | Phase 5.11 | Complete |
+| P5-11-AC-3  | Phase 5.11 | Complete |
+| P5-11-AC-4  | Phase 5.11 | Complete |
+| P5-11-AC-5  | Phase 5.11 | Complete |
+| P5-11-AC-6  | Phase 5.11 | Complete |
+| P5-11-AC-7  | Phase 5.11 | Complete |
+| P5-11-AC-8  | Phase 5.11 | Complete |
 
 **Coverage:**
 
-- v1 requirements: 46 total
-- Mapped to phases: 46
+- v1 requirements: 54 total
+- Mapped to phases: 54
 - Unmapped: 0
 
 ---
 
 _Requirements defined: 2026-06-30_
-_Last updated: 2026-07-01 after P4-04 verification_
+_Last updated: 2026-07-02 after P5-11 verification_

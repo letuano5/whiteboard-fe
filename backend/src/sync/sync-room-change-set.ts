@@ -88,6 +88,8 @@ function inferChangeSetReason(command: SharedSyncCommand): ChangeSetReason {
       return 'replace_document';
     case 'update-arrow-binding':
       return 'binding_update';
+    case 'reorder-elements':
+      return 'reorder';
     default:
       return 'repair';
   }

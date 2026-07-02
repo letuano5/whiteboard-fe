@@ -1,6 +1,6 @@
 import { useRef, useState, type ChangeEvent } from 'react';
 import { AlertCircle, Download, Loader2, Upload, X } from 'lucide-react';
-import type { Element, NativeFileDocument } from '../types/shared';
+import type { NativeFileDocument } from '../types/shared';
 import { useCameraStore } from '../store/camera.store';
 import { useElementsStore } from '../store/elements.store';
 import { writeLocalScene } from '../sync/local-storage';
@@ -94,8 +94,7 @@ export function NativeFileControls({ mode, roomId, canImport }: NativeFileContro
 
     setIsImporting(true);
     try {
-      await importNativeFileToRoom(roomId, document, 'merge');
-      mergeImportedElements(document.elements);
+      await importNativeFileToRoom(roomId, document, 'replace');
       useCameraStore.getState().setCamera(document.camera);
       setPendingDocument(null);
     } catch (error) {
@@ -109,14 +108,6 @@ export function NativeFileControls({ mode, roomId, canImport }: NativeFileContro
     useElementsStore.getState().setElements(document.elements);
     useCameraStore.getState().setCamera(document.camera);
     writeLocalScene({ elements: document.elements, camera: document.camera });
-  }
-
-  function mergeImportedElements(imported: Element[]) {
-    const byId = new Map(
-      useElementsStore.getState().elements.map((element) => [element.id, element]),
-    );
-    imported.forEach((element) => byId.set(element.id, element));
-    useElementsStore.getState().setElements([...byId.values()]);
   }
 
   return (
@@ -177,7 +168,7 @@ export function NativeFileControls({ mode, roomId, canImport }: NativeFileContro
           <p className="text-sm leading-6 text-[#4c5d52]">
             {mode === 'local'
               ? 'Replace the current local board with this file?'
-              : 'Merge this file into the current saved document?'}
+              : 'Replace the current saved document with this file?'}
           </p>
           <div className="mt-3 grid grid-cols-2 gap-2">
             <button
