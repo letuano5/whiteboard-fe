@@ -25,8 +25,10 @@ project roadmap, phase order, and product scope remain canonical in `docs/SPECS.
 - Repo roadmap ID `P5-09` maps to GSD Phase `5.9`.
 - Repo roadmap ID `P5-10` maps to GSD Phase `5.10`.
 - Repo roadmap ID `P5-11` maps to GSD Phase `5.11`.
+- Repo roadmap ID `P3C-00` maps to GSD Phase `3.30`.
 - The source of truth is `docs/SPECS.md` feature sections.
 
+- [x] **Phase 3.30: P3C-00 Re-render isolation** - Draft point updates are isolated from the main whiteboard and committed shape rendering before SVG ink tools are added.
 - [x] **Phase 4.0: P4-00 Anonymous local board + Login to save** - Anonymous local-only board can be converted into a private saved document after login.
 - [x] **Phase 4.1: P4-01 Workspace + document dashboard** - Authenticated users can list, search, create, open, rename, archive, and delete accessible saved documents.
 - [x] **Phase 4.2: P4-02 Sharing, public/private access, invited users** - Owners can share saved documents by link or invite while the server enforces effective room roles.
@@ -45,6 +47,25 @@ project roadmap, phase order, and product scope remain canonical in `docs/SPECS.
 - [x] **Phase 5.11: P5-11 Frontend reconciliation** - Saved-room frontend mutations use bounded P5 command queues, slot-aware reconciliation, reconnect-safe pending replay, and ephemeral presence/draft preview.
 
 ## Phase Details
+
+### Phase 3.30: P3C-00 Re-render isolation
+
+**Goal**: Isolate point-heavy draft rendering so future freehand/highlighter pointer samples do not re-render `Whiteboard.tsx` or unchanged committed shapes.
+**Depends on**: Phase 3B
+**Source**: `docs/SPECS.md` `[P3C-00]`
+**Canonical refs**: `docs/SPECS.md`, `specs/041-p3c-00-rerender-isolation/acceptance.md`
+**Requirements**: [P3C-00-AC-1, P3C-00-AC-2, P3C-00-AC-3]
+**Success Criteria** (what must be TRUE):
+
+1. `Whiteboard.tsx` no longer subscribes directly to draft element state.
+2. Draft rendering is handled by child SVG-layer components that subscribe to draft slices.
+3. Memoized committed element rendering prevents a draft point update from re-rendering unchanged committed shapes.
+4. Existing move/resize draft hiding and selection overlay behavior remains intact.
+   **Plans**: 1 plan
+
+Plans:
+
+- [x] 03.30-01: Isolate draft subscriptions, memoize committed element rendering, and cover P3C-00 AC tests.
 
 ### Phase 4.0: P4-00 Anonymous local board + Login to save
 

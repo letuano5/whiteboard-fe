@@ -27,7 +27,6 @@ export default function Whiteboard({ mode = 'saved' }: WhiteboardProps) {
   const elements = useElementsStore((s) => s.elements);
   const camera = useCameraStore((s) => s.camera);
   const tool = useInteractionStore((s) => s.tool);
-  const draftElement = useInteractionStore((s) => s.draftElement);
   const editingId = useInteractionStore((s) => s.editingId);
   const selectedIds = useInteractionStore((s) => s.selectedIds);
   const role = useRoomAccessStore((s) => s.effectiveRole);
@@ -79,13 +78,7 @@ export default function Whiteboard({ mode = 'saved' }: WhiteboardProps) {
       >
         <Menu className="h-5 w-5" />
       </button>
-      <SvgLayer
-        elements={elements}
-        camera={camera}
-        draftElement={draftElement}
-        editingId={editingId}
-        {...svgLayerHandlers}
-      />
+      <SvgLayer elements={elements} camera={camera} editingId={editingId} {...svgLayerHandlers} />
       {/* T015: CursorOverlay — sibling div after SvgLayer, pointer-events: none, zIndex: 10 */}
       <CursorOverlay />
       {/* T012: Context menu — rendered above all canvas elements */}

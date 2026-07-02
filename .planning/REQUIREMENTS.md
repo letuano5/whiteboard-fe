@@ -5,6 +5,13 @@
 
 ## v1 Requirements
 
+### P3C SVG Ink Foundation
+
+- [x] **P3C-00-AC-1**: `Whiteboard.tsx` does not subscribe directly to draft point-heavy state.
+- [x] **P3C-00-AC-2**: Updating one point on a draft element does not re-render unchanged
+      committed shapes already on the canvas.
+- [x] **P3C-00-AC-3**: Existing move/resize draft hiding and selection overlay behavior remains intact.
+
 ### Local Board And Save
 
 - [ ] **P4-00-AC-1**: Anonymous users can create and use a local-only board immediately.
@@ -106,6 +113,9 @@
 
 | Requirement | Phase      | Status   |
 | ----------- | ---------- | -------- |
+| P3C-00-AC-1 | Phase 3.30 | Complete |
+| P3C-00-AC-2 | Phase 3.30 | Complete |
+| P3C-00-AC-3 | Phase 3.30 | Complete |
 | P4-00-AC-1  | Phase 4.0  | Complete |
 | P4-00-AC-2  | Phase 4.0  | Complete |
 | P4-00-AC-3  | Phase 4.0  | Complete |
@@ -163,8 +173,8 @@
 
 **Coverage:**
 
-- v1 requirements: 54 total
-- Mapped to phases: 54
+- v1 requirements: 57 total
+- Mapped to phases: 57
 - Unmapped: 0
 
 ---

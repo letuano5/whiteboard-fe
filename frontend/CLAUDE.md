@@ -5,7 +5,7 @@
 
 ## Stack notes
 
-- Rendering is **SVG/DOM-first**; Canvas overlay added only in Phase 3C (freehand/highlighter/eraser). Images render via SVG `<image>` / `<img>`, never Canvas.
+- Rendering is **SVG/DOM-first** for all shapes, including freehand/highlighter/eraser (Phase 3C). Canvas overlay is deferred (see `docs/SPECS.md` §11 note v0.5) — only reconsider if profiling shows a real bottleneck beyond current object-count scale. Images render via SVG `<image>` / `<img>`, never Canvas.
 - State: Zustand — keep committed state (`elements`) separate from transient interaction state.
 - Realtime: Socket.IO. Server state is in-memory (authoritative-light) until Phase 3A.
 - Persistence: localStorage + BroadcastChannel (Phase 1); PostgreSQL + Prisma (Phase 3A+).
@@ -35,7 +35,7 @@ frontend/
 ├── src/
 │   ├── app/                   ← App.tsx, providers
 │   ├── canvas/
-│   │   ├── layers/            ← SvgLayer.tsx, CanvasLayer.tsx (P3C)
+│   │   ├── layers/            ← SvgLayer.tsx, DraftLayer.tsx (P3C, isolated re-render)
 │   │   ├── shapes/            ← ShapeUtil per type + registry index
 │   │   ├── tools/             ← Tool handlers (select, draw, pan…)
 │   │   └── Whiteboard.tsx     ← root canvas component

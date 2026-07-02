@@ -5,7 +5,6 @@ import type { HandleId } from '../../../types/interaction';
 export interface SvgLayerProps {
   elements: Element[];
   camera: Camera;
-  draftElement?: Element | null;
   editingId?: string | null;
   onPointerDown?: (e: React.PointerEvent<SVGSVGElement>) => void;
   onPointerMove?: (e: React.PointerEvent<SVGSVGElement>) => void;

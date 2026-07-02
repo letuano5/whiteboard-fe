@@ -2,7 +2,7 @@
 
 |               |                                                                                            |
 | ------------- | ------------------------------------------------------------------------------------------ |
-| **Phiên bản** | 0.4                                                                                        |
+| **Phiên bản** | 0.5                                                                                        |
 | **Ngày**      | 2026-07-02                                                                                 |
 | **Phạm vi**   | Đồ án web collaborative whiteboard, đồng bộ realtime nhiều người trên một canvas/bản đồ số |
 
@@ -11,6 +11,8 @@
 > **Ghi chú v0.3:** bổ sung Phase 4 cho workspace/document management, sharing/public/private access, admission control, import/export, version history/rollback; đẩy các phần sync polish/advanced canvas/refactor xuống các phase sau.
 >
 > **Ghi chú v0.4:** Phase 5 được thay bằng một refactor sync/import/export thống nhất: đập bỏ các đường sync cũ phân mảnh (`ELEMENT_UPDATE`, whole-element LWW, DB write/import/restore bypass), đưa toàn bộ write document vào module backend `SyncRoom` server-authoritative với `SyncCommand`, `SlotPatch`, `CommittedChangeSet`, `documentClock`, `roomEpoch`, idempotency và persistence transaction. Bỏ các sub-phase ack/rebase lẻ tẻ và section refactor future cũ.
+>
+> **Ghi chú v0.5:** Phase 3C đổi từ "Canvas overlay riêng cho ink" sang **SVG-only** cho freehand/highlighter/eraser — đối chiếu kiến trúc tldraw (SVG/DOM cho mọi shape, chỉ overlay tương tác tạm thời mới dùng canvas) cho thấy canvas không bắt buộc ở quy mô "vài chục–trăm object" của đồ án, miễn áp dụng point-simplification + point-cap + re-render isolation. Canvas overlay bị hoãn (không xoá), chỉ cân nhắc lại nếu đo được nghẽn thật hoặc cần blend/composite pixel chính xác cho highlighter.
 >
 > **Các sub-phase (P1A, P1B, P2.5, P3A…) là thứ tự triển khai (thứ tự tấn công), KHÔNG phải các milestone chấm điểm riêng.**
 
@@ -25,8 +27,8 @@
 | Tầng                    | Lựa chọn                                                                                                                                             |
 | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Frontend                | React + TypeScript + Vite                                                                                                                            |
-| Render (P1–P2.5)        | **SVG/DOM-first** — mỗi shape là một node trong layer transform theo camera. **Image cũng render bằng SVG `<image>`/DOM `<img>`, không cần Canvas.** |
-| Render (P3C+)           | Bổ sung **một lớp Canvas overlay** chỉ cho freehand/highlighter/eraser (point-heavy/ink)                                                             |
+| Render (P1–P3C)         | **SVG/DOM-first** cho mọi shape, kể cả freehand/highlighter/eraser (P3C) — mỗi shape là một node trong layer transform theo camera. **Image cũng render bằng SVG `<image>`/DOM `<img>`, không cần Canvas.** |
+| Render (Canvas overlay) | **Hoãn** — xem ghi chú v0.5 và mục 11 (Phase 3C). Chỉ cân nhắc lại nếu đo được nghẽn thật ở scale lớn hơn hiện tại.                                  |
 | State client            | Zustand — tách rõ `elements` (committed) và `interaction` (transient)                                                                                |
 | Shared types            | `packages/shared/src/index.ts` — single source of truth, import qua `@vdt/shared` workspace link                                                     |
 | Transport realtime      | Socket.IO client                                                                                                                                     |
@@ -65,7 +67,7 @@ type ElementType =
   | 'arrow' // P2
   | 'image' // P2.5 (render SVG/DOM, KHÔNG cần Canvas)
   | 'freehand'
-  | 'highlighter' // P3C (Canvas overlay)
+  | 'highlighter' // P3C (SVG, point-heavy — xem mục 11)
   | 'frame'
   | 'sticky'
   | 'embed'; // future polish
@@ -671,25 +673,51 @@ Clone Repo chính thức tại: https://github.com/supabase/supabase/tree/master
 
 ---
 
-## 11. Phase 3C — Canvas overlay (ink)
+## 11. Phase 3C — SVG ink (freehand/highlighter/eraser)
 
-**Chủ đề:** thêm một lớp Canvas (DPR + `ctx.setTransform`) chỉ cho các loại point-heavy.
+**Chủ đề:** thêm các loại point-heavy (freehand, highlighter, eraser) vào layer SVG hiện có —
+**không** dùng Canvas riêng (xem ghi chú v0.5). Freehand/highlighter dùng chung camera transform,
+mutation pipeline, và hit-test hình học đã có của select-tool; không mở thêm render engine thứ hai.
 
-### [P3C-01] Canvas layer
+> **Canvas overlay hoãn xuống cuối**, không xoá khỏi roadmap. Chỉ mở lại nếu sau này đo được nghẽn
+> thật (số nét tích lũy rất lớn) hoặc cần blend/composite pixel chính xác cho highlighter
+> (multiply-style buildup khi vẽ đè lên chính nét đó) — cả hai đều chưa phải nhu cầu ở quy mô đồ án.
 
-- [ ] Canvas full-viewport, `ctx.setTransform(zoom,0,0,zoom,x,y)`, nhân `devicePixelRatio` để nét; dùng chung camera.
+### [P3C-00] Re-render isolation (tiền đề bắt buộc)
+
+- [ ] `Whiteboard.tsx` không được subscribe trực tiếp state draft point-heavy; tách một layer con
+  (vd. `DraftLayer`) subscribe đúng slice draft đó, để cập nhật draft không re-render `Whiteboard`.
+- [ ] `ElementLayer` và từng shape component được memoize (`React.memo` hoặc selector scoped theo
+  id) để một draft update không kéo theo re-render toàn bộ danh sách element đã commit.
+- [ ] Có test/kiểm chứng: cập nhật 1 điểm của draft không re-render các shape khác đang có trên
+  canvas (lý do: `Whiteboard.tsx` hiện đọc thẳng `draftElement` và không component nào trong cây
+  render dùng `React.memo`, nên mọi draft update đang re-render toàn bộ danh sách — phải sửa trước
+  khi thêm freehand, nếu không sẽ lag bất kể chọn canvas hay SVG).
+
+### [P3C-01] SVG ink layer
+
+- [ ] Freehand/highlighter render trong cùng layer SVG hiện có (không phải Canvas/`ctx.setTransform`
+  riêng); dùng chung `screenToWorld`/`worldToScreen` như mọi shape khác.
 
 ### [P3C-02] Freehand
 
-- [ ] Vẽ nét tự do, lưu `props.points`; move/delete như element khác.
+- [ ] Vẽ nét tự do, lưu `props.points`; move/delete như element khác qua chung mutation pipeline.
+- [ ] Simplify điểm trước khi build path (kiểu `perfect-freehand`/Douglas-Peucker) thay vì vẽ 1:1
+  theo từng raw pointer sample — path SVG là outline đã smooth, không phải polyline khổng lồ.
+- [ ] Giới hạn trần số điểm/shape (constant, tham khảo tldraw ~600); vượt trần thì auto-commit shape
+  hiện tại và bắt đầu shape mới, để chặn trần độ phức tạp path.
 
 ### [P3C-03] Highlighter
 
-- [ ] Nét bán trong suốt, dày hơn freehand.
+- [ ] Nét bán trong suốt, dày hơn freehand; dùng chung SVG ink layer/pipeline với freehand (không
+  phải cơ chế render riêng). Opacity cố định thấp là đủ cho MVP — không cần blend-mode/`<filter>`.
 
 ### [P3C-04] Eraser
 
 - [ ] Rê qua shape → `isDeleted = true`; đồng bộ.
+- [ ] Hit-test bằng line-segment sweep (đoạn di chuyển giữa 2 pointermove) so với geometry/hit-test
+  đã có của từng shape — dùng lại hit-test hiện có ở select-tool, không viết hệ hit-test mới.
+- [ ] Xóa nguyên shape khi trúng (không cắt một nét thành nhiều đoạn) — giữ đơn giản cho MVP.
 
 ---
 

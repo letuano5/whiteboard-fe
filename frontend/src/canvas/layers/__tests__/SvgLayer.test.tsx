@@ -1,7 +1,8 @@
-import { fireEvent, render } from '@testing-library/react';
+import { act, fireEvent, render } from '@testing-library/react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import SvgLayer from '../SvgLayer';
 import { useInteractionStore } from '../../../store/interaction.store';
+import { rectangleShapeUtil } from '../../shapes/rectangle';
 import type { Camera, Element } from '../../../types/shared';
 
 const camera: Camera = { x: 0, y: 0, zoom: 1 };
@@ -97,12 +98,14 @@ describe('SvgLayer — SelectionOverlay', () => {
   });
 
   // @covers AC-19 (002-move-resize-delete)
+  // @covers AC-3
   it('keeps the selection overlay attached to draft bounds during resize', () => {
     const el = makeElement({ id: 'el-1' });
     const draft = { ...el, x: -20, y: -30, width: 30, height: 40 };
     useInteractionStore.getState().setSelectedIds([el.id]);
+    useInteractionStore.getState().setDraftElement(draft);
 
-    const { container } = render(<SvgLayer elements={[el]} camera={camera} draftElement={draft} />);
+    const { container } = render(<SvgLayer elements={[el]} camera={camera} />);
 
     const overlay = container.querySelector('rect[stroke="#3b82f6"]');
     const activeCorner = container.querySelector('circle[data-handle="nw"]');
@@ -118,8 +121,9 @@ describe('SvgLayer — SelectionOverlay', () => {
     const el = makeElement({ id: 'el-1', x: 10, y: 10 });
     const draft = { ...el, x: 80, y: 60 };
     useInteractionStore.getState().setSelectedIds([el.id]);
+    useInteractionStore.getState().setDraftElement(draft);
 
-    const { container } = render(<SvgLayer elements={[el]} camera={camera} draftElement={draft} />);
+    const { container } = render(<SvgLayer elements={[el]} camera={camera} />);
 
     const shapeRects = Array.from(container.querySelectorAll('rect')).filter(
       (rect) => rect.getAttribute('stroke') !== '#3b82f6',
@@ -148,8 +152,9 @@ describe('SvgLayer — SelectionOverlay', () => {
   it('still renders a new draft whose id is not in the committed element list', () => {
     const el = makeElement({ id: 'el-1' });
     const draft = makeElement({ id: '__draft__', x: 200, y: 150 });
+    useInteractionStore.getState().setDraftElement(draft);
 
-    const { container } = render(<SvgLayer elements={[el]} camera={camera} draftElement={draft} />);
+    const { container } = render(<SvgLayer elements={[el]} camera={camera} />);
 
     const shapeRects = Array.from(container.querySelectorAll('rect')).filter(
       (rect) => rect.getAttribute('stroke') !== '#3b82f6',
@@ -158,6 +163,48 @@ describe('SvgLayer — SelectionOverlay', () => {
     expect(
       shapeRects.find((rect) => rect.getAttribute('x') === '200')?.parentElement,
     ).toHaveAttribute('opacity', '0.6');
+  });
+});
+
+describe('SvgLayer — P3C-00 render isolation', () => {
+  // @covers AC-2
+  it('does not re-render unchanged committed shapes when a draft point changes', () => {
+    const committed = makeElement({ id: 'committed-rect', type: 'rectangle' });
+    const draft = makeElement({
+      id: '__draft-line__',
+      type: 'line',
+      props: {
+        ...committed.props,
+        points: [
+          [0, 0],
+          [10, 10],
+        ],
+      },
+    });
+    const renderSpy = vi.spyOn(rectangleShapeUtil, 'render');
+
+    render(<SvgLayer elements={[committed]} camera={camera} />);
+
+    expect(renderSpy).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      useInteractionStore.getState().setDraftElement(draft);
+    });
+    act(() => {
+      useInteractionStore.getState().setDraftElement({
+        ...draft,
+        props: {
+          ...draft.props,
+          points: [
+            [0, 0],
+            [10, 10],
+            [20, 20],
+          ],
+        },
+      });
+    });
+
+    expect(renderSpy).toHaveBeenCalledTimes(1);
   });
 });
 

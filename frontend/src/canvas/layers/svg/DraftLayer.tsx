@@ -1,18 +1,18 @@
 import type React from 'react';
 import type { Element } from '../../../types/shared';
+import { useInteractionStore } from '../../../store/interaction.store';
 import { getShapeUtil } from '../../shapes';
 
 interface DraftLayerProps {
-  draftElement?: Element | null;
-  draftElements: Element[];
-  isEditingExistingElement: boolean;
+  elements: Element[];
 }
 
-export default function DraftLayer({
-  draftElement,
-  draftElements,
-  isEditingExistingElement,
-}: DraftLayerProps) {
+export default function DraftLayer({ elements }: DraftLayerProps) {
+  const draftElement = useInteractionStore((s) => s.draftElement);
+  const draftElements = useInteractionStore((s) => s.draftElements);
+  const draftElementId = draftElement?.id ?? null;
+  const isEditingExistingElement = elements.some((el) => el.id === draftElementId);
+
   return (
     <>
       {draftElement && (
