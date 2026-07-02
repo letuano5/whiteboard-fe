@@ -1,5 +1,6 @@
 import type {
   CommittedChangeSet,
+  PendingRequestStatus,
   RoomDiff,
   RoomReplacedPayload,
   RoomSnapshot,
@@ -11,6 +12,7 @@ import type {
 import { WS_EVENTS } from '../../types/shared';
 import { useElementsStore } from '../../store/elements.store';
 import { applyChangeSetToElements, applySlotPatch, slotValueFromElement } from './p5-change-set';
+import { clearPendingQueue } from './pending-queue';
 import {
   applyKnownSlotClocks,
   consumeStaleAckRequest,
@@ -99,11 +101,15 @@ export function applyRoomSnapshot(snapshot: RoomSnapshot): void {
   hydrateKnownSlotClocks(snapshot.slotClocks);
   setRoomEpoch(snapshot.roomEpoch);
   setLastServerClock(snapshot.serverClock);
+  if (snapshot.pendingRequests) {
+    reconcilePendingRequests(snapshot.pendingRequests);
+  }
 }
 
 export function applyRoomReplaced(payload: RoomReplacedPayload): void {
   const state = getSocketState();
   markPendingRequestsStale();
+  clearPendingQueue();
   state.bufferedSyncEvents = [];
   useElementsStore.getState().setElements(payload.elements);
   hydrateKnownSlotClocks(payload.slotClocks);
@@ -152,6 +158,9 @@ export function applyRoomDiff(diff: RoomDiff): void {
   applyKnownSlotClocks(diff.slotClocks);
   setRoomEpoch(diff.roomEpoch);
   setLastServerClock(diff.serverClock);
+  if (diff.pendingRequests) {
+    reconcilePendingRequests(diff.pendingRequests);
+  }
 }
 
 function clearPendingRequest(requestId: string): void {
@@ -166,7 +175,10 @@ function applyIncomingChangeSet(
   options: ReconciliationOptions,
 ): P5ReconciliationResult {
   const state = getSocketState();
-  if (changeSet.serverClock <= state.lastServerClock) {
+  if (
+    changeSet.serverClock <= state.lastServerClock ||
+    changeSet.roomEpoch < state.roomEpoch
+  ) {
     return { status: 'ignored-stale', serverClock: changeSet.serverClock };
   }
 
@@ -219,4 +231,20 @@ function groupSlotClocks(slotClocks: SlotClockUpdate[]): Map<string, SlotClockUp
     grouped.set(slotClock.elementId, [...(grouped.get(slotClock.elementId) ?? []), slotClock]);
   }
   return grouped;
+}
+
+function reconcilePendingRequests(pendingRequests: PendingRequestStatus[]): void {
+  const state = getSocketState();
+  for (const status of pendingRequests) {
+    if (status.status === 'processed') {
+      state.pendingSyncRequests = state.pendingSyncRequests.filter(
+        (r) => r.requestId !== status.requestId,
+      );
+    } else if (status.status === 'conflict' || status.status === 'expired') {
+      state.pendingSyncRequests = state.pendingSyncRequests.filter(
+        (r) => r.requestId !== status.requestId,
+      );
+      state.staleAckRequestIds.add(status.requestId);
+    }
+  }
 }

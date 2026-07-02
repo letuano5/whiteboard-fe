@@ -1,7 +1,9 @@
 import type { Request, Response, Router } from 'express';
 import express from 'express';
+import type { Server } from 'socket.io';
 import type { PrismaClient } from '@prisma/client';
 import {
+  WS_EVENTS,
   isNativeFileDocument,
   type NativeFileDocument,
   type NativeFileImportMode,
@@ -13,13 +15,15 @@ import {
   type AppUserRepository,
   type AuthenticatedRequest,
 } from '../auth/index.js';
-import { executeSyncCommand } from '../sync/index.js';
+import { executeSyncCommand, type SyncRoom } from '../sync/index.js';
 import { canMutateRoom, resolveRoomAccess, RoomAccessError } from './room-roles.js';
 
 interface NativeFileImportDeps {
   authVerifier: AuthVerifier;
   appUserRepository: AppUserRepository;
   db: PrismaClient;
+  ioServer?: Server;
+  syncRooms?: Map<string, SyncRoom>;
 }
 
 interface NativeFileImportPayload {
@@ -100,6 +104,7 @@ async function executeNativeFileReplace(
   roomId: string,
   user: AppUser,
   document: NativeFileDocument,
+  opts: { ioServer?: Server; syncRooms?: Map<string, SyncRoom> } = {},
 ): Promise<NativeFileImportResponse> {
   const result = await executeSyncCommand(
     {
@@ -112,6 +117,11 @@ async function executeNativeFileReplace(
       db,
     },
   );
+
+  opts.syncRooms?.delete(roomId);
+  if (opts.ioServer) {
+    opts.ioServer.to(roomId).emit(WS_EVENTS.ROOM_REPLACED, result.replacePayload);
+  }
 
   return {
     importedElementCount: result.importedElementCount,
@@ -162,7 +172,12 @@ async function handleNativeFileImport(
   }
 
   try {
-    response.json(await executeNativeFileReplace(deps.db, roomId, user, payload.document));
+    response.json(
+      await executeNativeFileReplace(deps.db, roomId, user, payload.document, {
+        ioServer: deps.ioServer,
+        syncRooms: deps.syncRooms,
+      }),
+    );
   } catch (error) {
     sendKnownImportError(response, error);
   }

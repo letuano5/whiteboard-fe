@@ -111,8 +111,14 @@ describe('handleSyncCommand', () => {
     const peerEmit = vi.fn();
     const socket = makeSocket(emit, peerEmit);
     const deps = makeDeps(markDirty);
-    deps.roomElements.set('room-1', new Map([['old-shape', makeElement({ id: 'old-shape' })]]));
-    deps.roomClocks.set('room-1', 4);
+    deps.syncRooms.set(
+      'room-1',
+      new SyncRoom({
+        roomId: 'room-1',
+        elements: [makeElement({ id: 'old-shape' })],
+        documentClock: 4,
+      }),
+    );
     const replacement = makeElement({ id: 'replacement-shape', zIndex: 2 });
 
     await handleSyncCommand(socket, deps, createReplaceCommand('replace-1', [replacement]));
@@ -232,8 +238,37 @@ function makeDeps(markDirty: (roomId: string) => void): ResolvedWhiteboardServer
       markDirty,
       flushRoomNow: vi.fn(),
     },
-    db: {} as PrismaClient,
+    db: makeTestDb(),
   };
+}
+
+function makeTestDb(): PrismaClient {
+  const txMock = {
+    $executeRawUnsafe: vi.fn().mockResolvedValue(undefined),
+    room: {
+      updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+      findUnique: vi.fn().mockResolvedValue(null),
+    },
+    record: {
+      upsert: vi.fn().mockResolvedValue({}),
+      deleteMany: vi.fn().mockResolvedValue({}),
+    },
+    tombstone: {
+      upsert: vi.fn().mockResolvedValue({}),
+      deleteMany: vi.fn().mockResolvedValue({}),
+    },
+    processedRequest: {
+      findUnique: vi.fn().mockResolvedValue(null),
+      create: vi.fn().mockResolvedValue({}),
+    },
+  };
+  return {
+    room: { findUnique: vi.fn().mockResolvedValue(null) },
+    processedRequest: { findUnique: vi.fn().mockResolvedValue(null) },
+    $transaction: vi.fn().mockImplementation(async (fn: (tx: typeof txMock) => Promise<unknown>) =>
+      fn(txMock),
+    ),
+  } as unknown as PrismaClient;
 }
 
 function makeSocket(emit: ReturnType<typeof vi.fn>, peerEmit: ReturnType<typeof vi.fn>): Socket {

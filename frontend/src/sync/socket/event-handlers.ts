@@ -8,7 +8,6 @@ import type {
 } from '../../types/shared';
 import { useAuthStore } from '../../auth/auth.store';
 import { useCameraStore } from '../../store/camera.store';
-import { useElementsStore } from '../../store/elements.store';
 import { useInteractionStore } from '../../store/interaction.store';
 import { useRoomAccessStore } from '../../rooms/room-access.store';
 import { applyRemoteElements } from '../apply-remote';
@@ -23,7 +22,7 @@ import {
   processSyncBroadcast,
   replayBufferedSyncEvents,
 } from './p5-reconciliation';
-import { getSocketState, setLastServerClock } from './state';
+import { getSocketState, markPendingRequestsStale, setLastServerClock } from './state';
 import type {
   CursorMovePayload,
   ElementUpdatePayload,
@@ -60,9 +59,9 @@ export function registerSocketEventHandlers(): void {
 
   state.socket.on(WS_EVENTS.ROOM_SNAPSHOT, (data: RoomSnapshotPayload) => {
     const current = getSocketState();
-    if (data.protocolVersion === undefined) applyRemoteElements(data.elements);
     applyRoomSnapshot(normalizeSnapshotPayload(data));
     if (current.reconnectPending) {
+      markPendingRequestsStale();
       clearPendingQueue();
       current.reconnectPending = false;
     }
@@ -71,10 +70,6 @@ export function registerSocketEventHandlers(): void {
 
   state.socket.on(WS_EVENTS.ROOM_DIFF, (data: RoomDiffPayload) => {
     const current = getSocketState();
-    if (data.protocolVersion === undefined) {
-      applyRemoteElements(data.changed);
-      useElementsStore.getState().removeElements(data.deleted.map((d) => d.id));
-    }
     applyRoomDiff(normalizeDiffPayload(data));
     current.reconnectPending = false;
     replayBufferedSyncEvents({ localActorId: getLocalActorId() });

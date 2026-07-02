@@ -205,7 +205,7 @@ function planDeleteElements(
 
   const repairs = createDeleteBindingRepairs(context, new Set(deleted));
   return {
-    reason: (repairs.patched?.length ?? 0) > 0 ? 'repair' : 'delete',
+    reason: 'delete',
     deleted,
     patched: repairs.patched,
     slotClocks: repairs.slotClocks,
@@ -224,6 +224,16 @@ function planUpdateArrowBinding(
     getBindingTarget(context, command.binding.elementId);
   }
 
+  const bindingSlot = command.terminal === 'start' ? 'binding.start' : 'binding.end';
+  const currentBindingClock = currentSlotClock(context, command.arrowId, bindingSlot);
+  const currentGeometryClock = Math.max(
+    currentSlotClock(context, command.arrowId, 'geometry.startPoint'),
+    currentSlotClock(context, command.arrowId, 'geometry.endPoint'),
+  );
+  const hasLwwConflict =
+    command.baseBindingClock < currentBindingClock ||
+    command.baseGeometryClock < currentGeometryClock;
+
   const patched = repairArrow({
     context,
     arrow,
@@ -233,7 +243,7 @@ function planUpdateArrowBinding(
   });
 
   return {
-    reason: 'binding_update',
+    reason: hasLwwConflict ? 'patch_lww_conflict' : 'binding_update',
     patched: [patched],
     slotClocks: toSlotClocks(patched.patches, context.serverClock),
   };
@@ -318,7 +328,8 @@ function createBoundArrowRepairs({
   const patched: NonNullable<SyncRoomPlan['patched']> = [];
   for (const arrow of context.state.elements.values()) {
     if (arrow.type !== 'arrow') continue;
-    if (existingPatched.has(arrow.id)) continue;
+    const existingEntry = existingPatched.get(arrow.id);
+    if (existingEntry && hasGeometryOrBindingPatch(existingEntry.patches)) continue;
     const startTargetId = readBinding(arrow.props.startBinding)?.elementId;
     const endTargetId = readBinding(arrow.props.endBinding)?.elementId;
     if (
@@ -511,6 +522,16 @@ function toSlotClocksFromPatched(patched: NonNullable<SyncRoomPlan['patched']>, 
 
 function toSlotClocks(patches: readonly SlotPatch[], clock: number) {
   return patches.map((patch) => ({ elementId: patch.elementId, slot: patch.slot, clock }));
+}
+
+function hasGeometryOrBindingPatch(patches: readonly SlotPatch[]): boolean {
+  return patches.some(
+    (p) =>
+      p.slot.startsWith('geometry.') ||
+      p.slot.startsWith('transform.') ||
+      p.slot === 'binding.start' ||
+      p.slot === 'binding.end',
+  );
 }
 
 function assertRepairCountWithinLimit(patched: NonNullable<SyncRoomPlan['patched']>): void {

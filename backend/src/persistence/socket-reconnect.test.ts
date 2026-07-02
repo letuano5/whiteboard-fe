@@ -42,10 +42,12 @@ function makeDiffMockDb(opts: {
   documentClock: number;
   /** For tombstone.aggregate: MIN(deletedClock). null = no tombstones. */
   minDeletedClock: bigint | null;
-  /** Records returned by record.findMany (changed since lastServerClock) */
+  /** Records returned by record.findMany (changed since lastServerClock, diff path) */
   changedRecords?: Array<{ state: unknown; recordClock: bigint }>;
   /** Tombstones returned by tombstone.findMany (deleted since lastServerClock) */
   deletedTombstones?: Array<{ recordId: string }>;
+  /** All active DB records returned in wipe-all path (record.findMany without clock filter) */
+  allRecords?: Array<{ recordId: string; state: unknown; recordClock: bigint; slotClocks: unknown }>;
 }) {
   const clock = BigInt(opts.documentClock);
 
@@ -56,7 +58,16 @@ function makeDiffMockDb(opts: {
     _min: { deletedClock: opts.minDeletedClock },
   });
 
-  const recordFindMany = vi.fn().mockResolvedValue(opts.changedRecords ?? []);
+  // Distinguish wipe-all query (no recordClock filter) from diff query (has recordClock filter).
+  const recordFindMany = vi
+    .fn()
+    .mockImplementation((args: { where: Record<string, unknown> }) =>
+      Promise.resolve(
+        'recordClock' in args.where
+          ? (opts.changedRecords ?? [])
+          : (opts.allRecords ?? opts.changedRecords ?? []),
+      ),
+    );
 
   const tombstoneFindMany = vi.fn().mockResolvedValue(opts.deletedTombstones ?? []);
 
@@ -313,6 +324,10 @@ describe('AC-8: wipe-all returned when tombstone history is insufficient', () =>
       minDeletedClock: 10n, // lastServerClock=3 < 10 → wipe-all
       changedRecords: [],
       deletedTombstones: [],
+      allRecords: [
+        { recordId: 'wipe-el-1', state: el1, recordClock: 20n, slotClocks: {} },
+        { recordId: 'wipe-el-2', state: el2, recordClock: 20n, slotClocks: {} },
+      ],
     });
 
     const { ioServer, makeSocket, connect, getHandler } = makeFakeIo();

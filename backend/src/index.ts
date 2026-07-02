@@ -6,12 +6,14 @@ import { prisma } from './persistence/prisma.js';
 import { saveRoomElements } from './persistence/room-repository.js';
 import { createRoomState } from './realtime/room-state.js';
 import { createWhiteboardServer } from './realtime/whiteboard-server.js';
+import type { SyncRoom } from './sync/index.js';
 
 const PORT = process.env.PORT ?? 3001;
 
 const roomState = createRoomState();
 const authDeps = createRuntimeAuthDeps(prisma);
-const { httpServer, io } = createAppServer({ ...authDeps, db: prisma });
+const syncRooms = new Map<string, SyncRoom>();
+const { httpServer, io } = createAppServer({ ...authDeps, db: prisma, syncRooms });
 
 const autosave = createAutosaveManager({
   getRoomElements: (roomId) => {
@@ -23,6 +25,6 @@ const autosave = createAutosaveManager({
     saveRoomElements(prisma, roomId, elements, targetDocumentClock),
 });
 
-createWhiteboardServer(io, { ...roomState, autosave, ...authDeps });
+createWhiteboardServer(io, { ...roomState, autosave, ...authDeps, syncRooms });
 
 httpServer.listen(PORT, () => console.log(`Server running on :${PORT}`));

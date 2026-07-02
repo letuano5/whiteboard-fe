@@ -375,9 +375,7 @@ describe('socket-client — AC-5 (cursor removed when peer leaves)', () => {
 
 describe('socket-client — ROOM_SNAPSHOT replaces elements on join', () => {
   it('ROOM_SNAPSHOT event calls setElements with received elements (legacy check via store)', async () => {
-    const applyModule = await import('../apply-remote');
-    const spy = vi.spyOn(applyModule, 'applyRemoteElements');
-
+    const { useElementsStore: elStore } = await import('../../store/elements.store');
     const { initSocketClient } = await import('../socket-client');
     initSocketClient('room-abc');
 
@@ -411,8 +409,7 @@ describe('socket-client — ROOM_SNAPSHOT replaces elements on join', () => {
     };
 
     snapshotHandler({ elements: [el], documentClock: 0 });
-    expect(spy).toHaveBeenCalledWith([el]);
-    spy.mockRestore();
+    expect(elStore.getState().elements).toEqual([el]);
   });
 });
 
@@ -421,9 +418,7 @@ describe('socket-client — ROOM_SNAPSHOT replaces elements on join', () => {
 describe('socket-client — P3A-02/AC-4 (T013) ROOM_SNAPSHOT with non-empty elements', () => {
   // @covers AC-4
   it('calls applyRemoteElements with received elements and sets lastServerClock', async () => {
-    const applyModule = await import('../apply-remote');
-    const spy = vi.spyOn(applyModule, 'applyRemoteElements');
-
+    const { useElementsStore: elStore } = await import('../../store/elements.store');
     const { initSocketClient, getLastServerClock } = await import('../socket-client');
     initSocketClient('room-abc');
 
@@ -458,20 +453,15 @@ describe('socket-client — P3A-02/AC-4 (T013) ROOM_SNAPSHOT with non-empty elem
 
     snapshotHandler({ elements: [el], documentClock: 5 });
 
-    expect(spy).toHaveBeenCalledWith([el]);
+    expect(elStore.getState().elements).toEqual([el]);
     expect(getLastServerClock()).toBe(5);
-    spy.mockRestore();
   });
 });
 
 describe('socket-client — P3A-02/AC-5 (T014) ROOM_SNAPSHOT with empty elements', () => {
   // @covers AC-5
   it('does not modify elements store and sets lastServerClock to 0 for empty snapshot', async () => {
-    const applyModule = await import('../apply-remote');
-    const spy = vi.spyOn(applyModule, 'applyRemoteElements');
-
     const { useElementsStore: elStore } = await import('../../store/elements.store');
-    // Seed the store with an existing element to verify it is NOT cleared
     elStore.setState({ elements: [] });
 
     const { initSocketClient, getLastServerClock } = await import('../socket-client');
@@ -482,13 +472,8 @@ describe('socket-client — P3A-02/AC-5 (T014) ROOM_SNAPSHOT with empty elements
 
     snapshotHandler({ elements: [], documentClock: 0 });
 
-    // applyRemoteElements called with empty array (it handles the no-op internally)
-    expect(spy).toHaveBeenCalledWith([]);
-    // lastServerClock set to 0
     expect(getLastServerClock()).toBe(0);
-    // Store should remain empty (applyRemoteElements no-ops on empty array)
     expect(elStore.getState().elements).toHaveLength(0);
-    spy.mockRestore();
   });
 });
 
@@ -997,10 +982,8 @@ function changeSet(
 
 describe('socket-client — P3A-03/AC-3 (T008) ROOM_DIFF calls applyRemoteElements with changed', () => {
   // @covers AC-3
-  it('ROOM_DIFF received → applyRemoteElements called with changed elements', async () => {
-    const applyModule = await import('../apply-remote');
-    const spy = vi.spyOn(applyModule, 'applyRemoteElements');
-
+  it('ROOM_DIFF received → changed elements are applied to the store', async () => {
+    const { useElementsStore: elStore } = await import('../../store/elements.store');
     const { initSocketClient } = await import('../socket-client');
     initSocketClient('room-abc');
 
@@ -1009,8 +992,7 @@ describe('socket-client — P3A-03/AC-3 (T008) ROOM_DIFF calls applyRemoteElemen
     expect(diffHandler).toBeDefined();
     diffHandler({ changed: [changedEl], deleted: [], documentClock: 10 });
 
-    expect(spy).toHaveBeenCalledWith([changedEl]);
-    spy.mockRestore();
+    expect(elStore.getState().elements).toEqual([changedEl]);
   });
 });
 

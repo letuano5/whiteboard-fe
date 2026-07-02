@@ -114,6 +114,7 @@ export function consumeStaleAckRequest(requestId: string): boolean {
 }
 
 export function resetReconnectState(): void {
+  state.lastServerClock = 0;
   state.pendingQueue = [];
   state.pendingSyncRequests = [];
   state.staleAckRequestIds = new Set();

@@ -78,8 +78,10 @@ export async function getRoomDiff(
   });
 
   if (lastServerClock < roomEpoch || lastServerClock < tombstoneHistoryStartsAtClock) {
-    const activeElements = inMemoryElements.filter((element) => !element.isDeleted);
     const allRecords = await db.record.findMany({ where: { roomId } });
+    const activeElements = allRecords
+      .map((record) => record.state as unknown as Element)
+      .filter((element) => !element.isDeleted);
     const wipeSlotClocks = extractSlotClocks(allRecords, 0);
     return {
       mode: 'wipe',

@@ -788,7 +788,7 @@ describe('getRoomDiff — P3A-03', () => {
         documentClock: 12n,
         changedRecords: [],
         deletedTombstones: [],
-        allRecords: [],
+        allRecords: [{ recordId: 'active-1', state: el1, recordClock: 12n, slotClocks: {} }],
       });
 
       const result = await getRoomDiff(db, ROOM_ID, 5, [el1, elDeleted]);
