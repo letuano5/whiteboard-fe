@@ -171,4 +171,47 @@ describe('P5-02 shared sync invariants', () => {
       }),
     ).toEqual({ ok: true });
   });
+
+  it('validates P5-06 transient delivery hints for non-resendable intermediate patches', () => {
+    const transientPatch = {
+      ...envelope,
+      kind: 'patch-slots',
+      persistence: {
+        transient: true,
+        resendable: false,
+        storeProcessedRequest: false,
+        durability: 'relaxed',
+      },
+      patches: [
+        {
+          elementId: 'el-1',
+          slot: 'transform.position',
+          baseClock: 1,
+          changes: { x: 12, y: 24 },
+        },
+      ],
+    };
+
+    expect(validateSyncCommand(transientPatch)).toEqual({ ok: true });
+    expect(
+      validateSyncCommand({
+        ...transientPatch,
+        persistence: { ...transientPatch.persistence, resendable: true },
+      }),
+    ).toMatchObject({ ok: false });
+    expect(
+      validateSyncCommand({
+        ...envelope,
+        kind: 'delete-elements',
+        persistence: { transient: true, resendable: false, storeProcessedRequest: false },
+        elementIds: ['el-1'],
+      }),
+    ).toMatchObject({ ok: false });
+    expect(
+      validateSyncCommand({
+        ...transientPatch,
+        persistence: { resendable: true, storeProcessedRequest: false },
+      }),
+    ).toMatchObject({ ok: false });
+  });
 });

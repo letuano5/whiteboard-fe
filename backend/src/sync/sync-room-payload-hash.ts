@@ -6,6 +6,23 @@ export function toPayloadHash(value: unknown): string {
   return JSON.stringify(toCanonicalValue(value));
 }
 
+export function toCommandPayloadHash(value: unknown): string {
+  return toPayloadHash(stripClientOnlyCommandMetadata(value));
+}
+
+function stripClientOnlyCommandMetadata(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(stripClientOnlyCommandMetadata);
+  if (value === null || typeof value !== 'object') return value;
+
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([key]) => !CLIENT_ONLY_COMMAND_KEYS.has(key))
+      .map(([key, entryValue]) => [key, stripClientOnlyCommandMetadata(entryValue)]),
+  );
+}
+
+const CLIENT_ONLY_COMMAND_KEYS = new Set(['actorId', 'debug', 'persistence', 'transient']);
+
 function toCanonicalValue(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(toCanonicalValue);
   if (value === null || typeof value !== 'object') return value;

@@ -10,6 +10,8 @@ import {
 } from '@vdt/shared';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { makeElement } from '../../test/element-fixtures.js';
+import { SyncRoom, SyncRoomPersistenceError } from '../../sync/index.js';
+import type { SyncRoomPersistence } from '../../sync/index.js';
 import type { ResolvedWhiteboardServerDeps } from '../types.js';
 import { handleSyncCommand } from './sync-command.js';
 
@@ -56,6 +58,7 @@ describe('handleSyncCommand', () => {
   });
 
   it('replays the ACK on a duplicate request without re-broadcasting or re-marking dirty', async () => {
+    // @covers AC-3
     const emit = vi.fn();
     const peerEmit = vi.fn();
     const socket = makeSocket(emit, peerEmit);
@@ -96,6 +99,53 @@ describe('handleSyncCommand', () => {
     expect(markDirty).not.toHaveBeenCalled();
     expect(deps.roomElements.get('room-1')).toBeUndefined();
   });
+
+  it('does not ACK or broadcast when persistence fails before commit', async () => {
+    // @covers AC-6
+    const emit = vi.fn();
+    const peerEmit = vi.fn();
+    const socket = makeSocket(emit, peerEmit);
+    const deps = makeDeps(markDirty);
+    deps.syncRooms.set(
+      'room-1',
+      new SyncRoom({
+        roomId: 'room-1',
+        persistence: failingPersistence(new Error('db unavailable')),
+      }),
+    );
+
+    await handleSyncCommand(socket, deps, createCommand('db-fail', makeElement({ id: 'shape' })));
+
+    expect(emit).not.toHaveBeenCalledWith(WS_EVENTS.SYNC_ACK, expect.anything());
+    expect(peerEmit).not.toHaveBeenCalled();
+    expect(markDirty).not.toHaveBeenCalled();
+    expect(deps.roomElements.get('room-1')).toBeUndefined();
+  });
+
+  it('does not ACK or broadcast when conditional clock conflict marks the room unhealthy', async () => {
+    // @covers AC-8
+    const emit = vi.fn();
+    const peerEmit = vi.fn();
+    const socket = makeSocket(emit, peerEmit);
+    const deps = makeDeps(markDirty);
+    deps.syncRooms.set(
+      'room-1',
+      new SyncRoom({
+        roomId: 'room-1',
+        persistence: failingPersistence(
+          new SyncRoomPersistenceError('CONDITIONAL_CLOCK_CONFLICT'),
+          { documentClock: 9 },
+        ),
+      }),
+    );
+
+    await handleSyncCommand(socket, deps, createCommand('clock-conflict', makeElement({ id: 'shape' })));
+
+    expect(emit).not.toHaveBeenCalledWith(WS_EVENTS.SYNC_ACK, expect.anything());
+    expect(peerEmit).not.toHaveBeenCalled();
+    expect(markDirty).not.toHaveBeenCalled();
+    expect(deps.roomClocks.get('room-1')).toBeUndefined();
+  });
 });
 
 function createCommand(requestId: string, element: Element): CreateElementCommand {
@@ -131,4 +181,21 @@ function makeSocket(emit: ReturnType<typeof vi.fn>, peerEmit: ReturnType<typeof 
     emit,
     to: vi.fn().mockReturnValue({ emit: peerEmit }),
   } as unknown as Socket;
+}
+
+function failingPersistence(
+  error: Error,
+  reloadState: { documentClock: number } = { documentClock: 0 },
+): SyncRoomPersistence {
+  return {
+    findProcessedRequest: vi.fn().mockResolvedValue(null),
+    commitChangeSet: vi.fn().mockRejectedValue(error),
+    reloadState: vi.fn().mockResolvedValue({
+      elements: [],
+      documentClock: reloadState.documentClock,
+      roomEpoch: 0,
+      slotClocks: [],
+      tombstoneElementIds: [],
+    }),
+  };
 }

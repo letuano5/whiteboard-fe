@@ -50,7 +50,9 @@ export async function handleSyncCommand(
       socket.to(command.roomId).emit(WS_EVENTS.SYNC_BROADCAST, broadcast);
     }
   } catch (error) {
-    emitReject(socket, deps, command, error);
+    if (shouldEmitRejectAck(error)) {
+      emitReject(socket, deps, command, error);
+    }
   }
 }
 
@@ -105,4 +107,8 @@ function emitReject(
     deps.roomClocks.get(command.roomId) ??
     0;
   socket.emit(WS_EVENTS.SYNC_ACK, createSyncRejectAck(command, error, serverClock));
+}
+
+function shouldEmitRejectAck(error: unknown): boolean {
+  return error instanceof SyncRoomCommandError && error.code !== 'ROOM_UNHEALTHY';
 }

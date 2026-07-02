@@ -399,6 +399,7 @@ describe('loadRoomElements', () => {
       const findUnique = vi.fn().mockResolvedValue({
         id: ROOM_ID,
         documentClock: 7n,
+        roomEpoch: 2n,
         records: [
           {
             roomId: ROOM_ID,
@@ -409,6 +410,7 @@ describe('loadRoomElements', () => {
             slotClocks: {},
           },
         ],
+        tombstones: [],
       });
       const db = buildReadMockDb(findUnique);
 
@@ -417,7 +419,9 @@ describe('loadRoomElements', () => {
       expect(result.elements).toHaveLength(1);
       expect(result.elements[0]).toEqual(el);
       expect(result.documentClock).toBe(7);
+      expect(result.roomEpoch).toBe(2);
       expect(result.slotClocks).toEqual([]);
+      expect(result.tombstoneElementIds).toEqual([]);
     });
 
     it('extracts slotClocks from record.slotClocks JSON', async () => {
@@ -425,6 +429,7 @@ describe('loadRoomElements', () => {
       const findUnique = vi.fn().mockResolvedValue({
         id: ROOM_ID,
         documentClock: 3n,
+        roomEpoch: 0n,
         records: [
           {
             roomId: ROOM_ID,
@@ -438,6 +443,7 @@ describe('loadRoomElements', () => {
             },
           },
         ],
+        tombstones: [{ roomId: ROOM_ID, recordId: 'deleted-shape', deletedClock: 2n }],
       });
       const db = buildReadMockDb(findUnique);
 
@@ -454,9 +460,10 @@ describe('loadRoomElements', () => {
         slot: 'style.fillColor',
         clock: 2,
       });
+      expect(result.tombstoneElementIds).toEqual(['deleted-shape']);
     });
 
-    it('queries with include: { records: true }', async () => {
+    it('queries with records and tombstones for P5 recovery', async () => {
       const findUnique = vi.fn().mockResolvedValue(null);
       const db = buildReadMockDb(findUnique);
 
@@ -464,7 +471,7 @@ describe('loadRoomElements', () => {
 
       expect(findUnique).toHaveBeenCalledWith({
         where: { id: ROOM_ID },
-        include: { records: true },
+        include: { records: true, tombstones: true },
       });
     });
   });
@@ -473,13 +480,19 @@ describe('loadRoomElements', () => {
   // @covers AC-3 (P3A-02) — Empty room (no DB data)
   // =========================================================================
   describe('AC-3 (P3A-02): room does not exist in DB', () => {
-    it('returns { elements: [], documentClock: 0, slotClocks: [] } when room is not found', async () => {
+    it('returns empty recovery state when room is not found', async () => {
       const findUnique = vi.fn().mockResolvedValue(null);
       const db = buildReadMockDb(findUnique);
 
       const result = await loadRoomElements(db, ROOM_ID);
 
-      expect(result).toEqual({ elements: [], documentClock: 0, slotClocks: [] });
+      expect(result).toEqual({
+        elements: [],
+        documentClock: 0,
+        roomEpoch: 0,
+        slotClocks: [],
+        tombstoneElementIds: [],
+      });
     });
   });
 
@@ -491,7 +504,9 @@ describe('loadRoomElements', () => {
       const findUnique = vi.fn().mockResolvedValue({
         id: ROOM_ID,
         documentClock: 42n,
+        roomEpoch: 4n,
         records: [],
+        tombstones: [{ roomId: ROOM_ID, recordId: 'deleted-only', deletedClock: 42n }],
       });
       const db = buildReadMockDb(findUnique);
 
@@ -500,7 +515,9 @@ describe('loadRoomElements', () => {
       expect(result.elements).toHaveLength(0);
       expect(result.documentClock).toBe(42);
       expect(result.documentClock).toBeGreaterThan(0);
+      expect(result.roomEpoch).toBe(4);
       expect(result.slotClocks).toEqual([]);
+      expect(result.tombstoneElementIds).toEqual(['deleted-only']);
     });
   });
 
@@ -512,7 +529,9 @@ describe('loadRoomElements', () => {
       const findUnique = vi.fn().mockResolvedValue({
         id: ROOM_ID,
         documentClock: 99n,
+        roomEpoch: 0n,
         records: [],
+        tombstones: [],
       });
       const db = buildReadMockDb(findUnique);
 
@@ -525,7 +544,9 @@ describe('loadRoomElements', () => {
       const findUnique = vi.fn().mockResolvedValue({
         id: ROOM_ID,
         documentClock: 5n,
+        roomEpoch: 0n,
         records: [],
+        tombstones: [],
       });
       const db = buildReadMockDb(findUnique);
 
@@ -533,6 +554,21 @@ describe('loadRoomElements', () => {
 
       // Confirm the numeric value is correct after BigInt→number conversion
       expect(result.documentClock).toBe(5);
+    });
+
+    it('throws when documentClock exceeds the safe wire number range', async () => {
+      const findUnique = vi.fn().mockResolvedValue({
+        id: ROOM_ID,
+        documentClock: BigInt(Number.MAX_SAFE_INTEGER) + 1n,
+        roomEpoch: 0n,
+        records: [],
+        tombstones: [],
+      });
+      const db = buildReadMockDb(findUnique);
+
+      await expect(loadRoomElements(db, ROOM_ID)).rejects.toThrow(
+        'Clock value exceeds Number.MAX_SAFE_INTEGER.',
+      );
     });
   });
 });

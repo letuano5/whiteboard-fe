@@ -25,13 +25,16 @@ model Room {
   lastOpenedAt                  DateTime?
   createdBy                     String?
   documentClock                 BigInt           @default(0)
+  roomEpoch                     BigInt           @default(0)
   tombstoneHistoryStartsAtClock BigInt           @default(0)
+  processedRequestHistoryStartsAtClock BigInt    @default(0)
   createdAt                     DateTime         @default(now())
   updatedAt                     DateTime         @updatedAt
   members                       RoomMember[]
   invitations                   RoomInvitation[]
   records                       Record[]
   tombstones                    Tombstone[]
+  processedRequests             ProcessedRequest[]
 
   @@index([ownerId, updatedAt, id])
   @@index([updatedAt, id])
@@ -106,4 +109,21 @@ model Tombstone {
 
   @@id([roomId, recordId])
   @@index([roomId, deletedClock])
+}
+
+model ProcessedRequest {
+  roomId      String
+  actorId     String
+  requestId   String
+  payloadHash String
+  serverClock BigInt
+  action      String
+  reason      String?
+  ack         Json
+  createdAt   DateTime @default(now())
+  room        Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@id([roomId, actorId, requestId])
+  @@index([roomId, serverClock])
+  @@index([roomId, createdAt])
 }

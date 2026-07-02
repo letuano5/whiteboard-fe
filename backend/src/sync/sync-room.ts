@@ -8,14 +8,21 @@ import {
 } from './sync-room-change-set.js';
 import { SyncRoomCommandError } from './sync-room-errors.js';
 import { MAX_CHANGESET_BYTES } from './sync-room-limits.js';
-import { toPayloadHash } from './sync-room-payload-hash.js';
+import { toCommandPayloadHash } from './sync-room-payload-hash.js';
+import {
+  isConditionalClockConflict,
+  resolveSyncCommandPersistencePolicy,
+} from './sync-room-persistence.js';
 import { defaultSyncRoomPlanner } from './sync-room-planner.js';
 import type {
   SyncRoomActorContext,
   SyncRoomCommitOutcome,
   SyncRoomExecutionResult,
+  SyncRoomPersistence,
+  SyncRoomProcessedRequest,
   SyncRoomPlanner,
   SyncRoomReferenceValidator,
+  SyncRoomReloadState,
   SyncRoomStateSnapshot,
 } from './sync-room-contracts.js';
 
@@ -24,9 +31,15 @@ export type {
   SyncRoomCommitOutcome,
   SyncRoomExecutionResult,
   SyncRoomPlan,
+  SyncRoomPersistence,
+  SyncRoomPersistenceCommit,
+  SyncRoomPersistenceDurability,
+  SyncRoomPersistencePolicy,
+  SyncRoomProcessedRequest,
   SyncRoomPlanner,
   SyncRoomPlannerContext,
   SyncRoomReferenceValidator,
+  SyncRoomReloadState,
   SyncRoomStateSnapshot,
 } from './sync-room-contracts.js';
 
@@ -40,6 +53,7 @@ interface SyncRoomOptions {
   planner?: SyncRoomPlanner;
   referenceValidator?: SyncRoomReferenceValidator;
   maxChangeSetBytes?: number;
+  persistence?: SyncRoomPersistence;
 }
 
 interface SyncRoomCriticalSectionResult {
@@ -54,10 +68,12 @@ export class SyncRoom {
   private readonly elements = new Map<string, Element>();
   private readonly slotClocks = new Map<string, SyncClock>();
   private readonly tombstoneElementIds = new Set<string>();
-  private readonly processedRequests = new Map<string, SyncRoomExecutionResult>();
+  private readonly processedRequests = new Map<string, SyncRoomProcessedRequest>();
   private documentClock: SyncClock;
   private roomEpoch: SyncClock;
   private readonly planner: SyncRoomPlanner;
+  private unhealthy = false;
+  private recoveryTail: Promise<void> = Promise.resolve();
 
   constructor(private readonly options: SyncRoomOptions) {
     for (const element of options.elements ?? []) {
@@ -99,7 +115,9 @@ export class SyncRoom {
       roomEpoch: this.roomEpoch,
       slotClocks: new Map(this.slotClocks),
       tombstoneElementIds: new Set(this.tombstoneElementIds),
-      processedRequests: new Map(this.processedRequests),
+      processedRequests: new Map(
+        [...this.processedRequests.entries()].map(([key, processed]) => [key, processed.result]),
+      ),
     };
   }
 
@@ -107,13 +125,32 @@ export class SyncRoom {
     command: SharedSyncCommand,
     actorContext: SyncRoomActorContext,
   ): Promise<SyncRoomCriticalSectionResult> {
+    await this.ensureHealthy();
+
     const idempotencyKey = toProcessedRequestKey(actorContext.actorId, command.requestId);
+    const payloadHash = toCommandPayloadHash(command);
+    const persistencePolicy = resolveSyncCommandPersistencePolicy(command);
     const processed = this.processedRequests.get(idempotencyKey);
     if (processed) {
-      if (toPayloadHash(processed.command) !== toPayloadHash(command)) {
+      if (processed.payloadHash !== payloadHash) {
         throw new SyncRoomCommandError('DUPLICATE_REQUEST_CONFLICT');
       }
-      return { result: processed, replayed: true };
+      return { result: processed.result, replayed: true };
+    }
+
+    if (persistencePolicy.storeProcessedRequest && this.options.persistence) {
+      const persisted = await this.options.persistence.findProcessedRequest({
+        roomId: this.options.roomId,
+        actorId: actorContext.actorId,
+        requestId: command.requestId,
+      });
+      if (persisted) {
+        if (persisted.payloadHash !== payloadHash) {
+          throw new SyncRoomCommandError('DUPLICATE_REQUEST_CONFLICT');
+        }
+        this.processedRequests.set(idempotencyKey, persisted);
+        return { result: persisted.result, replayed: true };
+      }
     }
 
     assertCanMutate(actorContext);
@@ -128,15 +165,53 @@ export class SyncRoom {
     const changeSet = createChangeSet(command, actorContext, serverClock, this.roomEpoch, plan);
     assertChangeSetWithinLimit(changeSet, this.options.maxChangeSetBytes ?? MAX_CHANGESET_BYTES);
 
-    await plan.commit?.();
-    this.applyCommitted(changeSet);
-
     const result: SyncRoomExecutionResult = {
       command,
       actorId: actorContext.actorId,
       changeSet,
     };
-    this.processedRequests.set(idempotencyKey, result);
+
+    try {
+      if (this.options.persistence) {
+        await this.options.persistence.commitChangeSet({
+          command,
+          actorId: actorContext.actorId,
+          payloadHash,
+          expectedDocumentClock: this.documentClock,
+          result,
+          policy: persistencePolicy,
+          slotClocks: this.previewSlotClocks(changeSet),
+        });
+      } else {
+        await plan.commit?.();
+      }
+    } catch (error) {
+      if (isConditionalClockConflict(error)) {
+        await this.recoverUnhealthy(error);
+        throw new SyncRoomCommandError(
+          'ROOM_UNHEALTHY',
+          'Conditional room clock update failed; room was reloaded.',
+        );
+      }
+      throw error;
+    }
+
+    try {
+      this.applyCommitted(changeSet);
+    } catch (error) {
+      if (this.options.persistence) {
+        await this.recoverUnhealthy(error);
+        throw new SyncRoomCommandError(
+          'ROOM_UNHEALTHY',
+          'Committed change set could not be applied to hot room state; room was reloaded.',
+        );
+      }
+      throw error;
+    }
+
+    if (persistencePolicy.storeProcessedRequest) {
+      this.processedRequests.set(idempotencyKey, { payloadHash, result });
+    }
     return { result, replayed: false, afterApply: plan.afterApply };
   }
 
@@ -160,6 +235,14 @@ export class SyncRoom {
     }
   }
 
+  private previewSlotClocks(changeSet: CommittedChangeSet): ReadonlyMap<string, SyncClock> {
+    const slotClocks = new Map(this.slotClocks);
+    for (const slotClock of changeSet.slotClocks) {
+      slotClocks.set(toSlotClockKey(slotClock.elementId, slotClock.slot), slotClock.clock);
+    }
+    return slotClocks;
+  }
+
   private enqueueOutput(task: () => void | Promise<void>): Promise<void> {
     const run = this.outputTail.catch(() => undefined).then(task);
     this.outputTail = run.then(
@@ -167,6 +250,54 @@ export class SyncRoom {
       () => undefined,
     );
     return run;
+  }
+
+  private async ensureHealthy(): Promise<void> {
+    if (!this.unhealthy) return;
+    await this.recoveryTail;
+    if (this.unhealthy) {
+      throw new SyncRoomCommandError('ROOM_UNHEALTHY');
+    }
+  }
+
+  private async recoverUnhealthy(cause: unknown): Promise<void> {
+    this.unhealthy = true;
+    this.recoveryTail = this.recoveryTail
+      .catch(() => undefined)
+      .then(async () => {
+        if (!this.options.persistence) {
+          throw cause instanceof Error ? cause : new Error(String(cause));
+        }
+        const state = await this.options.persistence.reloadState({ roomId: this.options.roomId });
+        this.rebuildHotIndexes(state);
+        this.unhealthy = false;
+      });
+    await this.recoveryTail;
+  }
+
+  private rebuildHotIndexes(state: SyncRoomReloadState): void {
+    this.elements.clear();
+    for (const element of state.elements) {
+      this.elements.set(element.id, element);
+    }
+
+    this.slotClocks.clear();
+    for (const slotClock of state.slotClocks) {
+      this.slotClocks.set(toSlotClockKey(slotClock.elementId, slotClock.slot), slotClock.clock);
+    }
+
+    this.tombstoneElementIds.clear();
+    for (const elementId of state.tombstoneElementIds ?? []) {
+      this.tombstoneElementIds.add(elementId);
+    }
+
+    this.processedRequests.clear();
+    for (const [key, processed] of state.processedRequests ?? []) {
+      this.processedRequests.set(key, processed);
+    }
+
+    this.documentClock = state.documentClock;
+    this.roomEpoch = state.roomEpoch;
   }
 }
 

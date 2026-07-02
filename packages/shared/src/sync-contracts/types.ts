@@ -79,6 +79,26 @@ export interface SyncReadPrecondition {
   onStale: 'reject' | 'rebase' | 'server_recompute';
 }
 
+export interface SyncCommandPersistenceHints {
+  /**
+   * Marks an intermediate local interaction patch that is intentionally not resendable.
+   * Only valid for patch-slot drag/interaction updates that will be superseded by a final patch.
+   */
+  transient?: boolean;
+  /**
+   * Defaults to true. Resendable commands must persist a ProcessedRequest entry.
+   */
+  resendable?: boolean;
+  /**
+   * Defaults to true for resendable commands. May be false only when `resendable` is false.
+   */
+  storeProcessedRequest?: boolean;
+  /**
+   * Relaxed durability maps to PostgreSQL `synchronous_commit = off`; it is not durable.
+   */
+  durability?: 'durable' | 'relaxed';
+}
+
 interface SyncCommandEnvelope {
   protocolVersion: typeof SYNC_PROTOCOL_VERSION;
   schemaVersion: typeof SYNC_SCHEMA_VERSION;
@@ -87,6 +107,7 @@ interface SyncCommandEnvelope {
   clientClock: SyncClock;
   baseRoomEpoch: SyncClock;
   readPreconditions?: SyncReadPrecondition[];
+  persistence?: SyncCommandPersistenceHints;
 }
 
 export interface SyncOrderHint {

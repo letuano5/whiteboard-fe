@@ -16,11 +16,17 @@ import type { LoadRoomResult, RecordSlotClocksJson } from './types.js';
 export async function loadRoomElements(db: PrismaClient, roomId: string): Promise<LoadRoomResult> {
   const room = await db.room.findUnique({
     where: { id: roomId },
-    include: { records: true },
+    include: { records: true, tombstones: true },
   });
 
   if (!room) {
-    return { elements: [], documentClock: 0, slotClocks: [] };
+    return {
+      elements: [],
+      documentClock: 0,
+      roomEpoch: 0,
+      slotClocks: [],
+      tombstoneElementIds: [],
+    };
   }
 
   const elements: Element[] = [];
@@ -34,7 +40,13 @@ export async function loadRoomElements(db: PrismaClient, roomId: string): Promis
     }
   }
 
-  return { elements, documentClock: Number(room.documentClock), slotClocks };
+  return {
+    elements,
+    documentClock: toSafeClockNumber(room.documentClock),
+    roomEpoch: toSafeClockNumber(room.roomEpoch ?? 0n),
+    slotClocks,
+    tombstoneElementIds: (room.tombstones ?? []).map((tombstone) => tombstone.recordId),
+  };
 }
 
 /**
@@ -57,5 +69,13 @@ export async function getRoomClock(db: PrismaClient, roomId: string): Promise<nu
     return 0;
   }
 
-  return Number(room.documentClock);
+  return toSafeClockNumber(room.documentClock);
+}
+
+function toSafeClockNumber(clock: bigint): number {
+  const value = Number(clock);
+  if (!Number.isSafeInteger(value)) {
+    throw new Error('Clock value exceeds Number.MAX_SAFE_INTEGER.');
+  }
+  return value;
 }

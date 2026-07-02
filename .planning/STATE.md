@@ -1,11 +1,11 @@
 ---
 gsd_state_version: '1.0'
-status: planning
+status: complete
 progress:
-  total_phases: 10
-  completed_phases: 10
-  total_plans: 10
-  completed_plans: 10
+  total_phases: 11
+  completed_phases: 11
+  total_plans: 13
+  completed_plans: 13
   percent: 100
 ---
 
@@ -16,14 +16,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-30)
 
 **Core value:** Users can create tactical whiteboards without losing work, then collaborate or persist documents when the workflow calls for it.
-**Current focus:** Phase 5.5: P5-05 Change sets, ack/reject/rebase & broadcast
+**Current focus:** Phase 5.6: P5-06 Transactional persistence & idempotency
 
 ## Current Position
 
-Phase: 5.5 of active GSD bootstrap (P5-05 Change sets, ack/reject/rebase & broadcast)
-Plan: 1 of 1 in current phase
+Phase: 5.6 of active GSD bootstrap (P5-06 Transactional persistence & idempotency)
+Plan: 3 of 3 in current phase
 Status: Phase complete
-Last activity: 2026-07-02 - Implemented and verified P5-05 change-set, ACK/reject/rebase, and broadcast primitives.
+Last activity: 2026-07-02 - Implemented and verified P5-06 transactional persistence and persisted idempotency.
 
 Progress: [##########] 100%
 
@@ -50,6 +50,9 @@ Progress: [##########] 100%
 - [Phase 5.4]: Slot conflict resolution follows `different slot => merge`, `same slot => latest-to-server wins`, and `delete => delete-wins`.
 - [Phase 5.5]: `CommittedChangeSet` is the canonical P5 reconciliation payload; `slotPatches` are the primary apply instructions and `puts` are materialized state for create/replace/reconnect/debug/persistence.
 - [Phase 5.5]: ACK status is `commit`, `rebase`, or `reject`; same-origin broadcasts may clear pending requests when ACK is missed.
+- [Phase 5.6]: `ProcessedRequest` persistence is the durable idempotency source of truth; memory cache is only a fast path.
+- [Phase 5.6]: `synchronous_commit = off` is a relaxed/best-effort path only for non-resendable intermediate drag patches, never durable.
+- [Phase 5.6]: Persistence recovery rebuilds hot room indexes/maps from Postgres before accepting subsequent commands.
 
 ### Pending Todos
 
@@ -64,6 +67,7 @@ Progress: [##########] 100%
 - P5-03 server-authoritative `SyncRoom` implemented and verified against 3 acceptance criteria.
 - P5-04 conflict resolution and validation implemented and verified against 12 acceptance criteria.
 - P5-05 change-set, ACK/reject/rebase, broadcast, and reconciliation primitives implemented and verified against 5 acceptance criteria.
+- P5-06 transactional persistence, durable idempotency, relaxed transient policy, and unhealthy-room recovery implemented and verified against 10 acceptance criteria.
 
 ### Blockers/Concerns
 

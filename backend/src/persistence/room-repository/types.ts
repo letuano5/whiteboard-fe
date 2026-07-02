@@ -34,8 +34,12 @@ export interface LoadRoomResult {
   elements: Element[];
   /** documentClock converted from BigInt at repository boundary. */
   documentClock: number;
+  /** P5 room epoch converted from BigInt at repository boundary. */
+  roomEpoch: number;
   /** Slot-level clock metadata from Record.slotClocks JSON. */
   slotClocks: SlotClockUpdate[];
+  /** Deleted record IDs retained by tombstone history. */
+  tombstoneElementIds: string[];
 }
 
 /**

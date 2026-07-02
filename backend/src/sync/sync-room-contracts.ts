@@ -34,6 +34,48 @@ export interface SyncRoomStateSnapshot {
   processedRequests: ReadonlyMap<string, SyncRoomExecutionResult>;
 }
 
+export type SyncRoomPersistenceDurability = 'durable' | 'relaxed';
+
+export interface SyncRoomPersistencePolicy {
+  durability: SyncRoomPersistenceDurability;
+  resendable: boolean;
+  storeProcessedRequest: boolean;
+}
+
+export interface SyncRoomProcessedRequest {
+  payloadHash: string;
+  result: SyncRoomExecutionResult;
+}
+
+export interface SyncRoomPersistenceCommit {
+  command: SharedSyncCommand;
+  actorId: string | null;
+  payloadHash: string;
+  expectedDocumentClock: SyncClock;
+  result: SyncRoomExecutionResult;
+  policy: SyncRoomPersistencePolicy;
+  slotClocks: ReadonlyMap<string, SyncClock>;
+}
+
+export interface SyncRoomReloadState {
+  elements: Element[];
+  documentClock: SyncClock;
+  roomEpoch: SyncClock;
+  slotClocks: SlotClockUpdate[];
+  tombstoneElementIds?: string[];
+  processedRequests?: Iterable<[string, SyncRoomProcessedRequest]>;
+}
+
+export interface SyncRoomPersistence {
+  findProcessedRequest: (args: {
+    roomId: string;
+    actorId: string | null;
+    requestId: string;
+  }) => MaybePromise<SyncRoomProcessedRequest | null>;
+  commitChangeSet: (commit: SyncRoomPersistenceCommit) => MaybePromise<void>;
+  reloadState: (args: { roomId: string }) => MaybePromise<SyncRoomReloadState>;
+}
+
 export interface SyncRoomPlan {
   created?: Element[];
   patched?: CommittedChangeSet['patched'];

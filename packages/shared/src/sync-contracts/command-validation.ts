@@ -27,6 +27,7 @@ export function validateSyncCommand(
     return { ok: false, errors: ['SyncCommand must be an object.'] };
   }
   validateEnvelope(value, errors);
+  validatePersistenceHints(value, errors);
   if ('actorId' in value) {
     errors.push('SyncCommand payload must not include actorId.');
   }
@@ -85,6 +86,46 @@ function validateEnvelope(value: Record<string, unknown>, errors: string[]): voi
   if (!isFiniteNumber(value.baseRoomEpoch)) errors.push('baseRoomEpoch is required.');
   if (value.readPreconditions !== undefined && !isReadPreconditions(value.readPreconditions)) {
     errors.push('readPreconditions is invalid.');
+  }
+}
+
+function validatePersistenceHints(value: Record<string, unknown>, errors: string[]): void {
+  if (value.persistence === undefined) return;
+  if (!isRecord(value.persistence)) {
+    errors.push('SyncCommand.persistence is invalid.');
+    return;
+  }
+
+  const hints = value.persistence;
+  const transient = hints.transient === true;
+  const resendable = hints.resendable === undefined ? !transient : hints.resendable;
+  const storeProcessedRequest =
+    hints.storeProcessedRequest === undefined ? resendable : hints.storeProcessedRequest;
+  const durability = hints.durability ?? (transient ? 'relaxed' : 'durable');
+
+  if (hints.transient !== undefined && typeof hints.transient !== 'boolean') {
+    errors.push('SyncCommand.persistence.transient is invalid.');
+  }
+  if (hints.resendable !== undefined && typeof hints.resendable !== 'boolean') {
+    errors.push('SyncCommand.persistence.resendable is invalid.');
+  }
+  if (
+    hints.storeProcessedRequest !== undefined &&
+    typeof hints.storeProcessedRequest !== 'boolean'
+  ) {
+    errors.push('SyncCommand.persistence.storeProcessedRequest is invalid.');
+  }
+  if (durability !== 'durable' && durability !== 'relaxed') {
+    errors.push('SyncCommand.persistence.durability is invalid.');
+  }
+  if (storeProcessedRequest === false && resendable) {
+    errors.push('Resendable SyncCommand must store ProcessedRequest.');
+  }
+  if (transient && (value.kind !== 'patch-slots' || resendable || storeProcessedRequest)) {
+    errors.push('Only non-resendable patch-slot commands may be transient.');
+  }
+  if (!transient && durability === 'relaxed') {
+    errors.push('Only transient commands may request relaxed durability.');
   }
 }
 

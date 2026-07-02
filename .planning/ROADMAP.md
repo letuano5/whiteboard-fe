@@ -19,6 +19,7 @@ project roadmap, phase order, and product scope remain canonical in `docs/SPECS.
 - Repo roadmap ID `P5-03` maps to GSD Phase `5.3`.
 - Repo roadmap ID `P5-04` maps to GSD Phase `5.4`.
 - Repo roadmap ID `P5-05` maps to GSD Phase `5.5`.
+- Repo roadmap ID `P5-06` maps to GSD Phase `5.6`.
 - The source of truth is `docs/SPECS.md` feature sections.
 
 - [x] **Phase 4.0: P4-00 Anonymous local board + Login to save** - Anonymous local-only board can be converted into a private saved document after login.
@@ -31,6 +32,7 @@ project roadmap, phase order, and product scope remain canonical in `docs/SPECS.
 - [x] **Phase 5.3: P5-03 Server-authoritative SyncRoom + room actor** - Saved-room commands execute through backend hot state and per-room serialized actors.
 - [x] **Phase 5.4: P5-04 Conflict resolution & validation** - Backend sync planning enforces slot-level conflict rules, delete-wins semantics, permission boundaries, reference validation, linear geometry rules, and command limits.
 - [x] **Phase 5.5: P5-05 Change sets, ack/reject/rebase & broadcast** - Shared/backend/client primitives carry committed slot changes through ACKs and broadcasts.
+- [x] **Phase 5.6: P5-06 Transactional persistence & idempotency** - Accepted saved-room sync commands commit atomically with DB clocks, persisted idempotency, durability policy, and unhealthy-room recovery.
 
 ## Phase Details
 
@@ -238,6 +240,34 @@ Plans:
 
 - [x] 05.5-01: Implement change sets, ACK/reject/rebase, broadcast primitives, and AC tests.
 
+### Phase 5.6: P5-06 Transactional persistence & idempotency
+
+**Goal**: Accepted saved-room sync commands commit through one DB transaction that advances
+`Room.documentClock` exactly once, persists touched records/tombstones/slot clocks and
+`ProcessedRequest`, replays duplicate requests from durable storage, and protects memory state
+when persistence or post-commit apply fails.
+**Depends on**: Phase 5.5
+**Source**: `docs/SPECS.md` `[P5-06]`
+**Canonical refs**: `docs/SPECS.md`, `specs/035-p5-06-transactional-persistence-idempotency/acceptance.md`
+**Requirements**: [P5-06-AC-1, P5-06-AC-2, P5-06-AC-3, P5-06-AC-4, P5-06-AC-5, P5-06-AC-6, P5-06-AC-7, P5-06-AC-8, P5-06-AC-9, P5-06-AC-10]
+**Success Criteria** (what must be TRUE):
+
+1. Duplicate resendable commands replay persisted results without re-mutating state or broadcasting.
+2. Conflicting duplicate request IDs reject before domain validation and before mutation.
+3. Accepted commands persist records/tombstones/slot clocks and `ProcessedRequest` in one transaction
+   with one conditional `documentClock` advance.
+4. DB failures, conditional clock conflicts, and post-commit memory apply failures do not leave the
+   hot room acknowledging divergent state.
+5. Intermediate transient drag patches are the only relaxed/non-resendable path; final and discrete
+   commands stay durable/resendable.
+   **Plans**: 3 plans
+
+Plans:
+
+- [x] 05.6-01: Add P5-06 schema, shared delivery hints, and recovery load state.
+- [x] 05.6-02: Add SyncRoom transactional persistence, persisted idempotency, invariants, and recovery.
+- [x] 05.6-03: Enforce socket ACK safeguards and close P5-06 verification.
+
 ## Progress
 
 **Execution Order:**
@@ -255,3 +285,4 @@ Follow `docs/SPECS.md`; this bootstrap tracks active Phase 4 feature slices.
 | 5.3. P5-03 Server-authoritative SyncRoom         | 1/1            | Complete | 2026-07-02 |
 | 5.4. P5-04 Conflict resolution & validation      | 1/1            | Complete | 2026-07-02 |
 | 5.5. P5-05 Change sets + ACK/broadcast           | 1/1            | Complete | 2026-07-02 |
+| 5.6. P5-06 Transactional persistence             | 3/3            | Complete | 2026-07-02 |
