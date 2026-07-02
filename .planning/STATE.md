@@ -2,10 +2,10 @@
 gsd_state_version: '1.0'
 status: complete
 progress:
-  total_phases: 19
-  completed_phases: 19
-  total_plans: 22
-  completed_plans: 22
+  total_phases: 20
+  completed_phases: 20
+  total_plans: 23
+  completed_plans: 23
   percent: 100
 ---
 
@@ -16,14 +16,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-30)
 
 **Core value:** Users can create tactical whiteboards without losing work, then collaborate or persist documents when the workflow calls for it.
-**Current focus:** Phase 3.32: P3C-02 Freehand (completed)
+**Current focus:** Phase 3.34: P3C-04 Eraser (completed)
 
 ## Current Position
 
-Phase: 3.32 of active GSD bootstrap (P3C-02 Freehand)
+Phase: 3.34 of active GSD bootstrap (P3C-04 Eraser)
 Plan: 1 of 1 in current phase
 Status: Complete
-Last activity: 2026-07-02 - Completed P3C-02 freehand implementation and verification.
+Last activity: 2026-07-02 - Completed P3C-04 eraser implementation and verification.
 
 Progress: [##########] 100%
 
@@ -72,6 +72,8 @@ Progress: [##########] 100%
 - [Phase 3.32]: Freehand uses SVG-only point geometry with local Douglas-Peucker simplification,
   `MAX_POINTS_PER_FREEHAND_STROKE = 600`, and automatic stroke splitting while staying on the
   existing frontend mutation pipeline.
+- [Phase 3.34]: Eraser remains SVG/pointer-pipeline only, reuses registered shape hit-test
+  utilities by sampling each drag segment, and deletes whole elements through `deleteElements`.
 
 ### Pending Todos
 
@@ -95,6 +97,7 @@ Progress: [##########] 100%
 - P3C-00 re-render isolation implemented and verified against 3 acceptance criteria.
 - P3C-01 SVG ink layer implemented and verified against 2 acceptance criteria.
 - P3C-02 freehand drawing implemented and verified against 3 acceptance criteria.
+- P3C-04 eraser implemented and verified against 5 acceptance criteria.
 
 ### Blockers/Concerns
 

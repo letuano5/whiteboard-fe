@@ -28,11 +28,13 @@ project roadmap, phase order, and product scope remain canonical in `docs/SPECS.
 - Repo roadmap ID `P3C-00` maps to GSD Phase `3.30`.
 - Repo roadmap ID `P3C-01` maps to GSD Phase `3.31`.
 - Repo roadmap ID `P3C-02` maps to GSD Phase `3.32`.
+- Repo roadmap ID `P3C-04` maps to GSD Phase `3.34`.
 - The source of truth is `docs/SPECS.md` feature sections.
 
 - [x] **Phase 3.30: P3C-00 Re-render isolation** - Draft point updates are isolated from the main whiteboard and committed shape rendering before SVG ink tools are added.
 - [x] **Phase 3.31: P3C-01 SVG ink layer** - Freehand and highlighter elements render through the existing shared-camera SVG layer without introducing a Canvas render path.
 - [x] **Phase 3.32: P3C-02 Freehand** - Users can draw SVG freehand strokes that simplify points, commit through the shared mutation pipeline, and split automatically at the per-shape point cap.
+- [x] **Phase 3.34: P3C-04 Eraser** - Users can drag an eraser through existing shapes, reusing shape hit-testing to soft-delete whole elements through the shared mutation pipeline.
 - [x] **Phase 4.0: P4-00 Anonymous local board + Login to save** - Anonymous local-only board can be converted into a private saved document after login.
 - [x] **Phase 4.1: P4-01 Workspace + document dashboard** - Authenticated users can list, search, create, open, rename, archive, and delete accessible saved documents.
 - [x] **Phase 4.2: P4-02 Sharing, public/private access, invited users** - Owners can share saved documents by link or invite while the server enforces effective room roles.
@@ -112,6 +114,31 @@ mutation pipeline, simplifies raw samples, and keeps each committed stroke under
 Plans:
 
 - [x] 03.32-01: Implement freehand drawing, point simplification, point-cap stroke splitting, and AC tests.
+
+### Phase 3.34: P3C-04 Eraser
+
+**Goal**: Add an eraser tool that deletes whole shapes while dragging through them, using the
+existing shape hit-test utilities and shared element mutation pipeline.
+**Depends on**: Phase 3.32
+**Source**: `docs/SPECS.md` `[P3C-04]`
+**Canonical refs**: `docs/SPECS.md`, `specs/044-p3c-04-eraser/acceptance.md`
+**Requirements**: [P3C-04-AC-1, P3C-04-AC-2, P3C-04-AC-3, P3C-04-AC-4, P3C-04-AC-5]
+**Success Criteria** (what must be TRUE):
+
+1. Selecting the eraser tool and dragging through visible shapes soft-deletes them with
+   `isDeleted = true`.
+2. Eraser deletes flow through the same mutation pipeline as other deletes, so existing realtime
+   sync hooks can broadcast the deletion.
+3. Pointer movement is evaluated as a line-segment sweep between consecutive pointer samples and
+   reuses registered shape hit-test utilities instead of introducing a separate hit-test system.
+4. Eraser deletes whole elements only; it does not split freehand/highlighter strokes into pieces.
+5. Eraser deletes are undoable through the existing local undo history.
+   **Plans**: 1 plan
+
+Plans:
+
+- [x] 03.34-01: Implement eraser tool routing, segment-sweep hit testing, whole-element soft delete,
+      and AC tests.
 
 ### Phase 4.0: P4-00 Anonymous local board + Login to save
 

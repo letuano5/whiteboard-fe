@@ -8,6 +8,7 @@ import {
   Type,
   Zap,
   Pencil,
+  Eraser,
 } from 'lucide-react';
 import { useInteractionStore } from '../../store/interaction.store';
 import { clearLaserTrail } from '../../canvas/tools/laser-tool';
@@ -28,6 +29,7 @@ const TOOLS: ToolButton[] = [
   { id: 'arrow', label: 'Arrow', Icon: ArrowRight },
   { id: 'text', label: 'Text', Icon: Type },
   { id: 'freehand', label: 'Freehand', Icon: Pencil },
+  { id: 'eraser', label: 'Eraser', Icon: Eraser },
   { id: 'laser', label: 'Laser', Icon: Zap },
 ];
 
@@ -91,7 +93,8 @@ export default function Toolbar() {
             if (tool !== id) (e.currentTarget as HTMLButtonElement).style.background = '#f3f4f6';
           }}
           onMouseLeave={(e) => {
-            if (tool !== id) (e.currentTarget as HTMLButtonElement).style.background = 'transparent';
+            if (tool !== id)
+              (e.currentTarget as HTMLButtonElement).style.background = 'transparent';
           }}
         >
           <Icon size={18} />

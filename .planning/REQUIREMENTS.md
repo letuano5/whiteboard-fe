@@ -11,6 +11,16 @@
 - [x] **P3C-00-AC-2**: Updating one point on a draft element does not re-render unchanged
       committed shapes already on the canvas.
 - [x] **P3C-00-AC-3**: Existing move/resize draft hiding and selection overlay behavior remains intact.
+- [x] **P3C-04-AC-1**: The eraser tool soft-deletes visible shapes by setting `isDeleted = true`
+      when the user drags through them.
+- [x] **P3C-04-AC-2**: Eraser deletes go through the existing element mutation pipeline so deletion
+      events are emitted for realtime sync and persistence hooks.
+- [x] **P3C-04-AC-3**: Eraser hit-testing uses a line-segment sweep between consecutive pointer
+      samples and reuses registered shape hit-test utilities.
+- [x] **P3C-04-AC-4**: Eraser deletes whole shapes only and does not split freehand/highlighter
+      strokes into smaller segments.
+- [x] **P3C-04-AC-5**: Eraser deletes are undoable through the existing undo history and restore the
+      whole erased shape locally.
 
 ### Local Board And Save
 
@@ -116,6 +126,11 @@
 | P3C-00-AC-1 | Phase 3.30 | Complete |
 | P3C-00-AC-2 | Phase 3.30 | Complete |
 | P3C-00-AC-3 | Phase 3.30 | Complete |
+| P3C-04-AC-1 | Phase 3.34 | Complete |
+| P3C-04-AC-2 | Phase 3.34 | Complete |
+| P3C-04-AC-3 | Phase 3.34 | Complete |
+| P3C-04-AC-4 | Phase 3.34 | Complete |
+| P3C-04-AC-5 | Phase 3.34 | Complete |
 | P4-00-AC-1  | Phase 4.0  | Complete |
 | P4-00-AC-2  | Phase 4.0  | Complete |
 | P4-00-AC-3  | Phase 4.0  | Complete |
@@ -173,11 +188,11 @@
 
 **Coverage:**
 
-- v1 requirements: 57 total
-- Mapped to phases: 57
+- v1 requirements: 62 total
+- Mapped to phases: 62
 - Unmapped: 0
 
 ---
 
 _Requirements defined: 2026-06-30_
-_Last updated: 2026-07-02 after P5-11 verification_
+_Last updated: 2026-07-02 after P3C-04 verification_

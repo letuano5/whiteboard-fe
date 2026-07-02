@@ -40,7 +40,7 @@ describe('Toolbar tool selection', () => {
 // @covers AC-8 (005-detail-panel-toolbar)
 // @covers AC-1
 describe('AC-8 (005): toolbar shows tool buttons including laser', () => {
-  it('renders Select, Hand, Rectangle, Ellipse, Line, Text, Freehand, Laser buttons', () => {
+  it('renders Select, Hand, Rectangle, Ellipse, Line, Text, Freehand, Eraser, Laser buttons', () => {
     render(<Toolbar />);
     const expectedTitles = [
       'Select',
@@ -50,6 +50,7 @@ describe('AC-8 (005): toolbar shows tool buttons including laser', () => {
       'Line',
       'Text',
       'Freehand',
+      'Eraser',
       'Laser',
     ];
     expectedTitles.forEach((title) => {
@@ -67,6 +68,15 @@ describe('freehand tool button', () => {
   });
 });
 
+// @covers AC-1 (044-p3c-04-eraser)
+describe('eraser tool button', () => {
+  it('clicking Eraser sets tool to eraser', () => {
+    render(<Toolbar />);
+    fireEvent.click(screen.getByTitle('Eraser'));
+    expect(useInteractionStore.getState().tool).toBe('eraser');
+  });
+});
+
 // @covers AC-4 (011-laser-pointer)
 describe('AC-4: laser tool button activates laser tool', () => {
   it('clicking Laser button sets tool to laser', () => {
@@ -80,7 +90,9 @@ describe('AC-4: laser tool button activates laser tool', () => {
 describe('AC-5: switching away from laser clears trail immediately', () => {
   it('clicking another tool calls clearLaserTrail', () => {
     const clearSpy = vi.spyOn(laserTool, 'clearLaserTrail');
-    useInteractionStore.setState({ tool: 'laser' } as Parameters<typeof useInteractionStore.setState>[0]);
+    useInteractionStore.setState({ tool: 'laser' } as Parameters<
+      typeof useInteractionStore.setState
+    >[0]);
     render(<Toolbar />);
     fireEvent.click(screen.getByTitle('Select'));
     expect(clearSpy).toHaveBeenCalled();
@@ -92,7 +104,9 @@ describe('AC-5: switching away from laser clears trail immediately', () => {
 // @covers AC-9 (005-detail-panel-toolbar)
 describe('AC-9 (005): active tool is visually distinguished', () => {
   it('active tool button has different background from inactive tools', () => {
-    useInteractionStore.setState({ tool: 'rectangle' } as Parameters<typeof useInteractionStore.setState>[0]);
+    useInteractionStore.setState({ tool: 'rectangle' } as Parameters<
+      typeof useInteractionStore.setState
+    >[0]);
     render(<Toolbar />);
     const activeBtn = screen.getByTitle('Rectangle') as HTMLButtonElement;
     const inactiveBtn = screen.getByTitle('Select') as HTMLButtonElement;

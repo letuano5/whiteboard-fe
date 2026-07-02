@@ -185,8 +185,9 @@ export function applySnapshot(elements: Element[], options: MutationOptions = {}
   if (elements.length === 0) return;
   const now = Date.now();
   const storeElements = useElementsStore.getState().elements;
+  const currentById = new Map(storeElements.map((element) => [element.id, element]));
   const bumped = elements.map((el) => {
-    const current = storeElements.find((s) => s.id === el.id);
+    const current = currentById.get(el.id);
     // Increment from the current store version so it is always monotonically increasing (AC-14)
     const baseVersion = current ? current.version : el.version;
     return {
@@ -196,7 +197,11 @@ export function applySnapshot(elements: Element[], options: MutationOptions = {}
       updatedAt: now,
     };
   });
+  const before = bumped.flatMap((element) => {
+    const current = currentById.get(element.id);
+    return current ? [current] : [];
+  });
   // Use the Zustand store setter directly (NOT the pipeline updateElements) to avoid version-doubling
   useElementsStore.getState().updateElements(bumped);
-  fireHooks({ type: 'update', elements: bumped, before: elements, sync: options.sync });
+  fireHooks({ type: 'update', elements: bumped, before, sync: options.sync });
 }

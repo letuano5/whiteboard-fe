@@ -17,6 +17,12 @@ import {
   onFreehandPointerMove,
   onFreehandPointerUp,
 } from '../tools/freehand-tool';
+import {
+  cancelEraserDrag,
+  onEraserPointerDown,
+  onEraserPointerMove,
+  onEraserPointerUp,
+} from '../tools/eraser-tool';
 import { onLaserPointerLeave, onLaserPointerMove } from '../tools/laser-tool';
 import {
   onRotateHandlePointerDown,
@@ -97,6 +103,12 @@ export function useWhiteboardPointerHandlers({
       return;
     }
 
+    if (tool === 'eraser') {
+      event.currentTarget.setPointerCapture(event.pointerId);
+      onEraserPointerDown(svgWorldPoint(event, camera));
+      return;
+    }
+
     if (!isShapeTool(tool)) return;
 
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -138,6 +150,11 @@ export function useWhiteboardPointerHandlers({
       return;
     }
 
+    if (tool === 'eraser') {
+      onEraserPointerMove(svgWorldPoint(event, camera));
+      return;
+    }
+
     if (!isShapeTool(tool)) return;
     onShapePointerMove(tool, svgWorldPoint(event, camera));
   }
@@ -163,6 +180,11 @@ export function useWhiteboardPointerHandlers({
       return;
     }
 
+    if (tool === 'eraser') {
+      onEraserPointerUp(svgWorldPoint(event, camera));
+      return;
+    }
+
     if (!isShapeTool(tool)) return;
     onShapePointerUp(tool, svgWorldPoint(event, camera));
   }
@@ -183,6 +205,11 @@ export function useWhiteboardPointerHandlers({
 
     if (tool === 'freehand') {
       cancelFreehandDraw();
+      return;
+    }
+
+    if (tool === 'eraser') {
+      cancelEraserDrag();
       return;
     }
 
