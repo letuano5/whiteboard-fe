@@ -26,10 +26,15 @@ describe('shape registry', () => {
 
     expect(getShapeUtil('text')).toBeDefined();
     expect(getShapeUtil('text')?.type).toBe('text');
+
+    expect(getShapeUtil('freehand')).toBeDefined();
+    expect(getShapeUtil('freehand')?.type).toBe('freehand');
+
+    expect(getShapeUtil('highlighter')).toBeDefined();
+    expect(getShapeUtil('highlighter')?.type).toBe('highlighter');
   });
 
   it('returns undefined for unregistered types', () => {
-    expect(getShapeUtil('freehand')).toBeUndefined();
     expect(getShapeUtil('image')).toBeUndefined();
   });
 

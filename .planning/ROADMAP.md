@@ -26,9 +26,11 @@ project roadmap, phase order, and product scope remain canonical in `docs/SPECS.
 - Repo roadmap ID `P5-10` maps to GSD Phase `5.10`.
 - Repo roadmap ID `P5-11` maps to GSD Phase `5.11`.
 - Repo roadmap ID `P3C-00` maps to GSD Phase `3.30`.
+- Repo roadmap ID `P3C-01` maps to GSD Phase `3.31`.
 - The source of truth is `docs/SPECS.md` feature sections.
 
 - [x] **Phase 3.30: P3C-00 Re-render isolation** - Draft point updates are isolated from the main whiteboard and committed shape rendering before SVG ink tools are added.
+- [x] **Phase 3.31: P3C-01 SVG ink layer** - Freehand and highlighter elements render through the existing shared-camera SVG layer without introducing a Canvas render path.
 - [x] **Phase 4.0: P4-00 Anonymous local board + Login to save** - Anonymous local-only board can be converted into a private saved document after login.
 - [x] **Phase 4.1: P4-01 Workspace + document dashboard** - Authenticated users can list, search, create, open, rename, archive, and delete accessible saved documents.
 - [x] **Phase 4.2: P4-02 Sharing, public/private access, invited users** - Owners can share saved documents by link or invite while the server enforces effective room roles.
@@ -66,6 +68,27 @@ project roadmap, phase order, and product scope remain canonical in `docs/SPECS.
 Plans:
 
 - [x] 03.30-01: Isolate draft subscriptions, memoize committed element rendering, and cover P3C-00 AC tests.
+
+### Phase 3.31: P3C-01 SVG ink layer
+
+**Goal**: Freehand and highlighter element types render in the existing SVG whiteboard layer using
+the shared camera transform and no separate Canvas renderer.
+**Depends on**: Phase 3.30
+**Source**: `docs/SPECS.md` `[P3C-01]`
+**Canonical refs**: `docs/SPECS.md`, `specs/042-p3c-01-svg-ink-layer/acceptance.md`
+**Requirements**: [P3C-01-AC-1, P3C-01-AC-2]
+**Success Criteria** (what must be TRUE):
+
+1. Freehand elements are routed through the committed SVG element layer.
+2. Highlighter elements are routed through the same SVG element layer.
+3. Ink path coordinates remain world-space element geometry under the existing camera-transformed
+   SVG group.
+4. No Canvas/2D context render path is introduced for freehand or highlighter.
+   **Plans**: 1 plan
+
+Plans:
+
+- [x] 03.31-01: Add SVG ink shape routing/rendering and AC tests.
 
 ### Phase 4.0: P4-00 Anonymous local board + Login to save
 

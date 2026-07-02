@@ -4,6 +4,7 @@ import { ellipseShapeUtil } from '../ellipse';
 import { diamondShapeUtil } from '../diamond';
 import { lineShapeUtil } from '../line';
 import { textShapeUtil } from '../text';
+import { freehandShapeUtil, highlighterShapeUtil } from '../ink';
 import type { Element } from '../../../types/shared';
 
 function makeElement(overrides: Partial<Element> = {}): Element {
@@ -144,6 +145,88 @@ describe('lineShapeUtil', () => {
   it('getBounds returns element bounds', () => {
     const el = makeElement({ type: 'line', x: 5, y: 5, width: 90, height: 45 });
     expect(lineShapeUtil.getBounds(el)).toEqual({ x: 5, y: 5, width: 90, height: 45 });
+  });
+});
+
+describe('ink shape utils', () => {
+  // @covers AC-1 (P3C-01)
+  // @covers AC-2 (P3C-01)
+  it('renders freehand points as an SVG path in world coordinates', () => {
+    const el = makeElement({
+      type: 'freehand',
+      props: {
+        strokeColor: '#111827',
+        fillColor: 'none',
+        strokeWidth: 3,
+        strokeStyle: 'solid',
+        opacity: 0.9,
+        points: [
+          [10, 20],
+          [30, 45],
+          [60, 35],
+        ],
+      },
+    });
+
+    const jsx = freehandShapeUtil.render(el);
+    const p = jsx.props as AnyProps;
+
+    expect(jsx.type).toBe('path');
+    expect(p['d']).toBe('M 10 20 L 30 45 L 60 35');
+    expect(p['fill']).toBe('none');
+    expect(p['stroke']).toBe('#111827');
+    expect(p['strokeLinecap']).toBe('round');
+    expect(p['strokeLinejoin']).toBe('round');
+  });
+
+  // @covers AC-1 (P3C-01)
+  // @covers AC-2 (P3C-01)
+  it('renders highlighter points through the same SVG path pipeline', () => {
+    const el = makeElement({
+      type: 'highlighter',
+      props: {
+        strokeColor: '#facc15',
+        fillColor: 'none',
+        strokeWidth: 12,
+        strokeStyle: 'solid',
+        opacity: 0.35,
+        points: [
+          [-5, 5],
+          [15, 25],
+        ],
+      },
+    });
+
+    const jsx = highlighterShapeUtil.render(el);
+    const p = jsx.props as AnyProps;
+
+    expect(jsx.type).toBe('path');
+    expect(p['d']).toBe('M -5 5 L 15 25');
+    expect(p['stroke']).toBe('#facc15');
+    expect(p['strokeWidth']).toBe(12);
+    expect(p['opacity']).toBe(0.35);
+  });
+
+  it('uses point bounds and segment hit testing for ink elements', () => {
+    const el = makeElement({
+      type: 'freehand',
+      props: {
+        strokeColor: '#111827',
+        fillColor: 'none',
+        strokeWidth: 3,
+        strokeStyle: 'solid',
+        opacity: 1,
+        points: [
+          [10, 20],
+          [30, 45],
+          [60, 35],
+        ],
+      },
+    });
+
+    expect(freehandShapeUtil.getBounds(el)).toEqual({ x: 10, y: 20, width: 50, height: 25 });
+    expect(freehandShapeUtil.hitTest(el, 31, 44)).toBe(true);
+    expect(freehandShapeUtil.hitTest(el, 300, 300)).toBe(false);
   });
 });
 

@@ -11,7 +11,7 @@ export type ElementType =
   | 'arrow' // P2
   | 'image' // P2.5 — renders via SVG <image> / DOM <img>
   | 'freehand'
-  | 'highlighter' // P3C — Canvas overlay
+  | 'highlighter' // P3C — SVG ink
   | 'frame'
   | 'sticky'
   | 'embed'; // P4

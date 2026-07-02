@@ -2,10 +2,10 @@
 gsd_state_version: '1.0'
 status: complete
 progress:
-  total_phases: 17
-  completed_phases: 17
-  total_plans: 20
-  completed_plans: 20
+  total_phases: 18
+  completed_phases: 18
+  total_plans: 21
+  completed_plans: 21
   percent: 100
 ---
 
@@ -16,14 +16,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-30)
 
 **Core value:** Users can create tactical whiteboards without losing work, then collaborate or persist documents when the workflow calls for it.
-**Current focus:** Phase 3.30: P3C-00 Re-render isolation (completed)
+**Current focus:** Phase 3.31: P3C-01 SVG ink layer (completed)
 
 ## Current Position
 
-Phase: 3.30 of active GSD bootstrap (P3C-00 Re-render isolation)
+Phase: 3.31 of active GSD bootstrap (P3C-01 SVG ink layer)
 Plan: 1 of 1 in current phase
 Status: Complete
-Last activity: 2026-07-02 - Completed P3C-00 render isolation and verification.
+Last activity: 2026-07-02 - Completed P3C-01 SVG ink layer implementation and verification.
 
 Progress: [##########] 100%
 
@@ -67,6 +67,8 @@ Progress: [##########] 100%
   selection, and draft preview remain ephemeral and must not persist or advance documentClock.
 - [Phase 3.30]: P3C ink remains SVG-only; draft point-heavy rendering is isolated in child SVG
   layers and committed element rendering is memoized before adding freehand/highlighter/eraser.
+- [Phase 3.31]: P3C-01 adds committed freehand/highlighter SVG rendering only; drawing tools,
+  point simplification, highlighter styling controls, and eraser behavior remain later P3C phases.
 
 ### Pending Todos
 
@@ -88,6 +90,7 @@ Progress: [##########] 100%
 - P5-10 export adapters use materialized server truth implemented and verified against 4 acceptance criteria.
 - P5-11 frontend reconciliation implemented and verified against 8 acceptance criteria.
 - P3C-00 re-render isolation implemented and verified against 3 acceptance criteria.
+- P3C-01 SVG ink layer implemented and verified against 2 acceptance criteria.
 
 ### Blockers/Concerns
 

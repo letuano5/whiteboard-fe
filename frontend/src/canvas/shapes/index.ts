@@ -6,6 +6,7 @@ import { diamondShapeUtil } from './diamond';
 import { lineShapeUtil } from './line';
 import { textShapeUtil } from './text';
 import { arrowShapeUtil } from './arrow';
+import { freehandShapeUtil, highlighterShapeUtil } from './ink';
 
 const registry = new Map<ElementType, ShapeUtil>();
 
@@ -23,3 +24,5 @@ registerShapeUtil(diamondShapeUtil);
 registerShapeUtil(lineShapeUtil);
 registerShapeUtil(textShapeUtil);
 registerShapeUtil(arrowShapeUtil);
+registerShapeUtil(freehandShapeUtil);
+registerShapeUtil(highlighterShapeUtil);

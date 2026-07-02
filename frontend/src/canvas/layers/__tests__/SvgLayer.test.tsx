@@ -208,6 +208,58 @@ describe('SvgLayer — P3C-00 render isolation', () => {
   });
 });
 
+describe('SvgLayer — P3C-01 SVG ink layer', () => {
+  // @covers AC-1 (P3C-01)
+  // @covers AC-2 (P3C-01)
+  it('renders committed freehand and highlighter paths inside the shared camera transform', () => {
+    const cam: Camera = { x: 50, y: 75, zoom: 2 };
+    const freehand = makeElement({
+      id: 'ink-freehand',
+      type: 'freehand',
+      zIndex: 1,
+      props: {
+        strokeColor: '#111827',
+        fillColor: 'none',
+        strokeWidth: 4,
+        strokeStyle: 'solid',
+        opacity: 0.8,
+        points: [
+          [100, 110],
+          [120, 130],
+        ],
+      },
+    });
+    const highlighter = makeElement({
+      id: 'ink-highlighter',
+      type: 'highlighter',
+      zIndex: 2,
+      props: {
+        strokeColor: '#facc15',
+        fillColor: 'none',
+        strokeWidth: 12,
+        strokeStyle: 'solid',
+        opacity: 0.35,
+        points: [
+          [-20, -10],
+          [0, 10],
+        ],
+      },
+    });
+
+    const { container } = render(<SvgLayer elements={[freehand, highlighter]} camera={cam} />);
+
+    const transformedGroup = container.querySelector('svg > g');
+    expect(transformedGroup).toHaveAttribute('transform', 'scale(2) translate(-50 -75)');
+
+    const paths = Array.from(transformedGroup?.querySelectorAll('path') ?? []);
+    expect(paths.map((path) => path.getAttribute('d'))).toEqual([
+      'M 100 110 L 120 130',
+      'M -20 -10 L 0 10',
+    ]);
+    expect(paths.every((path) => path.tagName.toLowerCase() === 'path')).toBe(true);
+  });
+});
+
 describe('SvgLayer — P1A-10 Z-order render order', () => {
   // @covers AC-8 (006-localstorage-zorder)
   it('renders lower-zIndex element before higher-zIndex element in DOM order', () => {
