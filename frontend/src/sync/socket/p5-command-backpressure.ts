@@ -1,30 +1,20 @@
 import type { QueuedSyncCommand } from './state';
+import type { PatchSlotsCommand, SlotPatch } from '../../types/shared';
 
 export function enqueueCoalescedPatch(
   queue: QueuedSyncCommand[],
   next: QueuedSyncCommand,
 ): QueuedSyncCommand[] {
   if (next.command.kind !== 'patch-slots') return [...queue, next];
-  let updatedQueue = [...queue];
-
-  for (const patch of next.command.patches) {
-    let coalesced = false;
-    updatedQueue = updatedQueue.map((queued) => {
-      if (queued.command.kind !== 'patch-slots') return queued;
-      const patches = queued.command.patches.map((existing) => {
-        if (existing.elementId !== patch.elementId || existing.slot !== patch.slot) return existing;
-        coalesced = true;
-        return {
-          ...patch,
-          inverseChanges: existing.inverseChanges ?? patch.inverseChanges,
-        };
-      });
-      return { ...queued, command: { ...queued.command, patches } };
-    });
-    if (!coalesced) {
-      updatedQueue = [...updatedQueue, { ...next, command: { ...next.command, patches: [patch] } }];
-    }
-  }
+  const mergeIndex = queue.findIndex(
+    (queued) => queued.command.kind === 'patch-slots' && hasOverlappingPatch(queued, next),
+  );
+  const updatedQueue =
+    mergeIndex === -1
+      ? [...queue, next]
+      : queue.map((queued, index) =>
+          index === mergeIndex ? mergeQueuedPatchEnvelope(queued, next) : queued,
+        );
 
   return updatedQueue.filter(
     (queued) => queued.command.kind !== 'patch-slots' || queued.command.patches.length > 0,
@@ -45,23 +35,68 @@ export function compactQueuedSyncCommands(queue: QueuedSyncCommand[]): QueuedSyn
 
 function compactPatchCommand(compacted: QueuedSyncCommand[], queued: QueuedSyncCommand): void {
   if (queued.command.kind !== 'patch-slots') return;
-  for (const patch of queued.command.patches) {
-    const existing = compacted.find(
-      (entry) =>
-        entry.command.kind === 'patch-slots' &&
-        entry.command.patches.some(
-          (candidate) => candidate.elementId === patch.elementId && candidate.slot === patch.slot,
-        ),
+  const existing = compacted.find(
+    (entry) => entry.command.kind === 'patch-slots' && hasOverlappingPatch(entry, queued),
+  );
+  if (!existing) {
+    compacted.push(queued);
+    return;
+  }
+  const merged = mergeQueuedPatchEnvelope(existing, queued);
+  Object.assign(existing, merged);
+}
+
+function mergeQueuedPatchEnvelope(
+  queued: QueuedSyncCommand,
+  next: QueuedSyncCommand,
+): QueuedSyncCommand {
+  if (queued.command.kind !== 'patch-slots' || next.command.kind !== 'patch-slots') return queued;
+  const patches = mergePatches(queued.command.patches, next.command.patches);
+  // A durable/final patch must never be downgraded to transient by coalescing with an
+  // intermediate preview patch on either side — durability wins regardless of arrival order.
+  const persistence = isDurablePatch(queued.command)
+    ? queued.command.persistence
+    : next.command.persistence;
+  return {
+    ...queued,
+    command: { ...next.command, patches, persistence },
+    dependsOnRequestId: queued.dependsOnRequestId ?? next.dependsOnRequestId,
+    sendAfter: Math.min(queued.sendAfter, next.sendAfter),
+    createdAt: Math.min(queued.createdAt, next.createdAt),
+  };
+}
+
+function isDurablePatch(command: PatchSlotsCommand): boolean {
+  return command.persistence?.durability !== 'relaxed';
+}
+
+function hasOverlappingPatch(left: QueuedSyncCommand, right: QueuedSyncCommand): boolean {
+  if (left.command.kind !== 'patch-slots' || right.command.kind !== 'patch-slots') return false;
+  const leftPatches = left.command.patches;
+  const rightPatches = right.command.patches;
+  return leftPatches.some((leftPatch) =>
+    rightPatches.some(
+      (rightPatch) =>
+        rightPatch.elementId === leftPatch.elementId && rightPatch.slot === leftPatch.slot,
+    ),
+  );
+}
+
+function mergePatches(existingPatches: SlotPatch[], nextPatches: SlotPatch[]): SlotPatch[] {
+  const merged = [...existingPatches];
+  for (const patch of nextPatches) {
+    const index = merged.findIndex(
+      (candidate) => candidate.elementId === patch.elementId && candidate.slot === patch.slot,
     );
-    if (!existing) {
-      compacted.push({ ...queued, command: { ...queued.command, patches: [patch] } });
+    if (index === -1) {
+      merged.push(patch);
       continue;
     }
-    if (existing.command.kind !== 'patch-slots') continue;
-    existing.command.patches = existing.command.patches.map((candidate) =>
-      candidate.elementId === patch.elementId && candidate.slot === patch.slot
-        ? { ...patch, inverseChanges: candidate.inverseChanges ?? patch.inverseChanges }
-        : candidate,
-    );
+    const existing = merged[index];
+    merged[index] = {
+      ...patch,
+      inverseChanges: existing?.inverseChanges ?? patch.inverseChanges,
+    };
   }
+  return merged;
 }

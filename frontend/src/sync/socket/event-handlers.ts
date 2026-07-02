@@ -21,6 +21,7 @@ import {
   applyRoomSnapshot,
   processSyncAck,
   processSyncBroadcast,
+  rematerializeOptimisticStore,
   replayBufferedSyncEvents,
 } from './p5-reconciliation';
 import { getSocketState, markPendingRequestsStale, setLastServerClock } from './state';
@@ -64,6 +65,7 @@ export function registerSocketEventHandlers(): void {
     if (current.reconnectPending) {
       markPendingRequestsStale();
       clearPendingQueue();
+      rematerializeOptimisticStore();
       current.reconnectPending = false;
     }
     replayBufferedSyncEvents({ localActorId: getLocalActorId() });

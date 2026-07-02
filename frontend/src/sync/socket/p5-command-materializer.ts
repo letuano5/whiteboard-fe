@@ -5,6 +5,7 @@ import type {
   ReorderElementMove,
   SlotPatch,
   SyncCommand,
+  SyncReadPrecondition,
   SyncSlot,
 } from '../../types/shared';
 import { useElementsStore } from '../../store/elements.store';
@@ -39,6 +40,8 @@ const PATCHABLE_SLOTS: SyncSlot[] = [
   'state.locked',
 ];
 
+const LINEAR_ELEMENT_TYPES = new Set<Element['type']>(['line', 'arrow', 'freehand', 'highlighter']);
+
 type SyncCommandBase = Omit<PatchSlotsCommand, 'kind' | 'patches'>;
 
 export function createElementCommand(
@@ -72,11 +75,13 @@ export function createPatchCommand(
   patches: SlotPatch[],
   now: number,
   final: boolean,
+  readPreconditions?: SyncReadPrecondition[],
 ): PatchSlotsCommand {
   return {
     ...baseCommand(roomId, now, final),
     kind: 'patch-slots',
     patches,
+    ...(readPreconditions && readPreconditions.length > 0 ? { readPreconditions } : {}),
   };
 }
 
@@ -115,7 +120,7 @@ export function createReorderCommand(
 }
 
 export function diffElementSlots(before: Element, after: Element): SlotPatch[] {
-  return PATCHABLE_SLOTS.flatMap((slot) => {
+  return patchableSlotsForElement(after).flatMap((slot) => {
     const previousValue = slotValueFromElement(slot, before);
     const nextValue = slotValueFromElement(slot, after);
     if (JSON.stringify(previousValue) === JSON.stringify(nextValue)) return [];
@@ -128,6 +133,22 @@ export function diffElementSlots(before: Element, after: Element): SlotPatch[] {
         inverseChanges: previousValue,
       },
     ];
+  });
+}
+
+function patchableSlotsForElement(element: Element): SyncSlot[] {
+  const isLinear = LINEAR_ELEMENT_TYPES.has(element.type);
+  return PATCHABLE_SLOTS.filter((slot) => {
+    if (isLinear && slot.startsWith('transform.')) return false;
+    if (!isLinear && slot.startsWith('geometry.')) return false;
+    if (
+      element.type === 'arrow' &&
+      ((slot === 'geometry.startPoint' && element.props.startBinding) ||
+        (slot === 'geometry.endPoint' && element.props.endBinding))
+    ) {
+      return false;
+    }
+    return true;
   });
 }
 

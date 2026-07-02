@@ -7,6 +7,7 @@ import { saveRoomElements } from './persistence/room-repository.js';
 import { createRoomState } from './realtime/room-state.js';
 import { createWhiteboardServer } from './realtime/whiteboard-server.js';
 import type { SyncRoom } from './sync/index.js';
+import { startProcessedRequestGc } from './sync/sync-room-processed-request-gc.js';
 
 const PORT = process.env.PORT ?? 3001;
 
@@ -32,5 +33,6 @@ const autosave = createAutosaveManager({
 });
 
 createWhiteboardServer(io, { ...roomState, autosave, ...authDeps, syncRooms });
+startProcessedRequestGc(prisma);
 
 httpServer.listen(PORT, () => console.log(`Server running on :${PORT}`));

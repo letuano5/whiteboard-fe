@@ -60,16 +60,9 @@ export async function handleRoomDiffRequest(
     });
   } catch (error) {
     console.error(`[room-diff-request] Failed to compute diff for ${roomId}:`, error);
-    socket.emit(WS_EVENTS.ROOM_SNAPSHOT, {
-      protocolVersion: SYNC_PROTOCOL_VERSION,
-      schemaVersion: SYNC_SCHEMA_VERSION,
-      roomId,
-      serverClock: deps.roomClocks.get(roomId) ?? baseClock,
-      documentClock: deps.roomClocks.get(roomId) ?? baseClock,
-      roomEpoch: roomEpoch ?? 0,
-      elements: inMemory,
-      slotClocks: [],
-      wipeAll: true,
+    socket.emit(WS_EVENTS.ROOM_ACCESS_ERROR, {
+      code: 'room-access/forbidden',
+      message: 'Could not compute room diff. Please reconnect and retry.',
     });
   }
 }

@@ -22,8 +22,13 @@ export async function handleSyncCommand(
   command: SyncCommand,
 ): Promise<void> {
   try {
+    if (socket.data?.roomId !== command.roomId) {
+      emitReject(socket, deps, command, new SyncRoomCommandError('FORBIDDEN'));
+      return;
+    }
+
     const effectiveRole = await resolveEffectiveRole(socket, deps, command.roomId);
-    if (!canMutateRoom(effectiveRole ?? 'editor')) {
+    if (!canMutateRoom(effectiveRole ?? 'none')) {
       emitReject(socket, deps, command, new SyncRoomCommandError('FORBIDDEN'));
       return;
     }
@@ -48,7 +53,6 @@ export async function handleSyncCommand(
     // re-broadcast to peers or re-mark the room dirty: the state did not change.
     socket.emit(WS_EVENTS.SYNC_ACK, ack);
     if (!result.replayed) {
-      deps.autosave.markDirty(command.roomId);
       socket.to(command.roomId).emit(WS_EVENTS.SYNC_BROADCAST, broadcast);
       if (result.changeSet.reason === 'replace_document') {
         const replacedPayload = toRoomReplacedPayload(result.changeSet);
@@ -69,12 +73,18 @@ async function resolveEffectiveRole(
   roomId: string,
 ): Promise<EffectiveRoomRole | undefined> {
   const user = socket.data?.auth?.user;
-  if (!user) return socket.data?.roomRole ?? 'editor';
-
-  const access = await resolveRoomAccess(deps.db, roomId, user);
-  const admittedRole = socket.data.roomRoleCapacityDowngraded ? socket.data.roomRole : null;
-  const effectiveRole =
-    admittedRole && !canMutateRoom(admittedRole) ? admittedRole : access.effectiveRole;
+  let access: Awaited<ReturnType<typeof resolveRoomAccess>>;
+  try {
+    access = await resolveRoomAccess(deps.db, roomId, user);
+  } catch {
+    throw new SyncRoomCommandError('FORBIDDEN');
+  }
+  const socketRole = socket.data.roomRole;
+  const admittedRole =
+    socket.data.roomRoleCapacityDowngraded || (socketRole && !canMutateRoom(socketRole))
+      ? socketRole
+      : null;
+  const effectiveRole = admittedRole ?? access.effectiveRole;
   socket.data.roomBaseRole = access.baseRole;
   socket.data.roomRole = effectiveRole;
   return effectiveRole;

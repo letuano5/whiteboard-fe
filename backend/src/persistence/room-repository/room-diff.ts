@@ -92,7 +92,10 @@ async function computeRoomDiff(
     processedRequestHistoryStartsAtClock,
   });
 
-  if (lastServerClock < roomEpoch || lastServerClock < tombstoneHistoryStartsAtClock) {
+  if (
+    (options.roomEpoch !== undefined && options.roomEpoch !== roomEpoch) ||
+    lastServerClock < tombstoneHistoryStartsAtClock
+  ) {
     const allRecords = await db.record.findMany({ where: { roomId } });
     const activeElements = allRecords
       .map((record) => record.state as unknown as Element)
@@ -128,9 +131,9 @@ async function computeRoomDiff(
   const deleted = deletedTombstones.map((tombstone) => ({ id: tombstone.recordId }));
 
   const changedIds = new Set(changedFromDb.map((element) => element.id));
-  const inMemoryOverlay = inMemoryElements.filter(
-    (element) => !changedIds.has(element.id) && !element.isDeleted,
-  );
+  const inMemoryOverlay = room
+    ? []
+    : inMemoryElements.filter((element) => !changedIds.has(element.id) && !element.isDeleted);
 
   const diffSlotClocks = extractSlotClocks(changedRecords, lastServerClock);
 

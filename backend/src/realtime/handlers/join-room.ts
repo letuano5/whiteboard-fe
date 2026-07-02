@@ -42,29 +42,11 @@ export async function handleJoinRoom(
     }
 
     console.error('[room-access] DB error during join:', err);
-    if (!socket.data?.auth?.user) {
-      socket.data.roomBaseRole = 'editor';
-      socket.data.roomRole = 'editor';
-      socket.data.roomRoleCapacityDowngraded = false;
-      socket.emit(WS_EVENTS.ROOM_ACCESS, {
-        roomId,
-        role: 'editor',
-        baseRole: 'editor',
-        effectiveRole: 'editor',
-        visibility: 'link_edit',
-        maxParticipants: null,
-        maxEditors: null,
-        shareRevokedAt: null,
-        members: [],
-        invitations: [],
-      });
-    } else {
-      socket.emit(WS_EVENTS.ROOM_ACCESS_ERROR, {
-        code: 'room-access/forbidden',
-        message: 'Could not resolve room access.',
-      });
-      return;
-    }
+    socket.emit(WS_EVENTS.ROOM_ACCESS_ERROR, {
+      code: 'room-access/forbidden',
+      message: 'Could not resolve room access.',
+    });
+    return;
   }
 
   socket.join(roomId);

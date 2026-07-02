@@ -128,6 +128,105 @@ describe('P5 command queue drag flushing and backpressure', () => {
     expect(getSocketState().pausedForResync).toBe(true);
   });
 
+  it('keeps multi-slot patches in one command with one request id', () => {
+    // @covers C1
+    const emit = vi.fn();
+    getSocketState().socket = { emit, connected: true } as never;
+    getSocketState().roomId = 'room-1';
+
+    enqueueMutationSyncCommands(
+      {
+        type: 'patch',
+        before: [makeElement({ id: 'shape-1', x: 0, width: 100 })],
+        elements: [makeElement({ id: 'shape-1', x: 10, width: 120 })],
+      },
+      'room-1',
+      { final: true, now: 0 },
+    );
+
+    const command = emittedCommand(emit, 0) as PatchSlotsCommand;
+    expect(command.kind).toBe('patch-slots');
+    expect(command.patches.map((patch) => patch.slot)).toEqual([
+      'transform.position',
+      'transform.size',
+    ]);
+    expect(new Set(command.patches.map(() => command.requestId)).size).toBe(1);
+  });
+
+  it('coalesces overlapping patch commands without splitting new slots into sibling requests', () => {
+    // @covers C1
+    getSocketState().socket = { emit: vi.fn(), connected: false } as never;
+    getSocketState().roomId = 'room-1';
+
+    enqueueMutationSyncCommands(
+      {
+        type: 'patch',
+        before: [makeElement({ id: 'shape-1', x: 0, width: 100 })],
+        elements: [makeElement({ id: 'shape-1', x: 10, width: 100 })],
+      },
+      'room-1',
+      { now: 0 },
+    );
+    enqueueMutationSyncCommands(
+      {
+        type: 'patch',
+        before: [makeElement({ id: 'shape-1', x: 10, width: 100 })],
+        elements: [makeElement({ id: 'shape-1', x: 20, width: 140 })],
+      },
+      'room-1',
+      { final: true, now: 50 },
+    );
+
+    expect(getSocketState().queuedSyncCommands).toHaveLength(1);
+    const command = getSocketState().queuedSyncCommands[0]!.command as PatchSlotsCommand;
+    expect(command.patches.map((patch) => patch.slot)).toEqual([
+      'transform.position',
+      'transform.size',
+    ]);
+  });
+
+  it('does not emit transform patches for linear elements', () => {
+    // @covers H4
+    const emit = vi.fn();
+    getSocketState().socket = { emit, connected: true } as never;
+    getSocketState().roomId = 'room-1';
+    const before = makeElement({
+      id: 'line-1',
+      type: 'line',
+      x: 0,
+      width: 10,
+      props: {
+        ...makeElement().props,
+        points: [
+          [0, 0],
+          [10, 0],
+        ],
+      },
+    });
+    const after = makeElement({
+      id: 'line-1',
+      type: 'line',
+      x: 5,
+      width: 10,
+      props: {
+        ...makeElement().props,
+        points: [
+          [5, 0],
+          [15, 0],
+        ],
+      },
+    });
+
+    enqueueMutationSyncCommands({ type: 'patch', before: [before], elements: [after] }, 'room-1', {
+      final: true,
+      now: 0,
+    });
+
+    const command = emittedCommand(emit, 0) as PatchSlotsCommand;
+    expect(command.patches.some((patch) => patch.slot.startsWith('transform.'))).toBe(false);
+    expect(command.patches.map((patch) => patch.slot)).toContain('geometry.points');
+  });
+
   it('creates safe single-slot undo only when the slot clock still matches', () => {
     // @covers AC-6
     applyKnownSlotClocks([{ elementId: 'shape-1', slot: 'transform.position', clock: 4 }]);
@@ -178,6 +277,49 @@ describe('P5 command queue drag flushing and backpressure', () => {
 
     expect(emit).toHaveBeenCalledTimes(2);
     expect(emittedCommand(emit, 1).kind).toBe('patch-slots');
+  });
+
+  it('promotes queued create dependencies before dependent patches', () => {
+    // @covers H5
+    const emit = vi.fn();
+    getSocketState().socket = { emit, connected: false } as never;
+    getSocketState().roomId = 'room-1';
+
+    enqueueMutationSyncCommands(createEvent('created-1'), 'room-1', { now: 0 });
+    const create = getSocketState().queuedSyncCommands[0]!;
+    clearPendingSyncCommands();
+    getSocketState().socket = { emit, connected: true } as never;
+    getSocketState().queuedSyncCommands = [
+      {
+        command: {
+          protocolVersion: SYNC_PROTOCOL_VERSION,
+          schemaVersion: SYNC_SCHEMA_VERSION,
+          roomId: 'room-1',
+          requestId: 'patch-request',
+          clientClock: 1,
+          baseRoomEpoch: 0,
+          persistence: { durability: 'durable', resendable: true, storeProcessedRequest: true },
+          kind: 'patch-slots',
+          patches: [
+            {
+              elementId: 'created-1',
+              slot: 'transform.position',
+              baseClock: 0,
+              changes: { x: 50, y: 0 },
+            },
+          ],
+        },
+        dependsOnRequestId: create.command.requestId,
+        sendAfter: 0,
+        createdAt: 1,
+      },
+      create,
+    ];
+
+    flushPendingSyncCommands(true);
+
+    expect(emittedCommand(emit, 0).kind).toBe('create-element');
+    expect(getSocketState().queuedSyncCommands[0]?.command.kind).toBe('patch-slots');
   });
 
   it('sends draft/selection preview as ephemeral events, not SyncCommand persistence', () => {
@@ -338,6 +480,29 @@ describe('P5 command queue drag flushing and backpressure', () => {
     expect(result.status).toBe('ignored-stale');
     expect(getSocketState().pendingSyncRequests).toEqual([]);
     expect(useElementsStore.getState().elements[0]?.x).toBe(50);
+  });
+
+  it('rematerializes server state after a reject without serverChangeSet', () => {
+    // @covers M1
+    const emit = vi.fn();
+    const optimistic = makeElement({ id: 'created-1' });
+    useElementsStore.setState({ elements: [optimistic] });
+    getSocketState().serverElements = [];
+    getSocketState().hasServerState = true;
+    getSocketState().socket = { emit, connected: true } as never;
+    getSocketState().roomId = 'room-1';
+
+    enqueueMutationSyncCommands(createEvent('created-1'), 'room-1', { now: 0 });
+    const requestId = getSocketState().inFlightSyncCommands[0]!.command.requestId;
+    queuePendingSyncRequest({ requestId, actorId: null });
+
+    processSyncAck({
+      status: 'reject',
+      ...ackBase(requestId, 0),
+      reason: 'FORBIDDEN',
+    });
+
+    expect(useElementsStore.getState().elements).toEqual([]);
   });
 
   it('drops processed reconnect requests without double-applying them', () => {

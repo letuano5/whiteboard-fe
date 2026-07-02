@@ -9,16 +9,13 @@ import type {
 import { WS_EVENTS } from '../../types/shared';
 import type { MutationEvent } from '../../store/mutation-pipeline';
 import { compactQueuedSyncCommands, enqueueCoalescedPatch } from './p5-command-backpressure';
+import { commandsFromMutation } from './p5-command-from-mutation';
 import { isCommandRelevantForResend, requestBackpressureResync } from './p5-command-resync';
 import {
   applyOptimisticCommand,
   cloneElement,
   commandElementIds,
-  createDeleteCommand,
-  createElementCommand,
   createPatchCommand,
-  createReorderCommand,
-  diffElementSlots,
 } from './p5-command-materializer';
 import { getKnownSlotClock, getSocketState, type QueuedSyncCommand } from './state';
 
@@ -76,6 +73,7 @@ export function flushPendingSyncCommands(force = false): void {
     const next = state.queuedSyncCommands[0];
     if (!next) return;
     if (!force && next.sendAfter > now) return;
+    if (promoteQueuedDependency(next)) continue;
     if (
       next.dependsOnRequestId &&
       state.inFlightSyncCommands.some(
@@ -119,6 +117,7 @@ export function settleSyncCommandRequest(requestId: string): void {
 
 export function reconcilePendingCommandStatuses(statuses: PendingRequestStatus[]): void {
   const state = getSocketState();
+  const resendableUnknown: QueuedSyncCommand[] = [];
   for (const status of statuses) {
     if (
       status.status === 'processed' ||
@@ -145,10 +144,14 @@ export function reconcilePendingCommandStatuses(statuses: PendingRequestStatus[]
       (request) => request.requestId !== status.requestId,
     );
     if (isCommandRelevantForResend(sent.command)) {
-      state.queuedSyncCommands = [{ ...sent, sendAfter: Date.now() }, ...state.queuedSyncCommands];
+      resendableUnknown.push({ ...sent, sendAfter: Date.now() });
     } else {
       state.staleAckRequestIds.add(status.requestId);
     }
+  }
+  if (resendableUnknown.length > 0) {
+    resendableUnknown.sort((left, right) => left.createdAt - right.createdAt);
+    state.queuedSyncCommands = [...resendableUnknown, ...state.queuedSyncCommands];
   }
 }
 
@@ -188,46 +191,6 @@ export function createUndoPatchCommand(
       true,
     ),
   };
-}
-
-function commandsFromMutation(
-  event: MutationEvent,
-  roomId: string,
-  now: number,
-  final: boolean,
-): SyncCommand[] {
-  if (event.type === 'create') {
-    return event.elements.map((element) => createElementCommand(roomId, element, now, final));
-  }
-
-  if (event.type === 'delete') {
-    const elementIds = event.before.map((element) => element.id);
-    cancelUnsentCreates(elementIds);
-    const remainingIds = elementIds.filter((elementId) => !hasQueuedCreate(elementId));
-    if (remainingIds.length === 0) return [];
-    return [createDeleteCommand(roomId, remainingIds, now)];
-  }
-
-  const patches = event.elements.flatMap((after, index) => {
-    const before = event.before[index] ?? event.before.find((element) => element.id === after.id);
-    if (!before) return [];
-    return diffElementSlots(before, after);
-  });
-  squashPatchesIntoUnsentCreates(event.elements);
-  const createdReorder = createReorderCommand(roomId, event.before, event.elements, now);
-  const reorderMoves = createdReorder?.moves.filter((move) => !hasQueuedCreate(move.elementId));
-  const reorder =
-    createdReorder && reorderMoves && reorderMoves.length > 0
-      ? { ...createdReorder, moves: reorderMoves }
-      : null;
-  if (patches.length === 0) return reorder ? [reorder] : [];
-  const remainingPatches = patches.filter((patch) => !hasQueuedCreate(patch.elementId));
-  const commands: SyncCommand[] = [];
-  if (reorder) commands.push(reorder);
-  if (remainingPatches.length > 0) {
-    commands.push(createPatchCommand(roomId, remainingPatches, now, final));
-  }
-  return commands;
 }
 
 function enqueueCommand(command: SyncCommand, now: number, forceImmediate: boolean): void {
@@ -289,32 +252,24 @@ function dependencyForCommand(command: SyncCommand): string | undefined {
   return create?.command.requestId;
 }
 
-function cancelUnsentCreates(elementIds: string[]): void {
-  const state = getSocketState();
-  const ids = new Set(elementIds);
-  state.queuedSyncCommands = state.queuedSyncCommands.filter(
-    (queued) => queued.command.kind !== 'create-element' || !ids.has(queued.command.element.id),
-  );
-}
-
-function hasQueuedCreate(elementId: string): boolean {
-  return getSocketState().queuedSyncCommands.some(
-    (queued) => queued.command.kind === 'create-element' && queued.command.element.id === elementId,
-  );
-}
-
-function squashPatchesIntoUnsentCreates(elements: Element[]): void {
-  const state = getSocketState();
-  const byId = new Map(elements.map((element) => [element.id, element]));
-  state.queuedSyncCommands = state.queuedSyncCommands.map((queued) => {
-    if (queued.command.kind !== 'create-element') return queued;
-    const replacement = byId.get(queued.command.element.id);
-    return replacement
-      ? { ...queued, command: { ...queued.command, element: replacement } }
-      : queued;
-  });
-}
-
 function isDiscreteCommand(command: SyncCommand): boolean {
   return command.kind !== 'patch-slots';
+}
+
+function promoteQueuedDependency(next: QueuedSyncCommand): boolean {
+  if (!next.dependsOnRequestId) return false;
+  const state = getSocketState();
+  const dependencyIndex = state.queuedSyncCommands.findIndex(
+    (queued) => queued.command.requestId === next.dependsOnRequestId,
+  );
+  if (dependencyIndex <= 0) return false;
+
+  const dependency = state.queuedSyncCommands[dependencyIndex];
+  if (!dependency) return false;
+  state.queuedSyncCommands = [
+    dependency,
+    ...state.queuedSyncCommands.slice(0, dependencyIndex),
+    ...state.queuedSyncCommands.slice(dependencyIndex + 1),
+  ];
+  return true;
 }

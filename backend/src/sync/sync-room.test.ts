@@ -5,6 +5,21 @@ import { makeElement } from '../test/element-fixtures.js';
 import { SyncRoom, type SyncRoomPlan, type SyncRoomPlanner } from './sync-room.js';
 
 describe('SyncRoom', () => {
+  it('rejects commands before documentClock exceeds the safe wire-clock range', async () => {
+    // @covers L3
+    const room = new SyncRoom({
+      roomId: 'room-1',
+      documentClock: Number.MAX_SAFE_INTEGER,
+    });
+
+    await expect(
+      room.execute(createCommand('room-1', 'overflow', makeElement({ id: 'shape' })), {
+        actorId: 'actor-1',
+      }),
+    ).rejects.toMatchObject({ code: 'CLOCK_OVERFLOW' });
+    expect(room.getStateSnapshot().documentClock).toBe(Number.MAX_SAFE_INTEGER);
+  });
+
   it('serializes same-room commands without interleaving plan and apply', async () => {
     // @covers AC-1
     const events: string[] = [];
@@ -39,7 +54,12 @@ describe('SyncRoom', () => {
     releaseFirstPlan.resolve();
     await Promise.all([first, second]);
 
-    expect(events).toEqual(['plan:request-a', 'commit:request-a', 'plan:request-b', 'commit:request-b']);
+    expect(events).toEqual([
+      'plan:request-a',
+      'commit:request-a',
+      'plan:request-b',
+      'commit:request-b',
+    ]);
     expect([...room.getStateSnapshot().elements.keys()]).toEqual(['a', 'b']);
     expect(room.getStateSnapshot().documentClock).toBe(2);
   });
@@ -161,11 +181,7 @@ describe('SyncRoom', () => {
   it('rejects duplicate actor request IDs with different payloads', async () => {
     const room = new SyncRoom({ roomId: 'room-1' });
     const firstCommand = createCommand('room-1', 'request-1', makeElement({ id: 'first' }));
-    const conflictingCommand = createCommand(
-      'room-1',
-      'request-1',
-      makeElement({ id: 'second' }),
-    );
+    const conflictingCommand = createCommand('room-1', 'request-1', makeElement({ id: 'second' }));
 
     await room.execute(firstCommand, { actorId: 'actor-1' });
 
@@ -189,6 +205,20 @@ describe('SyncRoom', () => {
     expect(room.getStateSnapshot().elements.get('created')?.isDeleted).toBe(false);
     expect(result.changeSet.slotClocks.length).toBeGreaterThan(0);
     expect(room.getStateSnapshot().slotClocks.get('created:transform.position')).toBe(1);
+  });
+
+  it('caps the in-memory processed request cache instead of growing unbounded', async () => {
+    // @covers L1
+    const room = new SyncRoom({ roomId: 'room-1', maxProcessedRequests: 3 });
+
+    for (let i = 0; i < 5; i += 1) {
+      await room.execute(
+        createCommand('room-1', `request-${i}`, makeElement({ id: `el-${i}` })),
+        { actorId: 'actor-1' },
+      );
+    }
+
+    expect(room.getStateSnapshot().processedRequests.size).toBe(3);
   });
 });
 

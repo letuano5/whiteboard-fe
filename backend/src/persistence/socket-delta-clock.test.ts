@@ -23,7 +23,7 @@ function makeMockDb(documentClock: number | null = null) {
   };
 }
 
-function setup() {
+function setup(roomId = 'room-1') {
   const roomPresence = new Map<string, Map<string, Presence>>();
   const roomElements = new Map<string, Map<string, Element>>();
   const roomClocks = new Map<string, number>();
@@ -44,7 +44,7 @@ function setup() {
     autosave,
     db,
   });
-  const socket = makeSocket();
+  const socket = makeSocket({ roomId });
   connect(socket);
   const updateHandler = getHandler(socket, WS_EVENTS.ELEMENT_UPDATE) as (payload: {
     roomId: string;
@@ -153,7 +153,7 @@ describe('socket delta clock — ELEMENT_UPDATE broadcast clock', () => {
 
   // @covers AC-4
   it('uses 0 as the missing-room fallback before the first update increment', async () => {
-    const { updateHandler, peerEmit } = setup();
+    const { updateHandler, peerEmit } = setup('room-without-memory-clock');
 
     await updateHandler({
       roomId: 'room-without-memory-clock',
@@ -188,7 +188,7 @@ describe('socket delta clock — ELEMENT_UPDATE broadcast clock', () => {
       autosave,
       db,
     });
-    const socket = makeSocket();
+    const socket = makeSocket({ roomId });
     connect(socket);
 
     const updateHandler = getHandler(socket, WS_EVENTS.ELEMENT_UPDATE) as (payload: {

@@ -55,7 +55,7 @@ describe('handleSyncCommand', () => {
       expect.objectContaining({ id: 'created-shape' }),
     );
     expect(deps.roomClocks.get('room-1')).toBe(1);
-    expect(markDirty).toHaveBeenCalledWith('room-1');
+    expect(markDirty).not.toHaveBeenCalled();
   });
 
   it('replays the ACK on a duplicate request without re-broadcasting or re-marking dirty', async () => {
@@ -76,7 +76,7 @@ describe('handleSyncCommand', () => {
     );
     // The replay must not double-commit side effects.
     expect(peerEmit).toHaveBeenCalledTimes(1);
-    expect(markDirty).toHaveBeenCalledTimes(1);
+    expect(markDirty).not.toHaveBeenCalled();
   });
 
   it('rejects viewer commands as sync ACKs without broadcasting or marking dirty', async () => {
@@ -103,6 +103,67 @@ describe('handleSyncCommand', () => {
     expect(peerEmit).not.toHaveBeenCalled();
     expect(markDirty).not.toHaveBeenCalled();
     expect(deps.roomElements.get('room-1')).toBeUndefined();
+  });
+
+  it('rejects commands for a room the socket has not joined', async () => {
+    // @covers H2
+    const emit = vi.fn();
+    const peerEmit = vi.fn();
+    const socket = makeSocket(emit, peerEmit);
+    socket.data.roomId = 'other-room';
+    const deps = makeDeps(markDirty);
+
+    await handleSyncCommand(
+      socket,
+      deps,
+      createCommand('wrong-room', makeElement({ id: 'blocked' })),
+    );
+
+    expect(emit).toHaveBeenCalledWith(
+      WS_EVENTS.SYNC_ACK,
+      expect.objectContaining({
+        status: 'reject',
+        requestId: 'wrong-room',
+        reason: 'FORBIDDEN',
+      }),
+    );
+    expect(peerEmit).not.toHaveBeenCalled();
+    expect(markDirty).not.toHaveBeenCalled();
+  });
+
+  it('resolves anonymous room access instead of defaulting to editor', async () => {
+    // @covers H2
+    const emit = vi.fn();
+    const peerEmit = vi.fn();
+    const socket = makeSocket(emit, peerEmit);
+    const deps = makeDeps(markDirty);
+    deps.db = makeTestDb({
+      roomAccess: {
+        id: 'room-1',
+        name: 'Private',
+        visibility: 'private',
+        members: [],
+        invitations: [],
+      },
+      hasSharingDelegate: true,
+    });
+
+    await handleSyncCommand(
+      socket,
+      deps,
+      createCommand('anon-private', makeElement({ id: 'blocked' })),
+    );
+
+    expect(emit).toHaveBeenCalledWith(
+      WS_EVENTS.SYNC_ACK,
+      expect.objectContaining({
+        status: 'reject',
+        requestId: 'anon-private',
+        reason: 'FORBIDDEN',
+      }),
+    );
+    expect(peerEmit).not.toHaveBeenCalled();
+    expect(markDirty).not.toHaveBeenCalled();
   });
 
   it('broadcasts one authoritative room-replaced payload for replace-document commits', async () => {
@@ -242,7 +303,12 @@ function makeDeps(markDirty: (roomId: string) => void): ResolvedWhiteboardServer
   };
 }
 
-function makeTestDb(): PrismaClient {
+function makeTestDb(
+  options: {
+    roomAccess?: Record<string, unknown>;
+    hasSharingDelegate?: boolean;
+  } = {},
+): PrismaClient {
   const txMock = {
     $executeRawUnsafe: vi.fn().mockResolvedValue(undefined),
     room: {
@@ -263,17 +329,18 @@ function makeTestDb(): PrismaClient {
     },
   };
   return {
-    room: { findUnique: vi.fn().mockResolvedValue(null) },
+    room: { findUnique: vi.fn().mockResolvedValue(options.roomAccess ?? null) },
+    ...(options.hasSharingDelegate ? { roomInvitation: {} } : {}),
     processedRequest: { findUnique: vi.fn().mockResolvedValue(null) },
-    $transaction: vi.fn().mockImplementation(async (fn: (tx: typeof txMock) => Promise<unknown>) =>
-      fn(txMock),
-    ),
+    $transaction: vi
+      .fn()
+      .mockImplementation(async (fn: (tx: typeof txMock) => Promise<unknown>) => fn(txMock)),
   } as unknown as PrismaClient;
 }
 
 function makeSocket(emit: ReturnType<typeof vi.fn>, peerEmit: ReturnType<typeof vi.fn>): Socket {
   return {
-    data: {},
+    data: { roomId: 'room-1' },
     emit,
     to: vi.fn().mockReturnValue({ emit: peerEmit }),
   } as unknown as Socket;

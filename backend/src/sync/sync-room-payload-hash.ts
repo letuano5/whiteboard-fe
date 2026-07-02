@@ -1,9 +1,13 @@
+import { createHash } from 'node:crypto';
+
 /**
  * Canonical payload hashing for idempotency comparison. Object keys are sorted
  * recursively so semantically identical retries hash equally regardless of key order.
  */
 export function toPayloadHash(value: unknown): string {
-  return JSON.stringify(toCanonicalValue(value));
+  return createHash('sha256')
+    .update(JSON.stringify(toCanonicalValue(value)))
+    .digest('hex');
 }
 
 export function toCommandPayloadHash(value: unknown): string {

@@ -7,7 +7,7 @@ import {
   toSlotClockKey,
 } from './sync-room-change-set.js';
 import { SyncRoomCommandError } from './sync-room-errors.js';
-import { MAX_CHANGESET_BYTES } from './sync-room-limits.js';
+import { MAX_CHANGESET_BYTES, MAX_IN_MEMORY_PROCESSED_REQUESTS } from './sync-room-limits.js';
 import { toCommandPayloadHash } from './sync-room-payload-hash.js';
 import {
   isConditionalClockConflict,
@@ -53,6 +53,7 @@ interface SyncRoomOptions {
   planner?: SyncRoomPlanner;
   referenceValidator?: SyncRoomReferenceValidator;
   maxChangeSetBytes?: number;
+  maxProcessedRequests?: number;
   persistence?: SyncRoomPersistence;
 }
 
@@ -154,6 +155,9 @@ export class SyncRoom {
     }
 
     assertCanMutate(actorContext);
+    if (this.documentClock >= Number.MAX_SAFE_INTEGER) {
+      throw new SyncRoomCommandError('CLOCK_OVERFLOW');
+    }
     const serverClock = this.documentClock + 1;
     const plan = await this.planner({
       command,
@@ -211,8 +215,20 @@ export class SyncRoom {
 
     if (persistencePolicy.storeProcessedRequest) {
       this.processedRequests.set(idempotencyKey, { payloadHash, result });
+      this.evictOldestProcessedRequests();
     }
     return { result, replayed: false, afterApply: plan.afterApply };
+  }
+
+  // Bounds the hot-path idempotency cache; evicted entries still resolve via
+  // persistence.findProcessedRequest, so eviction only trades memory for a DB round-trip.
+  private evictOldestProcessedRequests(): void {
+    const max = this.options.maxProcessedRequests ?? MAX_IN_MEMORY_PROCESSED_REQUESTS;
+    while (this.processedRequests.size > max) {
+      const oldestKey = this.processedRequests.keys().next().value;
+      if (oldestKey === undefined) return;
+      this.processedRequests.delete(oldestKey);
+    }
   }
 
   private applyCommitted(changeSet: CommittedChangeSet): void {
@@ -225,6 +241,7 @@ export class SyncRoom {
         ...changeSet.created.map((element) => element.id),
         ...changeSet.puts.map((element) => element.id),
       ]);
+      this.tombstoneElementIds.clear();
     }
 
     for (const element of changeSet.created) {
@@ -257,7 +274,7 @@ export class SyncRoom {
   private clearSlotClocksFor(elementIds: string[]): void {
     const ids = new Set(elementIds);
     for (const key of this.slotClocks.keys()) {
-      const separatorIndex = key.indexOf(':');
+      const separatorIndex = key.lastIndexOf(':');
       const elementId = separatorIndex === -1 ? key : key.slice(0, separatorIndex);
       if (ids.has(elementId)) {
         this.slotClocks.delete(key);

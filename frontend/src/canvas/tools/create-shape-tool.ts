@@ -1,10 +1,10 @@
-import type { Element, ElementProps } from '../../types/shared';
+import type { ArrowEndpointBinding, Element, ElementProps } from '../../types/shared';
 import type { Point } from '../../types/geometry';
 import type { ToolId } from '../../types/interaction';
 import { useInteractionStore } from '../../store/interaction.store';
 import { createElement, type ElementDraft } from '../../store/mutation-pipeline';
 import { useElementsStore } from '../../store/elements.store';
-import { findNearestSnap } from '../shapes/arrow-binding';
+import { findNearestSnap, pointKeyToAnchorRatio } from '../shapes/arrow-binding';
 
 export const SHAPE_TOOLS = ['rectangle', 'ellipse', 'line', 'arrow', 'text'] as const;
 export type ShapeToolType = (typeof SHAPE_TOOLS)[number];
@@ -123,8 +123,8 @@ export function onShapePointerUp(
     const partial = buildDraftFromPoints(type, dragStart, worldPt);
 
     // T021: Arrow binding snap — check both endpoints against nearby shapes
-    let startBinding: string | undefined;
-    let endBinding: string | undefined;
+    let startBinding: ArrowEndpointBinding | undefined;
+    let endBinding: ArrowEndpointBinding | undefined;
     let resolvedProps = partial.props;
 
     if (type === 'arrow' && partial.props.points) {
@@ -135,13 +135,21 @@ export function onShapePointerUp(
       const snapStart = findNearestSnap(startPt, elements, '__draft__');
       const snapEnd = findNearestSnap(endPt, elements, '__draft__');
 
-      const newPoints: [number, number][] = [...partial.props.points.map((p) => [p[0], p[1]] as [number, number])];
+      const newPoints: [number, number][] = [
+        ...partial.props.points.map((p) => [p[0], p[1]] as [number, number]),
+      ];
       if (snapStart) {
-        startBinding = `${snapStart.elementId}:${snapStart.pointKey}`;
+        startBinding = {
+          elementId: snapStart.elementId,
+          anchorRatio: pointKeyToAnchorRatio(snapStart.pointKey),
+        };
         newPoints[0] = [snapStart.x, snapStart.y];
       }
       if (snapEnd) {
-        endBinding = `${snapEnd.elementId}:${snapEnd.pointKey}`;
+        endBinding = {
+          elementId: snapEnd.elementId,
+          anchorRatio: pointKeyToAnchorRatio(snapEnd.pointKey),
+        };
         newPoints[1] = [snapEnd.x, snapEnd.y];
       }
       resolvedProps = { ...partial.props, points: newPoints, startBinding, endBinding };

@@ -1,10 +1,11 @@
 import { create } from 'zustand';
-import type { Element } from '../types/shared';
+import type { Element, SyncReadPrecondition } from '../types/shared';
 import { deleteElements, applySnapshot } from './mutation-pipeline';
 
 export interface HistoryEntry {
   before: Element[];
   after: Element[];
+  readPreconditions?: SyncReadPrecondition[];
 }
 
 const MAX_HISTORY = 100;
@@ -49,7 +50,7 @@ export const useHistoryStore = create<HistoryState & HistoryActions>()((set, get
       // Undo of createElement: soft-delete the created elements
       deleteElements(entry.after.map((e) => e.id));
     } else {
-      applySnapshot(entry.before);
+      applySnapshot(entry.before, { sync: { readPreconditions: entry.readPreconditions } });
     }
 
     set({ isApplying: false });
@@ -62,7 +63,7 @@ export const useHistoryStore = create<HistoryState & HistoryActions>()((set, get
     const entry = redoStack[redoStack.length - 1];
     set({ isApplying: true, redoStack: redoStack.slice(0, -1), undoStack: [...undoStack, entry] });
 
-    applySnapshot(entry.after);
+    applySnapshot(entry.after, { sync: { readPreconditions: entry.readPreconditions } });
 
     set({ isApplying: false });
   },

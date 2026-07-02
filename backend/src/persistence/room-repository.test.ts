@@ -637,12 +637,14 @@ describe('getRoomClock', () => {
 function buildDiffMockDb({
   minDeletedClock,
   documentClock,
+  roomEpoch = 0n,
   changedRecords,
   deletedTombstones,
   allRecords,
 }: {
   minDeletedClock: bigint | null;
   documentClock: bigint;
+  roomEpoch?: bigint;
   changedRecords: Array<{
     recordId: string;
     state: unknown;
@@ -660,7 +662,7 @@ function buildDiffMockDb({
   const tombstoneAggregate = vi.fn().mockResolvedValue({
     _min: { deletedClock: minDeletedClock },
   });
-  const roomFindUnique = vi.fn().mockResolvedValue({ documentClock });
+  const roomFindUnique = vi.fn().mockResolvedValue({ documentClock, roomEpoch });
   // Wipe path calls record.findMany once (all records, no clock filter).
   // Diff path calls record.findMany once (filtered by recordClock).
   // Use allRecords when provided (wipe scenario), changedRecords otherwise (diff scenario).
@@ -836,12 +838,12 @@ describe('getRoomDiff — P3A-03', () => {
   });
 
   // =========================================================================
-  // R-03: in-memory overlay — element not yet autosaved appears in diff
+  // P5: persisted room diff reads from DB truth only, not the in-memory mirror
   // =========================================================================
-  describe('R-03: in-memory overlay adds not-yet-autosaved elements', () => {
-    it('includes in-memory active elements not present in DB changed set', async () => {
+  describe('P5 persisted diff excludes in-memory overlay', () => {
+    it('does not include in-memory active elements not present in DB changed set', async () => {
       const dbEl = makeElement({ id: 'db-el' });
-      const memEl = makeElement({ id: 'mem-only-el' }); // not in DB yet
+      const memEl = makeElement({ id: 'mem-only-el' });
 
       const { db } = buildDiffMockDb({
         minDeletedClock: null,
@@ -856,7 +858,7 @@ describe('getRoomDiff — P3A-03', () => {
       if (result.mode === 'diff') {
         const ids = result.changed.map((e) => e.id);
         expect(ids).toContain('db-el');
-        expect(ids).toContain('mem-only-el');
+        expect(ids).not.toContain('mem-only-el');
         // db-el should appear only once (not duplicated from overlay)
         expect(ids.filter((id) => id === 'db-el')).toHaveLength(1);
       }
@@ -877,6 +879,28 @@ describe('getRoomDiff — P3A-03', () => {
       expect(result.mode).toBe('diff');
       if (result.mode === 'diff') {
         expect(result.changed.map((e) => e.id)).not.toContain('mem-deleted-el');
+      }
+    });
+  });
+
+  describe('P5 roomEpoch boundary', () => {
+    it('returns wipe when the client roomEpoch does not match the server roomEpoch', async () => {
+      const el = makeElement({ id: 'active-epoch' });
+      const { db } = buildDiffMockDb({
+        minDeletedClock: null,
+        documentClock: 12n,
+        roomEpoch: 3n,
+        changedRecords: [],
+        deletedTombstones: [],
+        allRecords: [{ recordId: 'active-epoch', state: el, recordClock: 12n, slotClocks: {} }],
+      });
+
+      const result = await getRoomDiff(db, ROOM_ID, 11, [], { roomEpoch: 2 });
+
+      expect(result.mode).toBe('wipe');
+      if (result.mode === 'wipe') {
+        expect(result.roomEpoch).toBe(3);
+        expect(result.elements.map((element) => element.id)).toEqual(['active-epoch']);
       }
     });
   });

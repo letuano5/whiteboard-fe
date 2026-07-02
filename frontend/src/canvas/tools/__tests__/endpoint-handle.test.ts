@@ -288,7 +288,10 @@ describe('AC-7: snap binding on ep-end release near a target shape', () => {
 
     const updated = useElementsStore.getState().elements.find((e) => e.id === 'arrow-1')!;
     // endBinding should be set to target's center attachment
-    expect(updated.props.endBinding).toMatch(/^target-1:center$/);
+    expect(updated.props.endBinding).toEqual({
+      elementId: 'target-1',
+      anchorRatio: { x: 0.5, y: 0.5 },
+    });
     // Snap position: center is (150, 130)
     expect(updated.props.points?.[1][0]).toBeCloseTo(150);
     expect(updated.props.points?.[1][1]).toBeCloseTo(130);

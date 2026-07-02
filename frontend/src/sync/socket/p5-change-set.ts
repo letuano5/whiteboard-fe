@@ -1,4 +1,5 @@
 import type {
+  ArrowEndpointBinding,
   CommittedChangeSet,
   Element,
   PointTuple,
@@ -197,17 +198,9 @@ export function slotValueFromElement(slot: SyncSlot, element: Element): SlotValu
     case 'geometry.endPoint':
       return { endPoint: element.props.points?.[element.props.points.length - 1] ?? null };
     case 'binding.start':
-      return {
-        binding:
-          typeof element.props.startBinding === 'string'
-            ? null
-            : (element.props.startBinding ?? null),
-      };
+      return { binding: normalizeBinding(element.props.startBinding) };
     case 'binding.end':
-      return {
-        binding:
-          typeof element.props.endBinding === 'string' ? null : (element.props.endBinding ?? null),
-      };
+      return { binding: normalizeBinding(element.props.endBinding) };
     case 'order':
       return { zIndex: element.zIndex };
     case 'asset.src':
@@ -220,6 +213,33 @@ export function slotValueFromElement(slot: SyncSlot, element: Element): SlotValu
       return { frameId: element.frameId };
     case 'state.locked':
       return { locked: element.locked };
+  }
+}
+
+function normalizeBinding(binding: Element['props']['startBinding']): ArrowEndpointBinding | null {
+  if (!binding) return null;
+  if (typeof binding === 'object') return binding;
+  const separator = binding.lastIndexOf(':');
+  if (separator === -1) return null;
+  const elementId = binding.slice(0, separator);
+  const anchorRatio = pointKeyToAnchorRatio(binding.slice(separator + 1));
+  return elementId && anchorRatio ? { elementId, anchorRatio } : null;
+}
+
+function pointKeyToAnchorRatio(pointKey: string): ArrowEndpointBinding['anchorRatio'] | null {
+  switch (pointKey) {
+    case 'center':
+      return { x: 0.5, y: 0.5 };
+    case 'top':
+      return { x: 0.5, y: 0 };
+    case 'right':
+      return { x: 1, y: 0.5 };
+    case 'bottom':
+      return { x: 0.5, y: 1 };
+    case 'left':
+      return { x: 0, y: 0.5 };
+    default:
+      return null;
   }
 }
 

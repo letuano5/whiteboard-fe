@@ -1,4 +1,4 @@
-import type { Element } from '../types/shared';
+import type { Element, SyncReadPrecondition } from '../types/shared';
 import { generateId } from '../utils/id';
 import { useElementsStore } from './elements.store';
 import { normalizeLinearBounds } from '../utils/geometry';
@@ -12,6 +12,7 @@ export interface MutationEvent {
 
 export interface MutationSyncOptions {
   final?: boolean;
+  readPreconditions?: SyncReadPrecondition[];
 }
 
 interface MutationOptions {
@@ -177,7 +178,7 @@ export function updateElements(
   fireHooks({ type: 'update', elements: updated, before, sync: options.sync });
 }
 
-export function applySnapshot(elements: Element[]): void {
+export function applySnapshot(elements: Element[], options: MutationOptions = {}): void {
   if (elements.length === 0) return;
   const now = Date.now();
   const storeElements = useElementsStore.getState().elements;
@@ -194,5 +195,5 @@ export function applySnapshot(elements: Element[]): void {
   });
   // Use the Zustand store setter directly (NOT the pipeline updateElements) to avoid version-doubling
   useElementsStore.getState().updateElements(bumped);
-  fireHooks({ type: 'update', elements: bumped, before: elements });
+  fireHooks({ type: 'update', elements: bumped, before: elements, sync: options.sync });
 }

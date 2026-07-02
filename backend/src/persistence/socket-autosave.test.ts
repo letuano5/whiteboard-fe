@@ -18,6 +18,7 @@ import type { Element, Presence } from '@vdt/shared';
 import { WS_EVENTS } from '@vdt/shared';
 import { makeElement } from '../test/element-fixtures.js';
 import { makeFakeIo } from '../test/fake-socket-io.js';
+import type { PrismaClient } from '@prisma/client';
 
 // ---------------------------------------------------------------------------
 // @covers AC-8
@@ -54,7 +55,13 @@ describe('AC-8: hot path — element-update does not block on persistence', () =
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const roomId = 'room-1';
     roomClocks.set(roomId, 0);
-    createWhiteboardServer(ioServer as any, { roomPresence, roomElements, roomClocks, autosave });
+    createWhiteboardServer(ioServer as any, {
+      roomPresence,
+      roomElements,
+      roomClocks,
+      autosave,
+      db: { room: { findUnique: vi.fn().mockResolvedValue(null) } } as unknown as PrismaClient,
+    });
 
     const socket = makeSocket({ roomId, sessionId: 'session-1' });
     connect(socket);
@@ -89,7 +96,13 @@ describe('AC-8: hot path — element-update does not block on persistence', () =
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const roomId = 'room-2';
     roomClocks.set(roomId, 0);
-    createWhiteboardServer(ioServer as any, { roomPresence, roomElements, roomClocks, autosave });
+    createWhiteboardServer(ioServer as any, {
+      roomPresence,
+      roomElements,
+      roomClocks,
+      autosave,
+      db: { room: { findUnique: vi.fn().mockResolvedValue(null) } } as unknown as PrismaClient,
+    });
 
     const socket = makeSocket({ roomId, sessionId: 'session-1' });
     connect(socket);
@@ -133,7 +146,13 @@ describe('AC-8: hot path — element-update does not block on persistence', () =
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const roomId = 'room-3';
     roomClocks.set(roomId, 0);
-    createWhiteboardServer(ioServer as any, { roomPresence, roomElements, roomClocks, autosave });
+    createWhiteboardServer(ioServer as any, {
+      roomPresence,
+      roomElements,
+      roomClocks,
+      autosave,
+      db: { room: { findUnique: vi.fn().mockResolvedValue(null) } } as unknown as PrismaClient,
+    });
 
     const socket = makeSocket({ roomId, sessionId: 'session-1' });
     connect(socket);

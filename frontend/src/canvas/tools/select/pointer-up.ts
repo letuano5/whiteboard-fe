@@ -2,7 +2,7 @@ import { patchElement, updateElements } from '../../../store/mutation-pipeline';
 import { useElementsStore } from '../../../store/elements.store';
 import { useInteractionStore } from '../../../store/interaction.store';
 import type { Point } from '../../../types/geometry';
-import { findNearestSnap, parseBinding } from '../../shapes/arrow-binding';
+import { findNearestSnap, parseBinding, pointKeyToAnchorRatio } from '../../shapes/arrow-binding';
 import { rectsIntersect } from './geometry';
 
 export function onSelectPointerUp(_worldPt: Point): void {
@@ -99,13 +99,16 @@ export function onSelectPointerUp(_worldPt: Point): void {
 
         if (snap) {
           newPoints[movedIdx] = [snap.x, snap.y];
-          const bindingStr = `${snap.elementId}:${snap.pointKey}`;
+          const binding = {
+            elementId: snap.elementId,
+            anchorRatio: pointKeyToAnchorRatio(snap.pointKey),
+          };
           if (movedIdx === 0) {
             // Only update startBinding; leave endBinding untouched
-            resolvedProps = { ...resolvedProps, points: newPoints, startBinding: bindingStr };
+            resolvedProps = { ...resolvedProps, points: newPoints, startBinding: binding };
           } else {
             // Only update endBinding; leave startBinding untouched
-            resolvedProps = { ...resolvedProps, points: newPoints, endBinding: bindingStr };
+            resolvedProps = { ...resolvedProps, points: newPoints, endBinding: binding };
           }
         } else {
           // No snap — release binding only for the moved endpoint

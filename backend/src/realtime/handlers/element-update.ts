@@ -13,33 +13,33 @@ export async function handleElementUpdate(
   const { db } = deps;
 
   const user = socket.data?.auth?.user;
-  if (user) {
-    try {
-      const access = await resolveRoomAccess(db, roomId, user);
-      const admittedRole = socket.data.roomRoleCapacityDowngraded ? socket.data.roomRole : null;
-      const effectiveRole =
-        admittedRole && !canMutateRoom(admittedRole) ? admittedRole : access.effectiveRole;
-      socket.data.roomBaseRole = access.baseRole;
-      socket.data.roomRole = effectiveRole;
-      if (!canMutateRoom(effectiveRole)) {
-        socket.emit(WS_EVENTS.ROOM_ACCESS_ERROR, {
-          code: 'room-access/forbidden',
-          message: 'Viewers cannot mutate room elements.',
-        });
-        return;
-      }
-    } catch (err) {
-      console.error(`[room-access] Failed to authorize mutation for ${roomId}:`, err);
+  if (socket.data?.roomId !== roomId) {
+    socket.emit(WS_EVENTS.ROOM_ACCESS_ERROR, {
+      code: 'room-access/forbidden',
+      message: 'Socket is not joined to this room.',
+    });
+    return;
+  }
+
+  try {
+    const access = await resolveRoomAccess(db, roomId, user);
+    const admittedRole = socket.data.roomRoleCapacityDowngraded ? socket.data.roomRole : null;
+    const effectiveRole =
+      admittedRole && !canMutateRoom(admittedRole) ? admittedRole : access.effectiveRole;
+    socket.data.roomBaseRole = access.baseRole;
+    socket.data.roomRole = effectiveRole;
+    if (!canMutateRoom(effectiveRole)) {
       socket.emit(WS_EVENTS.ROOM_ACCESS_ERROR, {
         code: 'room-access/forbidden',
-        message: 'Could not authorize room mutation.',
+        message: 'Viewers cannot mutate room elements.',
       });
       return;
     }
-  } else if (!canMutateRoom(socket.data?.roomRole ?? 'editor')) {
+  } catch (err) {
+    console.error(`[room-access] Failed to authorize mutation for ${roomId}:`, err);
     socket.emit(WS_EVENTS.ROOM_ACCESS_ERROR, {
       code: 'room-access/forbidden',
-      message: 'Viewers cannot mutate room elements.',
+      message: 'Could not authorize room mutation.',
     });
     return;
   }
@@ -92,7 +92,7 @@ async function isPersistedRoom(
       (await roomDelegate.findUnique({ where: { id: roomId }, select: { id: true } })) !== null
     );
   } catch {
-    return false;
+    return true;
   }
 }
 

@@ -68,6 +68,7 @@ export function processSyncAck(
     if (ack.serverChangeSet) {
       return applyIncomingChangeSet(ack.serverChangeSet, options);
     }
+    rematerializeOptimisticStore();
     return { status: 'applied', serverClock: ack.serverClock };
   }
 
@@ -117,6 +118,7 @@ export function applyRoomSnapshot(snapshot: RoomSnapshot): void {
   if (snapshot.pendingRequests) {
     reconcilePendingRequests(snapshot.pendingRequests);
   }
+  rematerializeOptimisticStore();
 }
 
 export function applyRoomReplaced(payload: RoomReplacedPayload): void {
@@ -181,6 +183,13 @@ export function applyRoomDiff(diff: RoomDiff): void {
   if (diff.pendingRequests) {
     reconcilePendingRequests(diff.pendingRequests);
   }
+  rematerializeOptimisticStore();
+}
+
+export function rematerializeOptimisticStore(): void {
+  useElementsStore
+    .getState()
+    .setElements(materializeOptimisticElements(getCurrentServerElements()));
 }
 
 function clearPendingRequest(requestId: string): void {

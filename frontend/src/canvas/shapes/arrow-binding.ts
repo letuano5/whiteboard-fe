@@ -45,6 +45,21 @@ export interface SnapResult {
   y: number;
 }
 
+export function pointKeyToAnchorRatio(pointKey: PointKey): { x: number; y: number } {
+  switch (pointKey) {
+    case 'center':
+      return { x: 0.5, y: 0.5 };
+    case 'top':
+      return { x: 0.5, y: 0 };
+    case 'right':
+      return { x: 1, y: 0.5 };
+    case 'bottom':
+      return { x: 0.5, y: 1 };
+    case 'left':
+      return { x: 0, y: 0.5 };
+  }
+}
+
 /**
  * Finds the nearest attachment point among all non-arrow, non-deleted elements
  * (excluding `excludeId`) within ARROW_SNAP_THRESHOLD.

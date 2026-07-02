@@ -145,6 +145,7 @@ function makeSocket(
 ): Socket {
   return {
     data: {
+      roomId: 'room-1',
       auth: {
         identity: {
           provider: user.provider,

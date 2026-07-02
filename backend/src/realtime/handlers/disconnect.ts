@@ -18,9 +18,11 @@ export function handleDisconnect(
       roomMap.delete(socket.id);
       if (roomMap.size === 0) {
         presence.delete(roomId);
-        save.flushRoomNow(roomId).catch((err: unknown) => {
-          console.error(`[autosave] flushRoomNow failed for room ${roomId}:`, err);
-        });
+        if (!deps.syncRooms.has(roomId)) {
+          save.flushRoomNow(roomId).catch((err: unknown) => {
+            console.error(`[autosave] flushRoomNow failed for room ${roomId}:`, err);
+          });
+        }
       }
     }
     ioServer.to(roomId).emit(WS_EVENTS.USER_LEAVE, { sessionId });

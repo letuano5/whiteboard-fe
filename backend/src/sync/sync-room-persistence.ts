@@ -101,7 +101,7 @@ export interface PrismaSyncRoomTransaction {
       create: { roomId: string; recordId: string; deletedClock: bigint };
       update: { deletedClock: bigint };
     }) => Promise<unknown>;
-    deleteMany: (args: { where: { roomId: string; recordId: string } }) => Promise<unknown>;
+    deleteMany: (args: { where: { roomId: string; recordId?: string } }) => Promise<unknown>;
   };
   processedRequest: {
     findUnique: (args: {
@@ -196,6 +196,10 @@ async function commitPrismaChangeSet(
   }
 
   const changeSet = commit.result.changeSet;
+  if (changeSet.reason === 'replace_document') {
+    await tx.tombstone.deleteMany({ where: { roomId: changeSet.roomId } });
+  }
+
   const updatedRoom = await tx.room.updateMany({
     where: { id: changeSet.roomId, documentClock: BigInt(commit.expectedDocumentClock) },
     data: { documentClock: BigInt(changeSet.serverClock), roomEpoch: BigInt(changeSet.roomEpoch) },
@@ -232,7 +236,11 @@ async function commitPrismaChangeSet(
     await tx.record.deleteMany({ where: { roomId: changeSet.roomId, recordId: elementId } });
     await tx.tombstone.upsert({
       where: { roomId_recordId: { roomId: changeSet.roomId, recordId: elementId } },
-      create: { roomId: changeSet.roomId, recordId: elementId, deletedClock: BigInt(changeSet.serverClock) },
+      create: {
+        roomId: changeSet.roomId,
+        recordId: elementId,
+        deletedClock: BigInt(changeSet.serverClock),
+      },
       update: { deletedClock: BigInt(changeSet.serverClock) },
     });
   }
