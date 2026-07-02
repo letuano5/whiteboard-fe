@@ -25,6 +25,7 @@ describe('handleRoomDiffRequest', () => {
       changed: [changed],
       deleted: [{ id: 'deleted' }],
       documentClock: 5,
+      slotClocks: [],
     });
 
     await handleRoomDiffRequest(makeSocket(emit), deps, { roomId: 'room-1', fromClock: 3 });
@@ -45,6 +46,7 @@ describe('handleRoomDiffRequest', () => {
       mode: 'wipe',
       elements: [element],
       documentClock: 8,
+      slotClocks: [],
     });
 
     await handleRoomDiffRequest(makeSocket(emit), deps, { roomId: 'room-1', fromClock: 2 });

@@ -6,6 +6,8 @@ export {
 } from './room-repository/index.js';
 export type {
   LoadRoomResult,
+  RecordSlotClockEntry,
+  RecordSlotClocksJson,
   RoomDiffResult,
   SaveRoomElementsResult,
 } from './room-repository/index.js';

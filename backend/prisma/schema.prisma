@@ -91,6 +91,7 @@ model Record {
   typeName    String
   state       Json
   recordClock BigInt
+  slotClocks  Json   @default("{}")
   room        Room   @relation(fields: [roomId], references: [id], onDelete: Cascade)
 
   @@id([roomId, recordId])

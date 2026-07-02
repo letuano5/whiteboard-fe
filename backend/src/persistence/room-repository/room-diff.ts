@@ -1,16 +1,21 @@
 import type { PrismaClient } from '@prisma/client';
-import type { Element } from '@vdt/shared';
-import type { RoomDiffResult } from './types.js';
+import type { Element, SlotClockUpdate, SyncSlot } from '@vdt/shared';
+import type { RecordSlotClocksJson, RoomDiffResult } from './types.js';
 
 /**
  * Computes the reconnect diff for a room since `lastServerClock`.
  *
- * Algorithm (R-03, R-04):
+ * Algorithm (R-03, R-04, P5-13A):
  * 1. Compute tombstoneHistoryStartsAtClock = MIN(tombstone.deletedClock) for the room.
  *    If no tombstones exist, treat as +Infinity → always safe to do incremental diff.
  * 2. If lastServerClock < tombstoneHistoryStartsAtClock: return wipe-all snapshot (AC-8).
  * 3. Else: return incremental diff — DB changed records + DB deleted tombstones since clock.
  *    Overlay any in-memory elements not already covered by the DB changed set (R-03).
+ *
+ * Slot-aware diff (P5-13A step 2):
+ * - Coarse filter by `recordClock > lastServerClock` (uses existing index).
+ * - Then filter per-slot: only return slotClock entries where `entry.clock > lastServerClock`.
+ *   This allows the client to skip slots that haven't changed since its last known clock.
  *
  * @param db                  Prisma client.
  * @param roomId              UUID of the room.
@@ -43,7 +48,9 @@ export async function getRoomDiff(
 
   if (hasTombstones && lastServerClock < tombstoneHistoryStartsAtClock) {
     const activeElements = inMemoryElements.filter((element) => !element.isDeleted);
-    return { mode: 'wipe', elements: activeElements, documentClock };
+    const allRecords = await db.record.findMany({ where: { roomId } });
+    const wipeSlotClocks = extractSlotClocks(allRecords, 0);
+    return { mode: 'wipe', elements: activeElements, documentClock, slotClocks: wipeSlotClocks };
   }
 
   const clock = BigInt(lastServerClock);
@@ -67,10 +74,34 @@ export async function getRoomDiff(
     (element) => !changedIds.has(element.id) && !element.isDeleted,
   );
 
+  const diffSlotClocks = extractSlotClocks(changedRecords, lastServerClock);
+
   return {
     mode: 'diff',
     changed: [...changedFromDb, ...inMemoryOverlay],
     deleted,
     documentClock,
+    slotClocks: diffSlotClocks,
   };
+}
+
+/**
+ * Extracts SlotClockUpdate entries from a set of records.
+ * Only returns entries whose clock > sinceServerClock (step 2 of the 2-step filter).
+ * Pass sinceServerClock = 0 to get all slot clocks (for wipe-all / full load).
+ */
+function extractSlotClocks(
+  records: Array<{ recordId: string; slotClocks: unknown }>,
+  sinceServerClock: number,
+): SlotClockUpdate[] {
+  const result: SlotClockUpdate[] = [];
+  for (const record of records) {
+    const json = ((record.slotClocks ?? {}) as unknown) as RecordSlotClocksJson;
+    for (const [slot, entry] of Object.entries(json)) {
+      if (entry.clock > sinceServerClock) {
+        result.push({ elementId: record.recordId, slot: slot as SyncSlot, clock: entry.clock });
+      }
+    }
+  }
+  return result;
 }

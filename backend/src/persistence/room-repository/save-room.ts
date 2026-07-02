@@ -1,6 +1,6 @@
 import type { PrismaClient } from '@prisma/client';
 import type { Element } from '@vdt/shared';
-import type { SaveRoomElementsResult } from './types.js';
+import type { RecordSlotClocksJson, SaveRoomElementsResult } from './types.js';
 
 /**
  * Persists a batch of elements for a room in a single Prisma transaction.
@@ -12,11 +12,15 @@ import type { SaveRoomElementsResult } from './types.js';
  * - Without targetDocumentClock: legacy path increments documentClock once.
  * - For non-deleted elements: upserts active Record, deletes matching Tombstone (AC-1, AC-4).
  * - For deleted elements: deletes active Record, upserts Tombstone (AC-3).
+ * - slotClocksMap (optional): per-element slot clock JSON to write alongside state.
+ *   When absent, Record.slotClocks keeps its default `{}`.
+ *   P5-06 will supply this map; legacy P3A callers omit it.
  *
  * @param db     Prisma client (or transaction client for testing isolation).
  * @param roomId UUID of the room.
  * @param elements Batch of elements to persist.
  * @param targetDocumentClock Optional live in-memory room clock for P3A-04 flushes.
+ * @param slotClocksMap Optional per-elementId slot clock JSON for P5 persistence path.
  * @returns The persisted documentClock, or `null` when the batch is empty.
  */
 export async function saveRoomElements(
@@ -24,6 +28,7 @@ export async function saveRoomElements(
   roomId: string,
   elements: Element[],
   targetDocumentClock?: number,
+  slotClocksMap?: Map<string, RecordSlotClocksJson>,
 ): Promise<SaveRoomElementsResult | null> {
   if (elements.length === 0) {
     return null;
@@ -55,6 +60,7 @@ export async function saveRoomElements(
 
       for (const el of elements) {
         if (!el.isDeleted) {
+          const slotClocks = slotClocksMap?.get(el.id) ?? {};
           await tx.record.upsert({
             where: { roomId_recordId: { roomId, recordId: el.id } },
             create: {
@@ -65,12 +71,16 @@ export async function saveRoomElements(
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               state: el as any,
               recordClock: targetClock,
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              slotClocks: slotClocks as any,
             },
             update: {
               typeName: el.type,
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               state: el as any,
               recordClock: targetClock,
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              slotClocks: slotClocks as any,
             },
           });
           await tx.tombstone.deleteMany({
@@ -110,6 +120,7 @@ export async function saveRoomElements(
 
     for (const el of elements) {
       if (!el.isDeleted) {
+        const slotClocks = slotClocksMap?.get(el.id) ?? {};
         await tx.record.upsert({
           where: { roomId_recordId: { roomId, recordId: el.id } },
           create: {
@@ -120,12 +131,16 @@ export async function saveRoomElements(
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             state: el as any,
             recordClock: newClock,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            slotClocks: slotClocks as any,
           },
           update: {
             typeName: el.type,
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             state: el as any,
             recordClock: newClock,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            slotClocks: slotClocks as any,
           },
         });
         await tx.tombstone.deleteMany({

@@ -11,8 +11,8 @@
  *
  * loadRoomElements tests:
  * @covers AC-1 (P3A-02) DB load on join — elements and clock returned for room with active records.
- * @covers AC-3 (P3A-02) Empty room (no DB data) returns { elements: [], documentClock: 0 }.
- * @covers AC-6 (P3A-02) All records deleted (tombstones only) returns { elements: [], documentClock: N }.
+ * @covers AC-3 (P3A-02) Empty room (no DB data) returns { elements: [], documentClock: 0, slotClocks: [] }.
+ * @covers AC-6 (P3A-02) All records deleted (tombstones only) returns { elements: [], documentClock: N, slotClocks: [] }.
  * @covers AC-8 (P3A-02) documentClock is number in socket payload.
  */
 
@@ -325,6 +325,45 @@ describe('saveRoomElements', () => {
       expect(tombstoneUpsert).not.toHaveBeenCalled();
     });
   });
+
+  // =========================================================================
+  // P5-13A — slotClocksMap written when provided
+  // =========================================================================
+  describe('P5-13A: slotClocksMap written when provided', () => {
+    it('includes slotClocks in record upsert when slotClocksMap is provided', async () => {
+      const el = makeElement({ id: 'el-slot' });
+      const { db, recordUpsert } = buildMockDb(1n);
+      const slotClocksMap = new Map([
+        ['el-slot', { 'transform.position': { clock: 1 }, 'style.fillColor': { clock: 1 } }],
+      ]);
+
+      await saveRoomElements(db, ROOM_ID, [el], undefined, slotClocksMap);
+
+      expect(recordUpsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          create: expect.objectContaining({
+            slotClocks: { 'transform.position': { clock: 1 }, 'style.fillColor': { clock: 1 } },
+          }),
+          update: expect.objectContaining({
+            slotClocks: { 'transform.position': { clock: 1 }, 'style.fillColor': { clock: 1 } },
+          }),
+        }),
+      );
+    });
+
+    it('uses empty slotClocks {} when no slotClocksMap entry for element', async () => {
+      const el = makeElement({ id: 'el-no-slot' });
+      const { db, recordUpsert } = buildMockDb(1n);
+
+      await saveRoomElements(db, ROOM_ID, [el]);
+
+      expect(recordUpsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          create: expect.objectContaining({ slotClocks: {} }),
+        }),
+      );
+    });
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -361,7 +400,14 @@ describe('loadRoomElements', () => {
         id: ROOM_ID,
         documentClock: 7n,
         records: [
-          { roomId: ROOM_ID, recordId: 'el-load-1', typeName: 'rectangle', state: el, recordClock: 7n },
+          {
+            roomId: ROOM_ID,
+            recordId: 'el-load-1',
+            typeName: 'rectangle',
+            state: el,
+            recordClock: 7n,
+            slotClocks: {},
+          },
         ],
       });
       const db = buildReadMockDb(findUnique);
@@ -371,6 +417,43 @@ describe('loadRoomElements', () => {
       expect(result.elements).toHaveLength(1);
       expect(result.elements[0]).toEqual(el);
       expect(result.documentClock).toBe(7);
+      expect(result.slotClocks).toEqual([]);
+    });
+
+    it('extracts slotClocks from record.slotClocks JSON', async () => {
+      const el = makeElement({ id: 'el-clocked' });
+      const findUnique = vi.fn().mockResolvedValue({
+        id: ROOM_ID,
+        documentClock: 3n,
+        records: [
+          {
+            roomId: ROOM_ID,
+            recordId: 'el-clocked',
+            typeName: 'rectangle',
+            state: el,
+            recordClock: 3n,
+            slotClocks: {
+              'transform.position': { clock: 3, lastActorId: 'user-1' },
+              'style.fillColor': { clock: 2 },
+            },
+          },
+        ],
+      });
+      const db = buildReadMockDb(findUnique);
+
+      const result = await loadRoomElements(db, ROOM_ID);
+
+      expect(result.slotClocks).toHaveLength(2);
+      expect(result.slotClocks).toContainEqual({
+        elementId: 'el-clocked',
+        slot: 'transform.position',
+        clock: 3,
+      });
+      expect(result.slotClocks).toContainEqual({
+        elementId: 'el-clocked',
+        slot: 'style.fillColor',
+        clock: 2,
+      });
     });
 
     it('queries with include: { records: true }', async () => {
@@ -390,13 +473,13 @@ describe('loadRoomElements', () => {
   // @covers AC-3 (P3A-02) — Empty room (no DB data)
   // =========================================================================
   describe('AC-3 (P3A-02): room does not exist in DB', () => {
-    it('returns { elements: [], documentClock: 0 } when room is not found', async () => {
+    it('returns { elements: [], documentClock: 0, slotClocks: [] } when room is not found', async () => {
       const findUnique = vi.fn().mockResolvedValue(null);
       const db = buildReadMockDb(findUnique);
 
       const result = await loadRoomElements(db, ROOM_ID);
 
-      expect(result).toEqual({ elements: [], documentClock: 0 });
+      expect(result).toEqual({ elements: [], documentClock: 0, slotClocks: [] });
     });
   });
 
@@ -404,7 +487,7 @@ describe('loadRoomElements', () => {
   // @covers AC-6 (P3A-02) — All records tombstoned (room exists, records: [])
   // =========================================================================
   describe('AC-6 (P3A-02): room exists but all records are tombstoned', () => {
-    it('returns { elements: [], documentClock: N } where N > 0', async () => {
+    it('returns { elements: [], documentClock: N, slotClocks: [] } where N > 0', async () => {
       const findUnique = vi.fn().mockResolvedValue({
         id: ROOM_ID,
         documentClock: 42n,
@@ -417,6 +500,7 @@ describe('loadRoomElements', () => {
       expect(result.elements).toHaveLength(0);
       expect(result.documentClock).toBe(42);
       expect(result.documentClock).toBeGreaterThan(0);
+      expect(result.slotClocks).toEqual([]);
     });
   });
 
@@ -499,23 +583,31 @@ describe('getRoomClock', () => {
 /**
  * Builds a Prisma mock for the getRoomDiff read path.
  * Supports: tombstone.aggregate, room.findUnique, record.findMany, tombstone.findMany.
+ * changedRecords now include slotClocks for P5-13A slot-aware diff.
  */
 function buildDiffMockDb({
   minDeletedClock,
   documentClock,
   changedRecords,
   deletedTombstones,
+  allRecords,
 }: {
   minDeletedClock: bigint | null;
   documentClock: bigint;
-  changedRecords: Array<{ state: unknown; recordClock: bigint }>;
+  changedRecords: Array<{ recordId: string; state: unknown; recordClock: bigint; slotClocks: Record<string, { clock: number }> }>;
   deletedTombstones: Array<{ recordId: string }>;
+  allRecords?: Array<{ recordId: string; state: unknown; recordClock: bigint; slotClocks: Record<string, { clock: number }> }>;
 }) {
   const tombstoneAggregate = vi.fn().mockResolvedValue({
     _min: { deletedClock: minDeletedClock },
   });
   const roomFindUnique = vi.fn().mockResolvedValue({ documentClock });
-  const recordFindMany = vi.fn().mockResolvedValue(changedRecords);
+  // Wipe path calls record.findMany once (all records, no clock filter).
+  // Diff path calls record.findMany once (filtered by recordClock).
+  // Use allRecords when provided (wipe scenario), changedRecords otherwise (diff scenario).
+  const recordFindMany = vi.fn().mockResolvedValue(
+    allRecords !== undefined ? allRecords : changedRecords,
+  );
   const tombstoneFindMany = vi.fn().mockResolvedValue(deletedTombstones);
 
   const db = {
@@ -546,7 +638,7 @@ describe('getRoomDiff — P3A-03', () => {
       const { db } = buildDiffMockDb({
         minDeletedClock: null, // no tombstones
         documentClock: 5n,
-        changedRecords: [{ state: el, recordClock: 3n }],
+        changedRecords: [{ recordId: 'el-1', state: el, recordClock: 3n, slotClocks: {} }],
         deletedTombstones: [],
       });
 
@@ -557,6 +649,7 @@ describe('getRoomDiff — P3A-03', () => {
         expect(result.changed).toHaveLength(1);
         expect(result.deleted).toHaveLength(0);
         expect(result.documentClock).toBe(5);
+        expect(result.slotClocks).toEqual([]);
       }
     });
 
@@ -576,6 +669,7 @@ describe('getRoomDiff — P3A-03', () => {
         expect(result.changed).toHaveLength(0);
         expect(result.deleted).toHaveLength(0);
         expect(result.documentClock).toBe(7);
+        expect(result.slotClocks).toEqual([]);
       }
     });
   });
@@ -589,7 +683,7 @@ describe('getRoomDiff — P3A-03', () => {
       const { db } = buildDiffMockDb({
         minDeletedClock: null,
         documentClock: 10n,
-        changedRecords: [{ state: el1, recordClock: 8n }],
+        changedRecords: [{ recordId: 'changed-1', state: el1, recordClock: 8n, slotClocks: {} }],
         deletedTombstones: [],
       });
 
@@ -633,8 +727,9 @@ describe('getRoomDiff — P3A-03', () => {
       const { db } = buildDiffMockDb({
         minDeletedClock: 8n, // history starts at 8
         documentClock: 12n,
-        changedRecords: [],     // not reached in wipe path
-        deletedTombstones: [],  // not reached in wipe path
+        changedRecords: [],
+        deletedTombstones: [],
+        allRecords: [],
       });
 
       const result = await getRoomDiff(db, ROOM_ID, 5, [el1, elDeleted]);
@@ -645,20 +740,37 @@ describe('getRoomDiff — P3A-03', () => {
         expect(result.elements.map((e) => e.id)).toContain('active-1');
         expect(result.elements.map((e) => e.id)).not.toContain('ghost');
         expect(result.documentClock).toBe(12);
+        expect(result.slotClocks).toEqual([]);
       }
     });
 
-    it('does NOT hit record or tombstone findMany queries in wipe path', async () => {
-      const { db, recordFindMany, tombstoneFindMany } = buildDiffMockDb({
+    it('does NOT hit record findMany for diff queries in wipe path', async () => {
+      const { db, recordFindMany } = buildDiffMockDb({
         minDeletedClock: 8n,
         documentClock: 12n,
         changedRecords: [],
         deletedTombstones: [],
+        allRecords: [],
       });
 
       await getRoomDiff(db, ROOM_ID, 5, []);
 
-      expect(recordFindMany).not.toHaveBeenCalled();
+      // wipe path queries all records (for slotClocks), but does NOT call
+      // the filtered changedRecords query or tombstone findMany
+      expect(recordFindMany).toHaveBeenCalledTimes(1);
+    });
+
+    it('does NOT hit tombstone findMany in wipe path', async () => {
+      const { db, tombstoneFindMany } = buildDiffMockDb({
+        minDeletedClock: 8n,
+        documentClock: 12n,
+        changedRecords: [],
+        deletedTombstones: [],
+        allRecords: [],
+      });
+
+      await getRoomDiff(db, ROOM_ID, 5, []);
+
       expect(tombstoneFindMany).not.toHaveBeenCalled();
     });
   });
@@ -674,7 +786,7 @@ describe('getRoomDiff — P3A-03', () => {
       const { db } = buildDiffMockDb({
         minDeletedClock: null,
         documentClock: 6n,
-        changedRecords: [{ state: dbEl, recordClock: 4n }],
+        changedRecords: [{ recordId: 'db-el', state: dbEl, recordClock: 4n, slotClocks: {} }],
         deletedTombstones: [],
       });
 
@@ -732,12 +844,115 @@ describe('getRoomDiff — P3A-03', () => {
         documentClock: 55n,
         changedRecords: [],
         deletedTombstones: [],
+        allRecords: [],
       });
 
       const result = await getRoomDiff(db, ROOM_ID, 3, []);
       expect(result.mode).toBe('wipe');
       expect(typeof result.documentClock).toBe('number');
       expect(result.documentClock).toBe(55);
+    });
+  });
+
+  // =========================================================================
+  // P5-13A — slot-aware 2-step diff filter
+  // =========================================================================
+  describe('P5-13A: slot-aware 2-step diff filter', () => {
+    it('returns only slot clocks with clock > lastServerClock from changed records', async () => {
+      const el = makeElement({ id: 'patched-el' });
+      const { db } = buildDiffMockDb({
+        minDeletedClock: null,
+        documentClock: 5n,
+        changedRecords: [
+          {
+            recordId: 'patched-el',
+            state: el,
+            recordClock: 5n,
+            slotClocks: {
+              'transform.position': { clock: 5 },
+              'style.fillColor': { clock: 2 }, // NOT > lastServerClock=3
+            },
+          },
+        ],
+        deletedTombstones: [],
+      });
+
+      const result = await getRoomDiff(db, ROOM_ID, 3, []);
+
+      expect(result.mode).toBe('diff');
+      if (result.mode === 'diff') {
+        expect(result.slotClocks).toHaveLength(1);
+        expect(result.slotClocks[0]).toEqual({
+          elementId: 'patched-el',
+          slot: 'transform.position',
+          clock: 5,
+        });
+      }
+    });
+
+    it('returns slotClocks: [] when no slots changed since lastServerClock', async () => {
+      const el = makeElement({ id: 'stale-el' });
+      const { db } = buildDiffMockDb({
+        minDeletedClock: null,
+        documentClock: 10n,
+        changedRecords: [
+          {
+            recordId: 'stale-el',
+            state: el,
+            recordClock: 10n,
+            slotClocks: {
+              'transform.position': { clock: 3 }, // NOT > lastServerClock=5
+            },
+          },
+        ],
+        deletedTombstones: [],
+      });
+
+      const result = await getRoomDiff(db, ROOM_ID, 5, []);
+
+      expect(result.mode).toBe('diff');
+      if (result.mode === 'diff') {
+        expect(result.slotClocks).toEqual([]);
+      }
+    });
+
+    it('returns all slot clocks in wipe mode (sinceServerClock=0)', async () => {
+      const el = makeElement({ id: 'wipe-el' });
+      const allRecords = [
+        {
+          recordId: 'wipe-el',
+          state: el,
+          recordClock: 5n,
+          slotClocks: {
+            'transform.position': { clock: 5 },
+            'style.fillColor': { clock: 3 },
+          },
+        },
+      ];
+      const { db } = buildDiffMockDb({
+        minDeletedClock: 8n,
+        documentClock: 12n,
+        changedRecords: [],
+        deletedTombstones: [],
+        allRecords,
+      });
+
+      const result = await getRoomDiff(db, ROOM_ID, 5, [el]);
+
+      expect(result.mode).toBe('wipe');
+      if (result.mode === 'wipe') {
+        expect(result.slotClocks).toHaveLength(2);
+        expect(result.slotClocks).toContainEqual({
+          elementId: 'wipe-el',
+          slot: 'transform.position',
+          clock: 5,
+        });
+        expect(result.slotClocks).toContainEqual({
+          elementId: 'wipe-el',
+          slot: 'style.fillColor',
+          clock: 3,
+        });
+      }
     });
   });
 });
