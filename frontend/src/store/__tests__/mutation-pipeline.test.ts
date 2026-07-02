@@ -88,6 +88,33 @@ describe('createElement', () => {
     const el2 = createElement(makeDraft());
     expect(el1.id).not.toBe(el2.id);
   });
+
+  // @covers AC-1
+  it('normalizes freehand bounds from props.points on create', () => {
+    const el = createElement(
+      makeDraft({
+        type: 'freehand',
+        x: 0,
+        y: 0,
+        width: 0,
+        height: 0,
+        props: {
+          strokeColor: '#000000',
+          fillColor: 'transparent',
+          strokeWidth: 3,
+          strokeStyle: 'solid',
+          opacity: 1,
+          points: [
+            [10, 20],
+            [25, 45],
+            [40, 15],
+          ],
+        },
+      }),
+    );
+
+    expect(el).toMatchObject({ x: 10, y: 15, width: 30, height: 30 });
+  });
 });
 
 describe('patchElement', () => {

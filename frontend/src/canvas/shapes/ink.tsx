@@ -1,14 +1,19 @@
 import type { Element } from '../../types/shared';
 import type { ShapeUtil } from './types';
 import { normalizeLinearBounds } from '../../utils/geometry';
+import { buildFreehandPath } from '../freehand-points';
 
 const HIT_THRESHOLD = 8;
 
 function getInkPath(points: [number, number][] | undefined): string {
-  if (!points || points.length === 0) return '';
+  return buildFreehandPath(points);
+}
 
-  const [[startX, startY], ...rest] = points;
-  return [`M ${startX} ${startY}`, ...rest.map(([x, y]) => `L ${x} ${y}`)].join(' ');
+function getRotationTransform(element: Element): string | undefined {
+  if (element.angle === 0) return undefined;
+  const cx = element.x + element.width / 2;
+  const cy = element.y + element.height / 2;
+  return `rotate(${(element.angle * 180) / Math.PI} ${cx} ${cy})`;
 }
 
 function distanceToSegment(
@@ -46,18 +51,22 @@ function createInkShapeUtil(type: 'freehand' | 'highlighter'): ShapeUtil {
 
     render(element) {
       const { props } = element;
+      const transform = getRotationTransform(element);
+
       const d = getInkPath(props.points);
 
       return (
-        <path
-          d={d}
-          fill="none"
-          stroke={props.strokeColor}
-          strokeWidth={props.strokeWidth}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          opacity={props.opacity}
-        />
+        <g transform={transform}>
+          <path
+            d={d}
+            fill="none"
+            stroke={props.strokeColor}
+            strokeWidth={props.strokeWidth}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            opacity={props.opacity}
+          />
+        </g>
       );
     },
 

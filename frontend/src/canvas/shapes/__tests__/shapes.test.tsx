@@ -4,6 +4,7 @@ import { ellipseShapeUtil } from '../ellipse';
 import { diamondShapeUtil } from '../diamond';
 import { lineShapeUtil } from '../line';
 import { textShapeUtil } from '../text';
+import { buildFreehandPath } from '../../freehand-points';
 import { freehandShapeUtil, highlighterShapeUtil } from '../ink';
 import type { Element } from '../../../types/shared';
 
@@ -171,12 +172,14 @@ describe('ink shape utils', () => {
     const jsx = freehandShapeUtil.render(el);
     const p = jsx.props as AnyProps;
 
-    expect(jsx.type).toBe('path');
-    expect(p['d']).toBe('M 10 20 L 30 45 L 60 35');
-    expect(p['fill']).toBe('none');
-    expect(p['stroke']).toBe('#111827');
-    expect(p['strokeLinecap']).toBe('round');
-    expect(p['strokeLinejoin']).toBe('round');
+    expect(jsx.type).toBe('g');
+    const child = (p['children'] as { type: string; props: AnyProps });
+    expect(child.type).toBe('path');
+    expect(child.props['d']).toBe('M 10 20 Q 30 45 45 40 L 60 35');
+    expect(child.props['fill']).toBe('none');
+    expect(child.props['stroke']).toBe('#111827');
+    expect(child.props['strokeLinecap']).toBe('round');
+    expect(child.props['strokeLinejoin']).toBe('round');
   });
 
   // @covers AC-1 (P3C-01)
@@ -200,11 +203,13 @@ describe('ink shape utils', () => {
     const jsx = highlighterShapeUtil.render(el);
     const p = jsx.props as AnyProps;
 
-    expect(jsx.type).toBe('path');
-    expect(p['d']).toBe('M -5 5 L 15 25');
-    expect(p['stroke']).toBe('#facc15');
-    expect(p['strokeWidth']).toBe(12);
-    expect(p['opacity']).toBe(0.35);
+    expect(jsx.type).toBe('g');
+    const child = (p['children'] as { type: string; props: AnyProps });
+    expect(child.type).toBe('path');
+    expect(child.props['d']).toBe('M -5 5 L 15 25');
+    expect(child.props['stroke']).toBe('#facc15');
+    expect(child.props['strokeWidth']).toBe(12);
+    expect(child.props['opacity']).toBe(0.35);
   });
 
   it('uses point bounds and segment hit testing for ink elements', () => {
@@ -228,6 +233,47 @@ describe('ink shape utils', () => {
     expect(freehandShapeUtil.hitTest(el, 31, 44)).toBe(true);
     expect(freehandShapeUtil.hitTest(el, 300, 300)).toBe(false);
   });
+
+  // @covers AC-2
+  it('simplifies raw samples before building a freehand path', () => {
+    const rawPoints = [
+      [0, 0],
+      [1, 0],
+      [2, 0],
+      [30, 20],
+    ] satisfies [number, number][];
+
+    expect(buildFreehandPath(rawPoints)).toBe('M 0 0 L 30 20');
+  });
+
+  // @covers AC-4
+  it('applies rotation transform when rendering freehand ink', () => {
+    const el = makeElement({
+      type: 'freehand',
+      x: 10,
+      y: 20,
+      width: 50,
+      height: 25,
+      angle: Math.PI / 2,
+      props: {
+        strokeColor: '#111827',
+        fillColor: 'none',
+        strokeWidth: 3,
+        strokeStyle: 'solid',
+        opacity: 0.9,
+        points: [
+          [10, 20],
+          [30, 45],
+          [60, 35],
+        ],
+      },
+    });
+
+    const jsx = freehandShapeUtil.render(el);
+    const p = jsx.props as AnyProps;
+    expect(p['transform']).toBe('rotate(90 35 32.5)');
+  });
+
 });
 
 describe('textShapeUtil', () => {

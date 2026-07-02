@@ -38,13 +38,32 @@ describe('Toolbar tool selection', () => {
 });
 
 // @covers AC-8 (005-detail-panel-toolbar)
+// @covers AC-1
 describe('AC-8 (005): toolbar shows tool buttons including laser', () => {
-  it('renders Select, Hand, Rectangle, Ellipse, Line, Text, Laser buttons', () => {
+  it('renders Select, Hand, Rectangle, Ellipse, Line, Text, Freehand, Laser buttons', () => {
     render(<Toolbar />);
-    const expectedTitles = ['Select', 'Hand', 'Rectangle', 'Ellipse', 'Line', 'Text', 'Laser'];
+    const expectedTitles = [
+      'Select',
+      'Hand',
+      'Rectangle',
+      'Ellipse',
+      'Line',
+      'Text',
+      'Freehand',
+      'Laser',
+    ];
     expectedTitles.forEach((title) => {
       expect(screen.getByTitle(title)).toBeInTheDocument();
     });
+  });
+});
+
+// @covers AC-1
+describe('freehand tool button', () => {
+  it('clicking Freehand sets tool to freehand', () => {
+    render(<Toolbar />);
+    fireEvent.click(screen.getByTitle('Freehand'));
+    expect(useInteractionStore.getState().tool).toBe('freehand');
   });
 });
 

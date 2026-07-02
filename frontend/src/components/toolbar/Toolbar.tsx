@@ -7,6 +7,7 @@ import {
   ArrowRight,
   Type,
   Zap,
+  Pencil,
 } from 'lucide-react';
 import { useInteractionStore } from '../../store/interaction.store';
 import { clearLaserTrail } from '../../canvas/tools/laser-tool';
@@ -26,6 +27,7 @@ const TOOLS: ToolButton[] = [
   { id: 'line', label: 'Line', Icon: Minus },
   { id: 'arrow', label: 'Arrow', Icon: ArrowRight },
   { id: 'text', label: 'Text', Icon: Type },
+  { id: 'freehand', label: 'Freehand', Icon: Pencil },
   { id: 'laser', label: 'Laser', Icon: Zap },
 ];
 

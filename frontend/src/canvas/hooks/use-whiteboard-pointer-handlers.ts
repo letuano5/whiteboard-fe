@@ -11,6 +11,12 @@ import {
   onShapePointerMove,
   onShapePointerUp,
 } from '../tools/create-shape-tool';
+import {
+  cancelFreehandDraw,
+  onFreehandPointerDown,
+  onFreehandPointerMove,
+  onFreehandPointerUp,
+} from '../tools/freehand-tool';
 import { onLaserPointerLeave, onLaserPointerMove } from '../tools/laser-tool';
 import {
   onRotateHandlePointerDown,
@@ -85,6 +91,12 @@ export function useWhiteboardPointerHandlers({
       return;
     }
 
+    if (tool === 'freehand') {
+      event.currentTarget.setPointerCapture(event.pointerId);
+      onFreehandPointerDown(svgWorldPoint(event, camera));
+      return;
+    }
+
     if (!isShapeTool(tool)) return;
 
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -120,6 +132,12 @@ export function useWhiteboardPointerHandlers({
     }
 
     if (!canEdit) return;
+
+    if (tool === 'freehand') {
+      onFreehandPointerMove(svgWorldPoint(event, camera));
+      return;
+    }
+
     if (!isShapeTool(tool)) return;
     onShapePointerMove(tool, svgWorldPoint(event, camera));
   }
@@ -140,6 +158,11 @@ export function useWhiteboardPointerHandlers({
       return;
     }
 
+    if (tool === 'freehand') {
+      onFreehandPointerUp(svgWorldPoint(event, camera));
+      return;
+    }
+
     if (!isShapeTool(tool)) return;
     onShapePointerUp(tool, svgWorldPoint(event, camera));
   }
@@ -155,6 +178,11 @@ export function useWhiteboardPointerHandlers({
 
     if (tool === 'laser') {
       onLaserPointerLeave();
+      return;
+    }
+
+    if (tool === 'freehand') {
+      cancelFreehandDraw();
       return;
     }
 

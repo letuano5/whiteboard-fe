@@ -27,10 +27,12 @@ project roadmap, phase order, and product scope remain canonical in `docs/SPECS.
 - Repo roadmap ID `P5-11` maps to GSD Phase `5.11`.
 - Repo roadmap ID `P3C-00` maps to GSD Phase `3.30`.
 - Repo roadmap ID `P3C-01` maps to GSD Phase `3.31`.
+- Repo roadmap ID `P3C-02` maps to GSD Phase `3.32`.
 - The source of truth is `docs/SPECS.md` feature sections.
 
 - [x] **Phase 3.30: P3C-00 Re-render isolation** - Draft point updates are isolated from the main whiteboard and committed shape rendering before SVG ink tools are added.
 - [x] **Phase 3.31: P3C-01 SVG ink layer** - Freehand and highlighter elements render through the existing shared-camera SVG layer without introducing a Canvas render path.
+- [x] **Phase 3.32: P3C-02 Freehand** - Users can draw SVG freehand strokes that simplify points, commit through the shared mutation pipeline, and split automatically at the per-shape point cap.
 - [x] **Phase 4.0: P4-00 Anonymous local board + Login to save** - Anonymous local-only board can be converted into a private saved document after login.
 - [x] **Phase 4.1: P4-01 Workspace + document dashboard** - Authenticated users can list, search, create, open, rename, archive, and delete accessible saved documents.
 - [x] **Phase 4.2: P4-02 Sharing, public/private access, invited users** - Owners can share saved documents by link or invite while the server enforces effective room roles.
@@ -89,6 +91,27 @@ the shared camera transform and no separate Canvas renderer.
 Plans:
 
 - [x] 03.31-01: Add SVG ink shape routing/rendering and AC tests.
+
+### Phase 3.32: P3C-02 Freehand
+
+**Goal**: Add a freehand drawing tool that stores point-based SVG ink elements through the existing
+mutation pipeline, simplifies raw samples, and keeps each committed stroke under the point cap.
+**Depends on**: Phase 3.31
+**Source**: `docs/SPECS.md` `[P3C-02]`
+**Canonical refs**: `docs/SPECS.md`, `specs/043-p3c-02-freehand/acceptance.md`
+**Requirements**: [P3C-02-AC-1, P3C-02-AC-2, P3C-02-AC-3]
+**Success Criteria** (what must be TRUE):
+
+1. Freehand pointer input creates committed `freehand` elements with `props.points`.
+2. Committed freehand elements move/delete through the existing element mutation pipeline.
+3. Raw pointer samples are simplified before SVG path generation.
+4. Drawing beyond the per-shape point cap auto-commits the current stroke and continues in a new
+   `freehand` element.
+   **Plans**: 1 plan
+
+Plans:
+
+- [x] 03.32-01: Implement freehand drawing, point simplification, point-cap stroke splitting, and AC tests.
 
 ### Phase 4.0: P4-00 Anonymous local board + Login to save
 

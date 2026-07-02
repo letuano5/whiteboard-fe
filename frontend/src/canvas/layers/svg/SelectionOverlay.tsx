@@ -2,6 +2,7 @@ import type React from 'react';
 import type { Element } from '../../../types/shared';
 import type { EndpointHandleId, HandleId, ResizeHandleId } from '../../../types/interaction';
 import type { MultiSelectBounds } from './types';
+import { buildFreehandPath } from '../../freehand-points';
 
 const ROTATE_HANDLE_OFFSET = 24;
 
@@ -55,9 +56,24 @@ export function SelectionOverlay({ element, onHandlePointerDown }: SelectionOver
   ];
   const rotateTransform =
     angle !== 0 ? `rotate(${(angle * 180) / Math.PI} ${cx} ${cy})` : undefined;
+  const inkSelectionPath =
+    (element.type === 'freehand' || element.type === 'highlighter') && element.props.points
+      ? buildFreehandPath(element.props.points)
+      : null;
 
   return (
     <g transform={rotateTransform}>
+      {inkSelectionPath && (
+        <path
+          d={inkSelectionPath}
+          fill="none"
+          stroke="#3b82f6"
+          strokeWidth={1.5}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          style={{ pointerEvents: 'none' }}
+        />
+      )}
       <rect
         x={x}
         y={y}

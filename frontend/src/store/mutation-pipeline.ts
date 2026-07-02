@@ -43,10 +43,13 @@ function nextNonce(): number {
   return Math.floor(Math.random() * 1_000_000_000);
 }
 
-/** Keeps x,y,width,height in sync with props.points for arrow/line elements. */
+/** Keeps x,y,width,height in sync with props.points for point-based elements. */
 function applyLinearNorm(el: Element): Element {
   if (
-    (el.type === 'arrow' || el.type === 'line') &&
+    (el.type === 'arrow' ||
+      el.type === 'line' ||
+      el.type === 'freehand' ||
+      el.type === 'highlighter') &&
     el.props.points &&
     el.props.points.length >= 2
   ) {

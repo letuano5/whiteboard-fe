@@ -79,6 +79,37 @@ describe('SvgLayer — SelectionOverlay', () => {
     expect(svg).toHaveStyle({ userSelect: 'none' });
   });
 
+  // @covers AC-5
+  it('renders an inner selection path for selected freehand elements', () => {
+    const el = makeElement({
+      id: 'freehand-1',
+      type: 'freehand',
+      x: 10,
+      y: 20,
+      width: 50,
+      height: 25,
+      props: {
+        strokeColor: '#111827',
+        fillColor: 'transparent',
+        strokeWidth: 4,
+        strokeStyle: 'solid',
+        opacity: 1,
+        points: [
+          [10, 20],
+          [30, 45],
+          [60, 35],
+        ],
+      },
+    });
+    useInteractionStore.getState().setSelectedIds([el.id]);
+
+    const { container } = render(<SvgLayer elements={[el]} camera={camera} />);
+
+    const selectionPath = container.querySelector('path[stroke="#3b82f6"][fill="none"]');
+    expect(selectionPath).toHaveAttribute('d', 'M 10 20 Q 30 45 45 40 L 60 35');
+    expect(selectionPath).toHaveAttribute('stroke-linecap', 'round');
+  });
+
   it('prevents default browser selection when a resize handle is pressed', () => {
     const el = makeElement({ id: 'el-1' });
     const onHandlePointerDown = vi.fn((_, e: React.PointerEvent<SVGCircleElement>) => {
