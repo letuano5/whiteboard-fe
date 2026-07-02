@@ -9,6 +9,7 @@ import {
 import { getRoomClock, loadRoomElements } from '../persistence/room-repository.js';
 import { RoomActorRegistry } from './room-actor.js';
 import { SyncRoom } from './sync-room.js';
+import { getOrCreateSyncRoom } from './sync-room-registry.js';
 import { createPrismaSyncRoomPersistence } from './sync-room-persistence.js';
 import type {
   LegacyElementUpdateCommand,
@@ -151,29 +152,19 @@ async function executeReplaceDocumentInRoom(
   input: ExecuteReplaceDocumentInput,
   actorContext: SyncActorContext,
 ): Promise<ReplaceDocumentResult> {
-  const loaded = await loadRoomElements(actorContext.db, input.roomId);
+  const room = await resolveReplaceTargetRoom(input.roomId, actorContext);
+  const { documentClock, roomEpoch } = room.getStateSnapshot();
   const command: ReplaceDocumentCommand = {
     protocolVersion: SYNC_PROTOCOL_VERSION,
     schemaVersion: SYNC_SCHEMA_VERSION,
     kind: 'replace-document',
     roomId: input.roomId,
     requestId: input.requestId ?? `replace-document:${randomUUID()}`,
-    clientClock: loaded.documentClock,
-    baseRoomEpoch: loaded.roomEpoch,
+    clientClock: documentClock,
+    baseRoomEpoch: roomEpoch,
     elements: input.elements,
     reason: input.reason,
   };
-  const room = new SyncRoom({
-    roomId: input.roomId,
-    elements: loaded.elements,
-    documentClock: loaded.documentClock,
-    roomEpoch: loaded.roomEpoch,
-    slotClocks: loaded.slotClocks,
-    tombstoneElementIds: loaded.tombstoneElementIds,
-    persistence: createPrismaSyncRoomPersistence(
-      actorContext.db as unknown as Parameters<typeof createPrismaSyncRoomPersistence>[0],
-    ),
-  });
   const result = await room.execute(command, {
     actorId: actorContext.actorId,
     effectiveRole: actorContext.effectiveRole,
@@ -188,6 +179,30 @@ async function executeReplaceDocumentInRoom(
     changeSet: result.changeSet,
     replacePayload: toRoomReplacedPayload(result.changeSet),
   };
+}
+
+async function resolveReplaceTargetRoom(
+  roomId: string,
+  actorContext: SyncActorContext,
+): Promise<SyncRoom> {
+  // Prefer the shared hot room so replace serializes on the same actor as socket
+  // commands; only fall back to a throwaway room when no registry is wired in.
+  if (actorContext.syncRooms) {
+    return getOrCreateSyncRoom(actorContext.db, actorContext.syncRooms, roomId);
+  }
+
+  const loaded = await loadRoomElements(actorContext.db, roomId);
+  return new SyncRoom({
+    roomId,
+    elements: loaded.elements,
+    documentClock: loaded.documentClock,
+    roomEpoch: loaded.roomEpoch,
+    slotClocks: loaded.slotClocks,
+    tombstoneElementIds: loaded.tombstoneElementIds,
+    persistence: createPrismaSyncRoomPersistence(
+      actorContext.db as unknown as Parameters<typeof createPrismaSyncRoomPersistence>[0],
+    ),
+  });
 }
 
 function toRoomReplacedPayload(changeSet: ReplaceDocumentResult['changeSet']): RoomReplacedPayload {

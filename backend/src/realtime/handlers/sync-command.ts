@@ -6,15 +6,14 @@ import {
   type SyncBroadcast,
   type SyncCommand,
 } from '@vdt/shared';
-import { loadRoomElements } from '../../persistence/room-repository.js';
 import { canMutateRoom, resolveRoomAccess } from '../../rooms/room-roles.js';
 import {
   createSyncAck,
   createSyncRejectAck,
-  SyncRoom,
   SyncRoomCommandError,
-  createPrismaSyncRoomPersistence,
+  getOrCreateSyncRoom,
 } from '../../sync/index.js';
+import type { SyncRoom } from '../../sync/index.js';
 import type { ResolvedWhiteboardServerDeps } from '../types.js';
 
 export async function handleSyncCommand(
@@ -29,7 +28,7 @@ export async function handleSyncCommand(
       return;
     }
 
-    const room = await getOrCreateSyncRoom(deps, command.roomId);
+    const room = await getOrCreateSyncRoom(deps.db, deps.syncRooms, command.roomId);
     const result = await room.execute(command, {
       actorId: socket.data?.auth?.user?.id ?? null,
       effectiveRole,
@@ -79,29 +78,6 @@ async function resolveEffectiveRole(
   socket.data.roomBaseRole = access.baseRole;
   socket.data.roomRole = effectiveRole;
   return effectiveRole;
-}
-
-async function getOrCreateSyncRoom(
-  deps: ResolvedWhiteboardServerDeps,
-  roomId: string,
-): Promise<SyncRoom> {
-  const existing = deps.syncRooms.get(roomId);
-  if (existing) return existing;
-
-  const loaded = await loadRoomElements(deps.db, roomId);
-  const room = new SyncRoom({
-    roomId,
-    elements: loaded.elements,
-    documentClock: loaded.documentClock,
-    roomEpoch: loaded.roomEpoch,
-    slotClocks: loaded.slotClocks,
-    tombstoneElementIds: loaded.tombstoneElementIds,
-    persistence: createPrismaSyncRoomPersistence(
-      deps.db as unknown as Parameters<typeof createPrismaSyncRoomPersistence>[0],
-    ),
-  });
-  deps.syncRooms.set(roomId, room);
-  return room;
 }
 
 function mirrorSyncRoomState(

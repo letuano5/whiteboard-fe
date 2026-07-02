@@ -13,7 +13,13 @@ const PORT = process.env.PORT ?? 3001;
 const roomState = createRoomState();
 const authDeps = createRuntimeAuthDeps(prisma);
 const syncRooms = new Map<string, SyncRoom>();
-const { httpServer, io } = createAppServer({ ...authDeps, db: prisma, syncRooms });
+const { httpServer, io } = createAppServer({
+  ...authDeps,
+  db: prisma,
+  syncRooms,
+  roomElements: roomState.roomElements,
+  roomClocks: roomState.roomClocks,
+});
 
 const autosave = createAutosaveManager({
   getRoomElements: (roomId) => {

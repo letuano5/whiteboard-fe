@@ -128,6 +128,10 @@ export async function handleJoinRoom(
         pendingRequestIds: pendingRequestIds ?? [],
         actorId: socket.data?.auth?.user?.id ?? null,
       });
+      // Emit the clock the diff/snapshot was materialized at (P5-07). The mirror
+      // clock (`clocks`) can lead the transactional read and would advance the
+      // client's lastServerClock past changes it never received.
+      const diffServerClock = diffResult.serverClock;
 
       if (diffResult.mode === 'diff') {
         socket.emit(WS_EVENTS.ROOM_DIFF, {
@@ -136,8 +140,8 @@ export async function handleJoinRoom(
           roomId,
           fromClock: diffResult.fromClock,
           toClock: diffResult.toClock,
-          serverClock: clocks.get(roomId) ?? diffResult.serverClock,
-          documentClock: clocks.get(roomId) ?? diffResult.serverClock,
+          serverClock: diffServerClock,
+          documentClock: diffServerClock,
           roomEpoch: diffResult.roomEpoch,
           changed: diffResult.changed,
           deleted: diffResult.deleted,
@@ -151,8 +155,8 @@ export async function handleJoinRoom(
           protocolVersion: SYNC_PROTOCOL_VERSION,
           schemaVersion: SYNC_SCHEMA_VERSION,
           roomId,
-          serverClock: clocks.get(roomId) ?? diffResult.serverClock,
-          documentClock: clocks.get(roomId) ?? diffResult.serverClock,
+          serverClock: diffServerClock,
+          documentClock: diffServerClock,
           roomEpoch: diffResult.roomEpoch,
           elements: diffResult.elements,
           slotClocks: diffResult.slotClocks,

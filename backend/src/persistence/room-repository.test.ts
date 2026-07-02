@@ -670,6 +670,7 @@ function buildDiffMockDb({
   const tombstoneFindMany = vi.fn().mockResolvedValue(deletedTombstones);
 
   const db = {
+    $transaction: (task: (tx: unknown) => unknown) => task(db),
     tombstone: {
       aggregate: tombstoneAggregate,
       findMany: tombstoneFindMany,

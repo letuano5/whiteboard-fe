@@ -47,7 +47,12 @@ function makeDiffMockDb(opts: {
   /** Tombstones returned by tombstone.findMany (deleted since lastServerClock) */
   deletedTombstones?: Array<{ recordId: string }>;
   /** All active DB records returned in wipe-all path (record.findMany without clock filter) */
-  allRecords?: Array<{ recordId: string; state: unknown; recordClock: bigint; slotClocks: unknown }>;
+  allRecords?: Array<{
+    recordId: string;
+    state: unknown;
+    recordClock: bigint;
+    slotClocks: unknown;
+  }>;
 }) {
   const clock = BigInt(opts.documentClock);
 
@@ -72,6 +77,7 @@ function makeDiffMockDb(opts: {
   const tombstoneFindMany = vi.fn().mockResolvedValue(opts.deletedTombstones ?? []);
 
   const db = {
+    $transaction: (task: (tx: unknown) => unknown) => task(db),
     room: { findUnique: roomFindUnique },
     tombstone: { aggregate: tombstoneAggregate, findMany: tombstoneFindMany },
     record: { findMany: recordFindMany },

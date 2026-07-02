@@ -20,8 +20,10 @@ export async function handleRoomDiffRequest(
       pendingRequestIds,
       actorId: socket.data?.auth?.user?.id ?? null,
     });
-    const serverClock =
-      deps.roomClocks.get(roomId) ?? diffResult.serverClock ?? diffResult.documentClock;
+    // Emit the clock the diff was actually materialized at (P5-07): using the
+    // in-memory mirror clock here could advance the client's lastServerClock past
+    // changes that were never included in `changed`/`slotClocks`.
+    const serverClock = diffResult.serverClock ?? diffResult.documentClock;
 
     if (diffResult.mode === 'diff') {
       socket.emit(WS_EVENTS.ROOM_DIFF, {

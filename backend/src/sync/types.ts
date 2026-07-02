@@ -7,6 +7,7 @@ import type {
   SyncClock,
 } from '@vdt/shared';
 import type { AutosaveManager } from '../persistence/autosave.js';
+import type { SyncRoom } from './sync-room.js';
 
 export type SyncCommand = LegacyElementUpdateCommand | NativeFileImportCommand;
 
@@ -39,6 +40,9 @@ export interface SyncActorContext {
   autosave?: AutosaveManager;
   roomElements?: Map<string, Map<string, Element>>;
   roomClocks?: Map<string, number>;
+  // Shared hot-room registry. When provided, replace/import runs through the same
+  // per-room actor as the socket command path, so the two paths cannot interleave.
+  syncRooms?: Map<string, SyncRoom>;
   logger?: Pick<typeof console, 'error'>;
 }
 

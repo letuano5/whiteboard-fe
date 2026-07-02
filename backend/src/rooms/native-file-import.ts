@@ -24,7 +24,17 @@ interface NativeFileImportDeps {
   db: PrismaClient;
   ioServer?: Server;
   syncRooms?: Map<string, SyncRoom>;
+  // In-memory hot-state mirrors used by the socket layer. Replace bumps roomEpoch
+  // and rewrites the whole document, so these must be evicted; join-room then
+  // rehydrates them from Postgres instead of serving the stale pre-import state.
+  roomElements?: Map<string, unknown>;
+  roomClocks?: Map<string, number>;
 }
+
+type RoomStateMirrors = Pick<
+  NativeFileImportDeps,
+  'ioServer' | 'syncRooms' | 'roomElements' | 'roomClocks'
+>;
 
 interface NativeFileImportPayload {
   document: NativeFileDocument;
@@ -104,7 +114,7 @@ async function executeNativeFileReplace(
   roomId: string,
   user: AppUser,
   document: NativeFileDocument,
-  opts: { ioServer?: Server; syncRooms?: Map<string, SyncRoom> } = {},
+  opts: RoomStateMirrors = {},
 ): Promise<NativeFileImportResponse> {
   const result = await executeSyncCommand(
     {
@@ -115,10 +125,17 @@ async function executeNativeFileReplace(
     {
       actorId: user.id,
       db,
+      // Route replace through the shared hot room so it serializes on the same
+      // per-room actor as live socket commands instead of a throwaway room.
+      syncRooms: opts.syncRooms,
     },
   );
 
+  // Evict every in-memory mirror of the room so the next join/command reloads the
+  // freshly replaced document (and bumped roomEpoch) from Postgres.
   opts.syncRooms?.delete(roomId);
+  opts.roomElements?.delete(roomId);
+  opts.roomClocks?.delete(roomId);
   if (opts.ioServer) {
     opts.ioServer.to(roomId).emit(WS_EVENTS.ROOM_REPLACED, result.replacePayload);
   }
@@ -176,6 +193,8 @@ async function handleNativeFileImport(
       await executeNativeFileReplace(deps.db, roomId, user, payload.document, {
         ioServer: deps.ioServer,
         syncRooms: deps.syncRooms,
+        roomElements: deps.roomElements,
+        roomClocks: deps.roomClocks,
       }),
     );
   } catch (error) {

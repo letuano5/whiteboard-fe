@@ -1,4 +1,4 @@
-import type { PrismaClient } from '@prisma/client';
+import type { Prisma, PrismaClient } from '@prisma/client';
 import type {
   Element,
   PendingRequestStatus,
@@ -36,6 +36,9 @@ interface RoomDiffOptions {
  * @param inMemoryElements    Current in-memory hot-state for the room.
  * @returns RoomDiffResult union — either { mode:'diff', ... } or { mode:'wipe', ... }.
  *
+ * All reads run inside a single DB transaction so the diff reflects a consistent
+ * snapshot at one target clock (P5-07), never a torn read spanning a concurrent commit.
+ *
  * @covers AC-1, AC-2, AC-8, AC-10
  */
 export async function getRoomDiff(
@@ -44,6 +47,18 @@ export async function getRoomDiff(
   lastServerClock: number,
   inMemoryElements: Element[],
   options: RoomDiffOptions = {},
+): Promise<RoomDiffResult> {
+  return db.$transaction((tx) =>
+    computeRoomDiff(tx, roomId, lastServerClock, inMemoryElements, options),
+  );
+}
+
+async function computeRoomDiff(
+  db: Prisma.TransactionClient,
+  roomId: string,
+  lastServerClock: number,
+  inMemoryElements: Element[],
+  options: RoomDiffOptions,
 ): Promise<RoomDiffResult> {
   const tombstoneAgg = await db.tombstone.aggregate({
     where: { roomId },
@@ -135,7 +150,7 @@ export async function getRoomDiff(
 }
 
 export async function getPendingRequestStatuses(
-  db: PrismaClient,
+  db: Prisma.TransactionClient,
   roomId: string,
   options: {
     actorId?: string | null;

@@ -175,10 +175,7 @@ function applyIncomingChangeSet(
   options: ReconciliationOptions,
 ): P5ReconciliationResult {
   const state = getSocketState();
-  if (
-    changeSet.serverClock <= state.lastServerClock ||
-    changeSet.roomEpoch < state.roomEpoch
-  ) {
+  if (changeSet.serverClock <= state.lastServerClock || changeSet.roomEpoch < state.roomEpoch) {
     return { status: 'ignored-stale', serverClock: changeSet.serverClock };
   }
 
@@ -236,15 +233,28 @@ function groupSlotClocks(slotClocks: SlotClockUpdate[]): Map<string, SlotClockUp
 function reconcilePendingRequests(pendingRequests: PendingRequestStatus[]): void {
   const state = getSocketState();
   for (const status of pendingRequests) {
-    if (status.status === 'processed') {
-      state.pendingSyncRequests = state.pendingSyncRequests.filter(
-        (r) => r.requestId !== status.requestId,
-      );
-    } else if (status.status === 'conflict' || status.status === 'expired') {
-      state.pendingSyncRequests = state.pendingSyncRequests.filter(
-        (r) => r.requestId !== status.requestId,
-      );
-      state.staleAckRequestIds.add(status.requestId);
+    switch (status.status) {
+      case 'processed':
+        // Server already committed this request: drop it and let the replayed
+        // ACK (if any) apply the committed change set.
+        state.pendingSyncRequests = state.pendingSyncRequests.filter(
+          (r) => r.requestId !== status.requestId,
+        );
+        break;
+      case 'conflict':
+      case 'expired':
+        // Not safe to replay: drop the pending entry and mark any late ACK stale.
+        state.pendingSyncRequests = state.pendingSyncRequests.filter(
+          (r) => r.requestId !== status.requestId,
+        );
+        state.staleAckRequestIds.add(status.requestId);
+        break;
+      case 'unknown':
+        // Server never saw this request. Per P5-07 it may only be resent after the
+        // client re-verifies element existence, slot clocks and roomEpoch — which
+        // requires the P5-11 command store. Until then we keep the entry pending
+        // (so it is re-declared on the next reconnect) but never resend blindly.
+        break;
     }
   }
 }
