@@ -28,6 +28,7 @@ describe('WS_EVENTS', () => {
   it('defines sync events', () => {
     expect(WS_EVENTS.ROOM_SNAPSHOT).toBe('room-snapshot');
     expect(WS_EVENTS.ROOM_RESYNC).toBe('room-resync');
+    expect(WS_EVENTS.ROOM_REPLACED).toBe('room-replaced');
     expect(WS_EVENTS.SYNC_COMMAND).toBe('sync-command');
     expect(WS_EVENTS.SYNC_ACK).toBe('sync-ack');
     expect(WS_EVENTS.SYNC_BROADCAST).toBe('sync-broadcast');
@@ -45,10 +46,11 @@ describe('WS_EVENTS', () => {
     expect(WS_EVENTS.ROOM_ACCESS_ERROR).toBe('room-access-error');
   });
 
-  it('has 19 distinct event values', () => {
+  it('has 20 distinct event values', () => {
     // P5-05: slot-level sync command/ack/broadcast events added.
+    // P5-09: whole-document replace notification added.
     const values = Object.values(WS_EVENTS);
-    expect(values).toHaveLength(19);
-    expect(new Set(values).size).toBe(19);
+    expect(values).toHaveLength(20);
+    expect(new Set(values).size).toBe(20);
   });
 });

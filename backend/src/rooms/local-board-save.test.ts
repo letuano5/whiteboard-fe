@@ -10,6 +10,16 @@ vi.mock('../sync/index.js', () => ({
     roomId: 'room-created',
     importedElementCount: 0,
     documentClock: '1',
+    roomEpoch: 1,
+    replacePayload: {
+      protocolVersion: 1,
+      schemaVersion: 1,
+      roomId: 'room-created',
+      serverClock: 1,
+      roomEpoch: 1,
+      elements: [],
+      slotClocks: [],
+    },
   }),
 }));
 
@@ -31,6 +41,16 @@ beforeEach(() => {
     roomId: 'room-created',
     importedElementCount: 0,
     documentClock: '1',
+    roomEpoch: 1,
+    replacePayload: {
+      protocolVersion: 1,
+      schemaVersion: 1,
+      roomId: 'room-created',
+      serverClock: 1,
+      roomEpoch: 1,
+      elements: [],
+      slotClocks: [],
+    },
   });
 });
 

@@ -4,20 +4,23 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useElementsStore } from '../../store/elements.store';
 import {
   applyRoomDiff,
+  applyRoomReplaced,
   applyRoomSnapshot,
   processSyncAck,
   processSyncBroadcast,
   queuePendingSyncRequest,
 } from './p5-reconciliation';
-import { getKnownSlotClock, getSocketState, setLastServerClock } from './state';
+import { getKnownSlotClock, getSocketState, setLastServerClock, setRoomEpoch } from './state';
 
 beforeEach(() => {
   useElementsStore.setState({ elements: [] });
   setLastServerClock(0);
   const state = getSocketState();
   state.pendingSyncRequests = [];
+  state.staleAckRequestIds = new Set();
   state.bufferedSyncEvents = [];
   state.socket = null;
+  setRoomEpoch(0);
 });
 
 describe('P5 reconciliation pending and change-set handling', () => {
@@ -211,6 +214,52 @@ describe('P5 reconciliation pending and change-set handling', () => {
     expect(getSocketState().lastServerClock).toBe(9);
     expect(getSocketState().roomEpoch).toBe(4);
     expect(getKnownSlotClock('server-shape', 'style.fillColor')).toBe(9);
+  });
+
+  it('applies ROOM_REPLACED as server truth and ignores old ACKs for cleared pending', () => {
+    // @covers AC-6
+    const serverElement = makeElement({ id: 'server-shape' });
+    queuePendingSyncRequest({ requestId: 'old-pending', actorId: 'actor-1' });
+    useElementsStore.setState({ elements: [makeElement({ id: 'local-draft' })] });
+    getSocketState().bufferedSyncEvents = [
+      broadcast(changeSet({ requestId: 'buffered', serverClock: 12 })),
+    ];
+
+    applyRoomReplaced({
+      protocolVersion: SYNC_PROTOCOL_VERSION,
+      schemaVersion: SYNC_SCHEMA_VERSION,
+      roomId: 'room-1',
+      serverClock: 10,
+      roomEpoch: 3,
+      elements: [serverElement],
+      slotClocks: [{ elementId: 'server-shape', slot: 'style.fillColor', clock: 10 }],
+    });
+    const lateAckResult = processSyncAck({
+      status: 'commit',
+      ...ackBase('old-pending', 11),
+      changeSet: changeSet({
+        requestId: 'old-pending',
+        serverClock: 11,
+        roomEpoch: 2,
+        slotPatches: [
+          {
+            elementId: 'server-shape',
+            slot: 'style.fillColor',
+            baseClock: 0,
+            clock: 11,
+            changes: { fillColor: '#badbad' },
+          },
+        ],
+      }),
+    });
+
+    expect(lateAckResult.status).toBe('ignored-stale');
+    expect(getSocketState().pendingSyncRequests).toEqual([]);
+    expect(getSocketState().bufferedSyncEvents).toEqual([]);
+    expect(useElementsStore.getState().elements).toEqual([serverElement]);
+    expect(getSocketState().lastServerClock).toBe(10);
+    expect(getSocketState().roomEpoch).toBe(3);
+    expect(getKnownSlotClock('server-shape', 'style.fillColor')).toBe(10);
   });
 
   it('applies ROOM_DIFF slot-aware without originRequestIds or whole-element replacement', () => {

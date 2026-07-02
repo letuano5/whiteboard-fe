@@ -2,6 +2,7 @@ import type { Socket } from 'socket.io';
 import {
   WS_EVENTS,
   type EffectiveRoomRole,
+  type RoomReplacedPayload,
   type SyncBroadcast,
   type SyncCommand,
 } from '@vdt/shared';
@@ -48,6 +49,11 @@ export async function handleSyncCommand(
     if (!result.replayed) {
       deps.autosave.markDirty(command.roomId);
       socket.to(command.roomId).emit(WS_EVENTS.SYNC_BROADCAST, broadcast);
+      if (result.changeSet.reason === 'replace_document') {
+        socket
+          .to(command.roomId)
+          .emit(WS_EVENTS.ROOM_REPLACED, toRoomReplacedPayload(result.changeSet));
+      }
     }
   } catch (error) {
     if (shouldEmitRejectAck(error)) {
@@ -111,4 +117,16 @@ function emitReject(
 
 function shouldEmitRejectAck(error: unknown): boolean {
   return error instanceof SyncRoomCommandError && error.code !== 'ROOM_UNHEALTHY';
+}
+
+function toRoomReplacedPayload(changeSet: SyncBroadcast['changeSet']): RoomReplacedPayload {
+  return {
+    protocolVersion: changeSet.protocolVersion,
+    schemaVersion: changeSet.schemaVersion,
+    roomId: changeSet.roomId,
+    serverClock: changeSet.serverClock,
+    roomEpoch: changeSet.roomEpoch,
+    elements: changeSet.puts.length > 0 ? changeSet.puts : changeSet.created,
+    slotClocks: changeSet.slotClocks,
+  };
 }

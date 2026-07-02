@@ -219,6 +219,14 @@ export class SyncRoom {
     this.documentClock = changeSet.serverClock;
     this.roomEpoch = changeSet.roomEpoch;
 
+    if (changeSet.reason === 'replace_document') {
+      this.clearSlotClocksFor([
+        ...changeSet.deleted,
+        ...changeSet.created.map((element) => element.id),
+        ...changeSet.puts.map((element) => element.id),
+      ]);
+    }
+
     for (const element of changeSet.created) {
       this.elements.set(element.id, element);
       this.tombstoneElementIds.delete(element.id);
@@ -236,11 +244,25 @@ export class SyncRoom {
   }
 
   private previewSlotClocks(changeSet: CommittedChangeSet): ReadonlyMap<string, SyncClock> {
-    const slotClocks = new Map(this.slotClocks);
+    const slotClocks =
+      changeSet.reason === 'replace_document'
+        ? new Map<string, SyncClock>()
+        : new Map(this.slotClocks);
     for (const slotClock of changeSet.slotClocks) {
       slotClocks.set(toSlotClockKey(slotClock.elementId, slotClock.slot), slotClock.clock);
     }
     return slotClocks;
+  }
+
+  private clearSlotClocksFor(elementIds: string[]): void {
+    const ids = new Set(elementIds);
+    for (const key of this.slotClocks.keys()) {
+      const separatorIndex = key.indexOf(':');
+      const elementId = separatorIndex === -1 ? key : key.slice(0, separatorIndex);
+      if (ids.has(elementId)) {
+        this.slotClocks.delete(key);
+      }
+    }
   }
 
   private enqueueOutput(task: () => void | Promise<void>): Promise<void> {

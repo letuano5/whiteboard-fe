@@ -1,6 +1,7 @@
 import type {
   CommittedChangeSet,
   RoomDiff,
+  RoomReplacedPayload,
   RoomSnapshot,
   SlotClockUpdate,
   SyncAck,
@@ -12,10 +13,12 @@ import { useElementsStore } from '../../store/elements.store';
 import { applyChangeSetToElements, applySlotPatch, slotValueFromElement } from './p5-change-set';
 import {
   applyKnownSlotClocks,
+  consumeStaleAckRequest,
   getKnownSlotClock,
   getRoomEpochState,
   getSocketState,
   hydrateKnownSlotClocks,
+  markPendingRequestsStale,
   removeKnownSlotClocks,
   setLastServerClock,
   setRoomEpoch,
@@ -41,6 +44,14 @@ export function processSyncAck(
   ack: SyncAck,
   options: ReconciliationOptions = {},
 ): P5ReconciliationResult {
+  const state = getSocketState();
+  const isPending = state.pendingSyncRequests.some(
+    (request) => request.requestId === ack.requestId,
+  );
+  if (!isPending && consumeStaleAckRequest(ack.requestId)) {
+    return { status: 'ignored-stale', serverClock: ack.serverClock };
+  }
+
   clearPendingRequest(ack.requestId);
 
   if (ack.status === 'reject') {
@@ -88,6 +99,16 @@ export function applyRoomSnapshot(snapshot: RoomSnapshot): void {
   hydrateKnownSlotClocks(snapshot.slotClocks);
   setRoomEpoch(snapshot.roomEpoch);
   setLastServerClock(snapshot.serverClock);
+}
+
+export function applyRoomReplaced(payload: RoomReplacedPayload): void {
+  const state = getSocketState();
+  markPendingRequestsStale();
+  state.bufferedSyncEvents = [];
+  useElementsStore.getState().setElements(payload.elements);
+  hydrateKnownSlotClocks(payload.slotClocks);
+  setRoomEpoch(payload.roomEpoch);
+  setLastServerClock(payload.serverClock);
 }
 
 export function applyRoomDiff(diff: RoomDiff): void {

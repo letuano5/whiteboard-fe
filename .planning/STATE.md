@@ -2,10 +2,10 @@
 gsd_state_version: '1.0'
 status: complete
 progress:
-  total_phases: 13
-  completed_phases: 13
-  total_plans: 15
-  completed_plans: 15
+  total_phases: 14
+  completed_phases: 14
+  total_plans: 17
+  completed_plans: 17
   percent: 100
 ---
 
@@ -16,14 +16,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-30)
 
 **Core value:** Users can create tactical whiteboards without losing work, then collaborate or persist documents when the workflow calls for it.
-**Current focus:** Phase 5.8: P5-08 Delete, tombstone & binding repair
+**Current focus:** Phase 5.9: P5-09 Replace document for import/restore (completed)
 
 ## Current Position
 
-Phase: 5.8 of active GSD bootstrap (P5-08 Delete, tombstone & binding repair)
-Plan: 1 of 1 in current phase
-Status: Phase in progress
-Last activity: 2026-07-02 - Implemented and verified P5-08 delete, tombstone, and binding repair.
+Phase: 5.9 of active GSD bootstrap (P5-09 Replace document for import/restore)
+Plan: 2 of 2 in current phase
+Status: Complete
+Last activity: 2026-07-02 - Completed P5-09 replace-document import/restore workflow and verification.
 
 Progress: [##########] 100%
 
@@ -59,6 +59,8 @@ Progress: [##########] 100%
   wipe-all snapshots.
 - [Phase 5.8]: Arrow binding repair is server-authoritative; repaired binding and geometry slots
   must be emitted in the same committed change set as the triggering delete or target mutation.
+- [Phase 5.9]: Whole-document saved-room import/restore uses `ReplaceDocumentCommand` through
+  `SyncRoom`; direct repository writes remain legacy/bypass and are not authoritative.
 
 ### Pending Todos
 
@@ -76,6 +78,7 @@ Progress: [##########] 100%
 - P5-06 transactional persistence, durable idempotency, relaxed transient policy, and unhealthy-room recovery implemented and verified against 10 acceptance criteria.
 - P5-07 load/reconnect/diff implemented and verified against 8 acceptance criteria.
 - P5-08 delete, tombstone, and binding repair implemented and verified against 8 acceptance criteria.
+- P5-09 replace document/import/restore implemented and verified.
 
 ### Blockers/Concerns
 

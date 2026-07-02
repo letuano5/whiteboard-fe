@@ -25,6 +25,7 @@ interface SocketClientState {
   reconnectPending: boolean;
   pendingQueue: Element[];
   pendingSyncRequests: PendingSyncRequest[];
+  staleAckRequestIds: Set<string>;
   bufferedSyncEvents: Array<SyncAck | SyncBroadcast>;
 }
 
@@ -50,6 +51,7 @@ const state: SocketClientState = {
   reconnectPending: false,
   pendingQueue: [],
   pendingSyncRequests: [],
+  staleAckRequestIds: new Set(),
   bufferedSyncEvents: [],
 };
 
@@ -97,9 +99,24 @@ export function removeKnownSlotClocks(elementIds: string[]): void {
   for (const elementId of elementIds) state.knownSlotClocks.delete(elementId);
 }
 
+export function markPendingRequestsStale(): string[] {
+  const requestIds = state.pendingSyncRequests.map((request) => request.requestId);
+  for (const requestId of requestIds) {
+    state.staleAckRequestIds.add(requestId);
+  }
+  state.pendingSyncRequests = [];
+  return requestIds;
+}
+
+export function consumeStaleAckRequest(requestId: string): boolean {
+  const existed = state.staleAckRequestIds.delete(requestId);
+  return existed;
+}
+
 export function resetReconnectState(): void {
   state.pendingQueue = [];
   state.pendingSyncRequests = [];
+  state.staleAckRequestIds = new Set();
   state.bufferedSyncEvents = [];
   state.knownSlotClocks = new Map();
   state.roomEpoch = 0;

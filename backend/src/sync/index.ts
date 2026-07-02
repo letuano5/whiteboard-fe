@@ -1,4 +1,4 @@
-export { executeSyncCommand } from './execute-sync-command.js';
+export { executeReplaceDocument, executeSyncCommand } from './execute-sync-command.js';
 export { RoomActor, RoomActorRegistry } from './room-actor.js';
 export { createSyncAck, createSyncRejectAck } from './sync-room-ack.js';
 export { SyncRoom } from './sync-room.js';
@@ -38,6 +38,7 @@ export type {
   LegacyElementUpdateResult,
   NativeFileImportCommand,
   NativeFileImportResult,
+  ReplaceDocumentResult,
   SyncActorContext,
   SyncCommand,
   SyncCommandResult,

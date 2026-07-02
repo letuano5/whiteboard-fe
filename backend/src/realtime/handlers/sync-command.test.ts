@@ -7,6 +7,7 @@ import {
   type CreateElementCommand,
   type Element,
   type Presence,
+  type ReplaceDocumentCommand,
 } from '@vdt/shared';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { makeElement } from '../../test/element-fixtures.js';
@@ -85,7 +86,11 @@ describe('handleSyncCommand', () => {
     socket.data.roomRole = 'viewer';
     const deps = makeDeps(markDirty);
 
-    await handleSyncCommand(socket, deps, createCommand('blocked-1', makeElement({ id: 'blocked' })));
+    await handleSyncCommand(
+      socket,
+      deps,
+      createCommand('blocked-1', makeElement({ id: 'blocked' })),
+    );
 
     expect(emit).toHaveBeenCalledWith(
       WS_EVENTS.SYNC_ACK,
@@ -98,6 +103,44 @@ describe('handleSyncCommand', () => {
     expect(peerEmit).not.toHaveBeenCalled();
     expect(markDirty).not.toHaveBeenCalled();
     expect(deps.roomElements.get('room-1')).toBeUndefined();
+  });
+
+  it('broadcasts one authoritative room-replaced payload for replace-document commits', async () => {
+    // @covers AC-2
+    const emit = vi.fn();
+    const peerEmit = vi.fn();
+    const socket = makeSocket(emit, peerEmit);
+    const deps = makeDeps(markDirty);
+    deps.roomElements.set('room-1', new Map([['old-shape', makeElement({ id: 'old-shape' })]]));
+    deps.roomClocks.set('room-1', 4);
+    const replacement = makeElement({ id: 'replacement-shape', zIndex: 2 });
+
+    await handleSyncCommand(socket, deps, createReplaceCommand('replace-1', [replacement]));
+
+    expect(emit).toHaveBeenCalledWith(
+      WS_EVENTS.SYNC_ACK,
+      expect.objectContaining({
+        status: 'commit',
+        requestId: 'replace-1',
+        serverClock: 5,
+      }),
+    );
+    const roomReplacedCalls = peerEmit.mock.calls.filter(
+      ([event]) => event === WS_EVENTS.ROOM_REPLACED,
+    );
+    expect(roomReplacedCalls).toHaveLength(1);
+    expect(roomReplacedCalls[0][1]).toEqual(
+      expect.objectContaining({
+        roomId: 'room-1',
+        serverClock: 5,
+        roomEpoch: 1,
+        elements: [expect.objectContaining({ id: 'replacement-shape' })],
+      }),
+    );
+    expect(deps.roomElements.get('room-1')?.has('old-shape')).toBe(false);
+    expect(deps.roomElements.get('room-1')?.get('replacement-shape')).toEqual(
+      expect.objectContaining({ id: 'replacement-shape' }),
+    );
   });
 
   it('does not ACK or broadcast when persistence fails before commit', async () => {
@@ -139,7 +182,11 @@ describe('handleSyncCommand', () => {
       }),
     );
 
-    await handleSyncCommand(socket, deps, createCommand('clock-conflict', makeElement({ id: 'shape' })));
+    await handleSyncCommand(
+      socket,
+      deps,
+      createCommand('clock-conflict', makeElement({ id: 'shape' })),
+    );
 
     expect(emit).not.toHaveBeenCalledWith(WS_EVENTS.SYNC_ACK, expect.anything());
     expect(peerEmit).not.toHaveBeenCalled();
@@ -158,6 +205,20 @@ function createCommand(requestId: string, element: Element): CreateElementComman
     clientClock: 1,
     baseRoomEpoch: 0,
     element,
+  };
+}
+
+function createReplaceCommand(requestId: string, elements: Element[]): ReplaceDocumentCommand {
+  return {
+    kind: 'replace-document',
+    protocolVersion: SYNC_PROTOCOL_VERSION,
+    schemaVersion: SYNC_SCHEMA_VERSION,
+    roomId: 'room-1',
+    requestId,
+    clientClock: 4,
+    baseRoomEpoch: 0,
+    elements,
+    reason: 'import',
   };
 }
 

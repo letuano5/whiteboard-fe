@@ -1,16 +1,34 @@
-import { getRoomClock, saveRoomElements } from '../persistence/room-repository.js';
+import { randomUUID } from 'node:crypto';
+import {
+  SYNC_PROTOCOL_VERSION,
+  SYNC_SCHEMA_VERSION,
+  type Element,
+  type ReplaceDocumentCommand,
+  type RoomReplacedPayload,
+} from '@vdt/shared';
+import { getRoomClock, loadRoomElements } from '../persistence/room-repository.js';
 import { RoomActorRegistry } from './room-actor.js';
+import { SyncRoom } from './sync-room.js';
+import { createPrismaSyncRoomPersistence } from './sync-room-persistence.js';
 import type {
   LegacyElementUpdateCommand,
   LegacyElementUpdateResult,
   NativeFileImportCommand,
   NativeFileImportResult,
+  ReplaceDocumentResult,
   SyncActorContext,
   SyncCommand,
   SyncCommandResult,
 } from './types.js';
 
 const commandActors = new RoomActorRegistry();
+
+interface ExecuteReplaceDocumentInput {
+  roomId: string;
+  elements: Element[];
+  reason: ReplaceDocumentCommand['reason'];
+  requestId?: string;
+}
 
 export function executeSyncCommand(
   command: LegacyElementUpdateCommand,
@@ -32,6 +50,15 @@ export function executeSyncCommand(
         return executeNativeFileImport(command, actorContext);
     }
   });
+}
+
+export function executeReplaceDocument(
+  input: ExecuteReplaceDocumentInput,
+  actorContext: SyncActorContext,
+): Promise<ReplaceDocumentResult> {
+  return commandActors.enqueue<ReplaceDocumentResult>(input.roomId, () =>
+    executeReplaceDocumentInRoom(input, actorContext),
+  );
 }
 
 async function executeLegacyElementUpdate(
@@ -100,12 +127,77 @@ async function executeNativeFileImport(
   command: NativeFileImportCommand,
   actorContext: SyncActorContext,
 ): Promise<NativeFileImportResult> {
-  const result = await saveRoomElements(actorContext.db, command.roomId, command.elements);
+  const result = await executeReplaceDocumentInRoom(
+    {
+      roomId: command.roomId,
+      elements: command.elements,
+      reason: 'import',
+      requestId: `native-file-import:${randomUUID()}`,
+    },
+    actorContext,
+  );
 
   return {
     kind: 'native-file-import',
     roomId: command.roomId,
     importedElementCount: command.elements.length,
-    documentClock: result?.documentClock.toString() ?? null,
+    documentClock: result.documentClock,
+    roomEpoch: result.roomEpoch,
+    replacePayload: result.replacePayload,
+  };
+}
+
+async function executeReplaceDocumentInRoom(
+  input: ExecuteReplaceDocumentInput,
+  actorContext: SyncActorContext,
+): Promise<ReplaceDocumentResult> {
+  const loaded = await loadRoomElements(actorContext.db, input.roomId);
+  const command: ReplaceDocumentCommand = {
+    protocolVersion: SYNC_PROTOCOL_VERSION,
+    schemaVersion: SYNC_SCHEMA_VERSION,
+    kind: 'replace-document',
+    roomId: input.roomId,
+    requestId: input.requestId ?? `replace-document:${randomUUID()}`,
+    clientClock: loaded.documentClock,
+    baseRoomEpoch: loaded.roomEpoch,
+    elements: input.elements,
+    reason: input.reason,
+  };
+  const room = new SyncRoom({
+    roomId: input.roomId,
+    elements: loaded.elements,
+    documentClock: loaded.documentClock,
+    roomEpoch: loaded.roomEpoch,
+    slotClocks: loaded.slotClocks,
+    tombstoneElementIds: loaded.tombstoneElementIds,
+    persistence: createPrismaSyncRoomPersistence(
+      actorContext.db as unknown as Parameters<typeof createPrismaSyncRoomPersistence>[0],
+    ),
+  });
+  const result = await room.execute(command, {
+    actorId: actorContext.actorId,
+    effectiveRole: actorContext.effectiveRole,
+  });
+
+  return {
+    kind: 'replace-document',
+    roomId: input.roomId,
+    replacedElementCount: input.elements.length,
+    documentClock: result.changeSet.serverClock.toString(),
+    roomEpoch: result.changeSet.roomEpoch,
+    changeSet: result.changeSet,
+    replacePayload: toRoomReplacedPayload(result.changeSet),
+  };
+}
+
+function toRoomReplacedPayload(changeSet: ReplaceDocumentResult['changeSet']): RoomReplacedPayload {
+  return {
+    protocolVersion: changeSet.protocolVersion,
+    schemaVersion: changeSet.schemaVersion,
+    roomId: changeSet.roomId,
+    serverClock: changeSet.serverClock,
+    roomEpoch: changeSet.roomEpoch,
+    elements: changeSet.puts.length > 0 ? changeSet.puts : changeSet.created,
+    slotClocks: changeSet.slotClocks,
   };
 }

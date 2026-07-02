@@ -22,6 +22,7 @@ project roadmap, phase order, and product scope remain canonical in `docs/SPECS.
 - Repo roadmap ID `P5-06` maps to GSD Phase `5.6`.
 - Repo roadmap ID `P5-07` maps to GSD Phase `5.7`.
 - Repo roadmap ID `P5-08` maps to GSD Phase `5.8`.
+- Repo roadmap ID `P5-09` maps to GSD Phase `5.9`.
 - The source of truth is `docs/SPECS.md` feature sections.
 
 - [x] **Phase 4.0: P4-00 Anonymous local board + Login to save** - Anonymous local-only board can be converted into a private saved document after login.
@@ -37,6 +38,7 @@ project roadmap, phase order, and product scope remain canonical in `docs/SPECS.
 - [x] **Phase 5.6: P5-06 Transactional persistence & idempotency** - Accepted saved-room sync commands commit atomically with DB clocks, persisted idempotency, durability policy, and unhealthy-room recovery.
 - [x] **Phase 5.7: P5-07 Load, reconnect & diff** - Saved-room load and reconnect hydrate/apply server-authoritative snapshot/diff payloads with room epoch, slot clocks, pending request statuses, and wipe-all fallback.
 - [x] **Phase 5.8: P5-08 Delete, tombstone & binding repair** - Saved-room deletes write tombstones and repair arrow bindings/geometry in the same authoritative change set.
+- [x] **Phase 5.9: P5-09 Replace document for import/restore** - Saved-room import/restore replaces the document through the authoritative sync room path, bumps room epoch, and broadcasts one server truth.
 
 ## Phase Details
 
@@ -317,6 +319,30 @@ Plans:
 
 - [x] 05.8-01: Implement authoritative delete tombstones, binding update planning, arrow repair, and AC tests.
 
+### Phase 5.9: P5-09 Replace document for import/restore
+
+**Goal**: Saved-room native import and future restore replace the whole document through the
+authoritative sync room path, bump `roomEpoch`, tombstone removed records, rebuild slot clocks, and
+broadcast one authoritative replacement payload.
+**Depends on**: Phase 5.8
+**Source**: `docs/SPECS.md` `[P5-09]`
+**Canonical refs**: `docs/SPECS.md`, `specs/038-p5-09-replace-document-import-restore/acceptance.md`
+**Requirements**: [P5-09-AC-1, P5-09-AC-2, P5-09-AC-3, P5-09-AC-4, P5-09-AC-5, P5-09-AC-6]
+**Success Criteria** (what must be TRUE):
+
+1. Saved-document import executes a `ReplaceDocumentCommand` through `SyncRoom` persistence.
+2. Replace increments `roomEpoch` and stale pre-replace commands reject by epoch.
+3. Removed active ids become tombstones, incoming records get fresh slot clocks, and same-id type
+   changes do not retain old slot clocks.
+4. Realtime peers can hydrate from `ROOM_REPLACED` as a single server truth.
+5. Client replacement reconciliation clears pending work and ignores stale ACKs.
+   **Plans**: 2 plans
+
+Plans:
+
+- [x] 05.9-01: Backend replace document command and import adapter path.
+- [x] 05.9-02: Frontend ROOM_REPLACED reconciliation and verification.
+
 ## Progress
 
 **Execution Order:**
@@ -337,3 +363,4 @@ Follow `docs/SPECS.md`; this bootstrap tracks active Phase 4 feature slices.
 | 5.6. P5-06 Transactional persistence             | 3/3            | Complete | 2026-07-02 |
 | 5.7. P5-07 Load, reconnect & diff                | 1/1            | Complete | 2026-07-02 |
 | 5.8. P5-08 Delete, tombstone & binding repair    | 1/1            | Complete | 2026-07-02 |
+| 5.9. P5-09 Replace document import/restore       | 2/2            | Complete | 2026-07-02 |

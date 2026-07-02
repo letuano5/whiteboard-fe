@@ -60,7 +60,7 @@ describe('P5-08 SyncRoom delete, tombstone, and binding repair', () => {
     expect(peerArrow).toEqual(repaired);
   });
 
-  it('rejects create and replace resurrection for ids retained in tombstones', async () => {
+  it('rejects create resurrection while allowing whole-document replace for tombstoned ids', async () => {
     // @covers AC-3
     const room = new SyncRoom({ roomId: 'room-1', tombstoneElementIds: ['dead-shape'] });
 
@@ -71,11 +71,14 @@ describe('P5-08 SyncRoom delete, tombstone, and binding repair', () => {
     expect(room.getStateSnapshot().elements.has('dead-shape')).toBe(false);
     expect(room.getStateSnapshot().documentClock).toBe(0);
 
-    await expect(
-      room.execute(replaceCommand('replace-dead', [makeElement({ id: 'dead-shape' })]), editor),
-    ).rejects.toMatchObject({ code: 'DUPLICATE_ELEMENT_ID' });
-    expect(room.getStateSnapshot().elements.has('dead-shape')).toBe(false);
-    expect(room.getStateSnapshot().documentClock).toBe(0);
+    const result = await room.execute(
+      replaceCommand('replace-dead', [makeElement({ id: 'dead-shape' })]),
+      editor,
+    );
+    expect(result.changeSet.reason).toBe('replace_document');
+    expect(room.getStateSnapshot().elements.has('dead-shape')).toBe(true);
+    expect(room.getStateSnapshot().tombstoneElementIds.has('dead-shape')).toBe(false);
+    expect(room.getStateSnapshot().documentClock).toBe(1);
   });
 
   it('rejects delete and repair limit violations without partial commit', async () => {

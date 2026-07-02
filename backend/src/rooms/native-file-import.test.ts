@@ -13,6 +13,16 @@ vi.mock('../sync/index.js', () => ({
     roomId: 'room-1',
     importedElementCount: 1,
     documentClock: '3',
+    roomEpoch: 2,
+    replacePayload: {
+      protocolVersion: 1,
+      schemaVersion: 1,
+      roomId: 'room-1',
+      serverClock: 3,
+      roomEpoch: 2,
+      elements: [],
+      slotClocks: [],
+    },
   }),
 }));
 
@@ -56,6 +66,16 @@ beforeEach(() => {
     roomId: 'room-1',
     importedElementCount: 1,
     documentClock: '3',
+    roomEpoch: 2,
+    replacePayload: {
+      protocolVersion: 1,
+      schemaVersion: 1,
+      roomId: 'room-1',
+      serverClock: 3,
+      roomEpoch: 2,
+      elements: [],
+      slotClocks: [],
+    },
   });
   vi.mocked(resolveRoomAccess).mockReset();
 });
@@ -69,6 +89,7 @@ describe('native file import', () => {
     await expect(importNativeFileIntoRoom(db, 'room-1', user, document)).resolves.toEqual({
       importedElementCount: 1,
       documentClock: '3',
+      roomEpoch: 2,
     });
 
     expect(executeSyncCommand).toHaveBeenCalledWith(

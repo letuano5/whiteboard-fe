@@ -1,5 +1,11 @@
 import { WS_EVENTS } from '../../types/shared';
-import type { Element, Presence, SyncAck, SyncBroadcast } from '../../types/shared';
+import type {
+  Element,
+  Presence,
+  RoomReplacedPayload,
+  SyncAck,
+  SyncBroadcast,
+} from '../../types/shared';
 import { useAuthStore } from '../../auth/auth.store';
 import { useCameraStore } from '../../store/camera.store';
 import { useElementsStore } from '../../store/elements.store';
@@ -11,6 +17,7 @@ import { LOCAL_PRESENCE } from '../presence';
 import { clearPendingQueue, replayPendingQueue } from './pending-queue';
 import {
   applyRoomDiff,
+  applyRoomReplaced,
   applyRoomSnapshot,
   processSyncAck,
   processSyncBroadcast,
@@ -80,6 +87,10 @@ export function registerSocketEventHandlers(): void {
 
   state.socket.on(WS_EVENTS.SYNC_BROADCAST, (data: SyncBroadcast) => {
     processSyncBroadcast(data, { localActorId: getLocalActorId() });
+  });
+
+  state.socket.on(WS_EVENTS.ROOM_REPLACED, (data: RoomReplacedPayload) => {
+    applyRoomReplaced(data);
   });
 
   state.socket.on(WS_EVENTS.ROOM_ACCESS, (data: RoomAccessPayload) => {

@@ -30,6 +30,7 @@ interface NativeFileImportPayload {
 interface NativeFileImportResponse {
   importedElementCount: number;
   documentClock: string | null;
+  roomEpoch: number;
 }
 
 interface NativeFileImportHttpError {
@@ -41,12 +42,12 @@ interface NativeFileImportHttpError {
 
 export function createNativeFileImportRouter(deps: NativeFileImportDeps): Router {
   const router = express.Router();
-  router.use(express.json({ limit: '10mb' }));
   router.use(
     createHttpAuthMiddleware(deps.authVerifier, {
       appUserRepository: deps.appUserRepository,
     }),
   );
+  router.use(express.json({ limit: '10mb' }));
 
   router.post(
     '/api/rooms/:roomId/import-native',
@@ -67,6 +68,15 @@ export async function importNativeFileIntoRoom(
   user: AppUser | undefined,
   document: NativeFileDocument,
 ): Promise<NativeFileImportResponse> {
+  const authorizedUser = await assertCanImportNativeFile(db, roomId, user);
+  return executeNativeFileReplace(db, roomId, authorizedUser, document);
+}
+
+export async function assertCanImportNativeFile(
+  db: PrismaClient,
+  roomId: string,
+  user: AppUser | undefined,
+): Promise<AppUser> {
   if (!user) {
     throw new NativeFileImportError(
       'native-file/unauthenticated',
@@ -82,6 +92,15 @@ export async function importNativeFileIntoRoom(
     );
   }
 
+  return user;
+}
+
+async function executeNativeFileReplace(
+  db: PrismaClient,
+  roomId: string,
+  user: AppUser,
+  document: NativeFileDocument,
+): Promise<NativeFileImportResponse> {
   const result = await executeSyncCommand(
     {
       kind: 'native-file-import',
@@ -97,6 +116,7 @@ export async function importNativeFileIntoRoom(
   return {
     importedElementCount: result.importedElementCount,
     documentClock: result.documentClock,
+    roomEpoch: result.roomEpoch,
   };
 }
 
@@ -126,6 +146,15 @@ async function handleNativeFileImport(
   response: Response<NativeFileImportResponse | NativeFileImportHttpError>,
   deps: NativeFileImportDeps,
 ): Promise<void> {
+  const roomId = readRoomId(request);
+  let user: AppUser;
+  try {
+    user = await assertCanImportNativeFile(deps.db, roomId, request.auth.user);
+  } catch (error) {
+    sendKnownImportError(response, error);
+    return;
+  }
+
   const payload = readNativeFileImportPayload(request.body);
   if (!payload) {
     sendNativeFileError(response, 400, 'native-file/invalid-payload', 'Native file is invalid.');
@@ -133,14 +162,7 @@ async function handleNativeFileImport(
   }
 
   try {
-    response.json(
-      await importNativeFileIntoRoom(
-        deps.db,
-        readRoomId(request),
-        request.auth.user,
-        payload.document,
-      ),
-    );
+    response.json(await executeNativeFileReplace(deps.db, roomId, user, payload.document));
   } catch (error) {
     sendKnownImportError(response, error);
   }

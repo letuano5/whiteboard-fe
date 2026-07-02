@@ -1,5 +1,11 @@
 import type { PrismaClient } from '@prisma/client';
-import type { Element } from '@vdt/shared';
+import type {
+  CommittedChangeSet,
+  EffectiveRoomRole,
+  Element,
+  RoomReplacedPayload,
+  SyncClock,
+} from '@vdt/shared';
 import type { AutosaveManager } from '../persistence/autosave.js';
 
 export type SyncCommand = LegacyElementUpdateCommand | NativeFileImportCommand;
@@ -29,13 +35,17 @@ export interface NativeFileImportCommand {
 export interface SyncActorContext {
   actorId: string | null;
   db: PrismaClient;
+  effectiveRole?: EffectiveRoomRole;
   autosave?: AutosaveManager;
   roomElements?: Map<string, Map<string, Element>>;
   roomClocks?: Map<string, number>;
   logger?: Pick<typeof console, 'error'>;
 }
 
-export type SyncCommandResult = LegacyElementUpdateResult | NativeFileImportResult;
+export type SyncCommandResult =
+  | LegacyElementUpdateResult
+  | NativeFileImportResult
+  | ReplaceDocumentResult;
 
 export interface LegacyElementUpdateResult {
   kind: 'legacy-element-update';
@@ -50,4 +60,16 @@ export interface NativeFileImportResult {
   roomId: string;
   importedElementCount: number;
   documentClock: string | null;
+  roomEpoch: SyncClock;
+  replacePayload: RoomReplacedPayload;
+}
+
+export interface ReplaceDocumentResult {
+  kind: 'replace-document';
+  roomId: string;
+  replacedElementCount: number;
+  documentClock: string;
+  roomEpoch: SyncClock;
+  changeSet: CommittedChangeSet;
+  replacePayload: RoomReplacedPayload;
 }

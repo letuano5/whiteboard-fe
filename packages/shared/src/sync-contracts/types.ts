@@ -216,6 +216,16 @@ export interface RoomDiff {
   pendingRequests?: PendingRequestStatus[];
 }
 
+export interface RoomReplacedPayload {
+  protocolVersion: typeof SYNC_PROTOCOL_VERSION;
+  schemaVersion: typeof SYNC_SCHEMA_VERSION;
+  roomId: string;
+  serverClock: SyncClock;
+  roomEpoch: SyncClock;
+  elements: Element[];
+  slotClocks: SlotClockUpdate[];
+}
+
 export interface ReconnectRequest {
   roomId: string;
   lastServerClock: SyncClock;

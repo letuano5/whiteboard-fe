@@ -67,13 +67,9 @@ export function defaultSyncRoomPlanner(context: SyncRoomPlannerContext): SyncRoo
       return planUpdateArrowBinding(context, context.command);
     case 'replace-document': {
       const created = context.command.elements.map((element) => ({ ...element, isDeleted: false }));
-      for (const element of created) {
-        if (context.state.tombstoneElementIds.has(element.id)) {
-          throw new SyncRoomCommandError('DUPLICATE_ELEMENT_ID');
-        }
-      }
       const replacementIds = new Set(created.map((element) => element.id));
       return {
+        reason: 'replace_document',
         created,
         deleted: [...context.state.elements.keys()].filter(
           (elementId) => !replacementIds.has(elementId),

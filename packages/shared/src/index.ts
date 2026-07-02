@@ -158,6 +158,7 @@ export const WS_EVENTS = {
   ROOM_DIFF_REQUEST: 'room-diff-request',
   ROOM_SNAPSHOT: 'room-snapshot',
   ROOM_RESYNC: 'room-resync',
+  ROOM_REPLACED: 'room-replaced',
   ROOM_ACCESS: 'room-access',
   ROOM_ROLE_UPDATE: 'room-role-update',
   ROOM_ACCESS_ERROR: 'room-access-error',
