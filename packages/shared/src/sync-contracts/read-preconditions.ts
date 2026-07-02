@@ -18,7 +18,7 @@ export function getStaleReadPreconditions(
 
   return command.readPreconditions.flatMap((precondition) => {
     const currentClock = getCurrentSlotClock(context, precondition.elementId, precondition.slot);
-    if (precondition.baseClock <= currentClock) return [];
+    if (precondition.baseClock >= currentClock) return [];
 
     return [
       {

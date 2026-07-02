@@ -21,9 +21,6 @@ describe('SyncRoom', () => {
         commit: () => {
           events.push(`commit:${command.requestId}`);
         },
-        afterApply: () => {
-          events.push(`apply:${command.requestId}`);
-        },
       });
     };
     const room = new SyncRoom({ roomId: 'room-1', planner });
@@ -35,23 +32,57 @@ describe('SyncRoom', () => {
     const second = room.execute(createCommand('room-1', 'request-b', makeElement({ id: 'b' })), {
       actorId: 'actor-2',
     });
-    await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(events).toEqual(['plan:request-a']);
 
     releaseFirstPlan.resolve();
     await Promise.all([first, second]);
 
-    expect(events).toEqual([
-      'plan:request-a',
-      'commit:request-a',
-      'apply:request-a',
-      'plan:request-b',
-      'commit:request-b',
-      'apply:request-b',
-    ]);
+    expect(events).toEqual(['plan:request-a', 'commit:request-a', 'plan:request-b', 'commit:request-b']);
     expect([...room.getStateSnapshot().elements.keys()]).toEqual(['a', 'b']);
     expect(room.getStateSnapshot().documentClock).toBe(2);
+  });
+
+  it('does not block the room actor on afterApply delivery work', async () => {
+    const events: string[] = [];
+    const afterApplyEntered = createDeferred<void>();
+    const releaseAfterApply = createDeferred<void>();
+    const planner: SyncRoomPlanner = ({ command }) =>
+      planCreatedElement(command as CreateElementCommand, {
+        commit: () => {
+          events.push(`commit:${command.requestId}`);
+        },
+        afterApply: async () => {
+          events.push(`afterApply:${command.requestId}`);
+          if (command.requestId === 'request-a') {
+            afterApplyEntered.resolve();
+            await releaseAfterApply.promise;
+          }
+        },
+      });
+    const room = new SyncRoom({ roomId: 'room-1', planner });
+
+    const first = room.execute(createCommand('room-1', 'request-a', makeElement({ id: 'a' })), {
+      actorId: 'actor-1',
+    });
+    await afterApplyEntered.promise;
+    const second = room.execute(createCommand('room-1', 'request-b', makeElement({ id: 'b' })), {
+      actorId: 'actor-2',
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(events).toEqual(['commit:request-a', 'afterApply:request-a', 'commit:request-b']);
+
+    releaseAfterApply.resolve();
+    await Promise.all([first, second]);
+
+    expect(events).toEqual([
+      'commit:request-a',
+      'afterApply:request-a',
+      'commit:request-b',
+      'afterApply:request-b',
+    ]);
   });
 
   it('does not serialize unrelated rooms through a global queue', async () => {
@@ -123,6 +154,39 @@ describe('SyncRoom', () => {
     expect(sideEffects).toBe(1);
     expect(room.getStateSnapshot().documentClock).toBe(1);
     expect(room.getStateSnapshot().processedRequests.size).toBe(1);
+  });
+
+  it('rejects duplicate actor request IDs with different payloads', async () => {
+    const room = new SyncRoom({ roomId: 'room-1' });
+    const firstCommand = createCommand('room-1', 'request-1', makeElement({ id: 'first' }));
+    const conflictingCommand = createCommand(
+      'room-1',
+      'request-1',
+      makeElement({ id: 'second' }),
+    );
+
+    await room.execute(firstCommand, { actorId: 'actor-1' });
+
+    await expect(room.execute(conflictingCommand, { actorId: 'actor-1' })).rejects.toMatchObject({
+      code: 'DUPLICATE_REQUEST_CONFLICT',
+    });
+    expect(room.getStateSnapshot().elements.has('second')).toBe(false);
+    expect(room.getStateSnapshot().documentClock).toBe(1);
+  });
+
+  it('materializes created elements and initializes slot clocks', async () => {
+    const room = new SyncRoom({ roomId: 'room-1' });
+    const command = createCommand(
+      'room-1',
+      'create-deleted-client-payload',
+      makeElement({ id: 'created', isDeleted: true }),
+    );
+
+    const result = await room.execute(command, { actorId: 'actor-1' });
+
+    expect(room.getStateSnapshot().elements.get('created')?.isDeleted).toBe(false);
+    expect(result.changeSet.slotClocks.length).toBeGreaterThan(0);
+    expect(room.getStateSnapshot().slotClocks.get('created:transform.position')).toBe(1);
   });
 });
 

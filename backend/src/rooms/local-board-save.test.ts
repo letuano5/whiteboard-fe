@@ -2,10 +2,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PrismaClient } from '@prisma/client';
 import { saveLocalBoardAsRoom } from './local-board-save.js';
 import { makeDeletedElement, makeElement } from '../test/element-fixtures.js';
-import { saveRoomElements } from '../persistence/room-repository.js';
+import { executeSyncCommand } from '../sync/index.js';
 
-vi.mock('../persistence/room-repository.js', () => ({
-  saveRoomElements: vi.fn().mockResolvedValue({ documentClock: 1n }),
+vi.mock('../sync/index.js', () => ({
+  executeSyncCommand: vi.fn().mockResolvedValue({
+    kind: 'native-file-import',
+    roomId: 'room-created',
+    importedElementCount: 0,
+    documentClock: '1',
+  }),
 }));
 
 function buildDb(roomId = 'room-created') {
@@ -20,8 +25,13 @@ function buildDb(roomId = 'room-created') {
 }
 
 beforeEach(() => {
-  vi.mocked(saveRoomElements).mockReset();
-  vi.mocked(saveRoomElements).mockResolvedValue({ documentClock: 1n });
+  vi.mocked(executeSyncCommand).mockReset();
+  vi.mocked(executeSyncCommand).mockResolvedValue({
+    kind: 'native-file-import',
+    roomId: 'room-created',
+    importedElementCount: 0,
+    documentClock: '1',
+  });
 });
 
 describe('saveLocalBoardAsRoom', () => {
@@ -48,7 +58,7 @@ describe('saveLocalBoardAsRoom', () => {
     });
   });
 
-  it('imports current local elements through the persistence path with one live clock', async () => {
+  it('imports current local elements through the sync module entrypoint', async () => {
     // @covers AC-8
     // @covers AC-9
     const { db } = buildDb('room-imported');
@@ -56,7 +66,17 @@ describe('saveLocalBoardAsRoom', () => {
 
     await saveLocalBoardAsRoom(db, 'user-123', elements);
 
-    expect(saveRoomElements).toHaveBeenCalledWith(db, 'room-imported', elements, 1);
+    expect(executeSyncCommand).toHaveBeenCalledWith(
+      {
+        kind: 'native-file-import',
+        roomId: 'room-imported',
+        elements,
+      },
+      {
+        actorId: 'user-123',
+        db,
+      },
+    );
   });
 
   it('passes deleted elements to persistence so tombstone semantics are preserved', async () => {
@@ -66,7 +86,17 @@ describe('saveLocalBoardAsRoom', () => {
 
     await saveLocalBoardAsRoom(db, 'user-123', [deleted]);
 
-    expect(saveRoomElements).toHaveBeenCalledWith(db, 'room-deleted', [deleted], 1);
+    expect(executeSyncCommand).toHaveBeenCalledWith(
+      {
+        kind: 'native-file-import',
+        roomId: 'room-deleted',
+        elements: [deleted],
+      },
+      {
+        actorId: 'user-123',
+        db,
+      },
+    );
   });
 
   it('does not write any room before the save action is called', () => {
@@ -78,7 +108,7 @@ describe('saveLocalBoardAsRoom', () => {
 
   it('propagates persistence failures so the client can keep local data and show an error', async () => {
     // @covers AC-11
-    vi.mocked(saveRoomElements).mockRejectedValueOnce(new Error('DB unavailable.'));
+    vi.mocked(executeSyncCommand).mockRejectedValueOnce(new Error('DB unavailable.'));
     const { db } = buildDb('room-failure');
 
     await expect(saveLocalBoardAsRoom(db, 'user-123', [makeElement()])).rejects.toThrow(

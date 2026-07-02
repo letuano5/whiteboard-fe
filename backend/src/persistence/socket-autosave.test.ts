@@ -39,7 +39,7 @@ describe('AC-8: hot path — element-update does not block on persistence', () =
     vi.clearAllMocks();
   });
 
-  it('updates in-memory state without awaiting the slow database write', () => {
+  it('updates in-memory state without awaiting the slow database write', async () => {
     const autosave = createAutosaveManager({
       delayMs: 60000,
       getRoomElements: (id) => {
@@ -63,18 +63,18 @@ describe('AC-8: hot path — element-update does not block on persistence', () =
       roomId: string;
       elements: Element[];
       sessionId?: string;
-    }) => void;
+    }) => Promise<void>;
 
     const el = makeElement({ id: 'el-1' });
 
     // Act — synchronous call; persistence is never-resolving (simulates slow DB)
-    handler({ roomId, elements: [el], sessionId: 'session-1' });
+    await handler({ roomId, elements: [el], sessionId: 'session-1' });
 
     // Assert: in-memory state updated immediately (synchronous, no await)
     expect(roomElements.get(roomId)?.get('el-1')).toEqual(el);
   });
 
-  it('broadcasts the element-update to peers without waiting for the database write', () => {
+  it('broadcasts the element-update to peers without waiting for the database write', async () => {
     const autosave = createAutosaveManager({
       delayMs: 60000,
       getRoomElements: (id) => {
@@ -98,12 +98,12 @@ describe('AC-8: hot path — element-update does not block on persistence', () =
       roomId: string;
       elements: Element[];
       sessionId?: string;
-    }) => void;
+    }) => Promise<void>;
 
     const el = makeElement({ id: 'el-broadcast' });
 
     // Act
-    handler({ roomId, elements: [el], sessionId: 'session-1' });
+    await handler({ roomId, elements: [el], sessionId: 'session-1' });
 
     // Assert: socket.to(roomId).emit was called with ELEMENT_UPDATE immediately
     const toCalls = (socket.to as ReturnType<typeof vi.fn>).mock.calls as Array<[string]>;
@@ -118,7 +118,7 @@ describe('AC-8: hot path — element-update does not block on persistence', () =
     expect((updateCall![1] as { elements: Element[] }).elements).toContainEqual(el);
   });
 
-  it('in-memory state reflects latest element version after multiple updates', () => {
+  it('in-memory state reflects latest element version after multiple updates', async () => {
     const autosave = createAutosaveManager({
       delayMs: 60000,
       getRoomElements: (id) => {
@@ -141,13 +141,13 @@ describe('AC-8: hot path — element-update does not block on persistence', () =
     const handler = getHandler(socket, WS_EVENTS.ELEMENT_UPDATE) as (payload: {
       roomId: string;
       elements: Element[];
-    }) => void;
+    }) => Promise<void>;
 
     const v1 = makeElement({ id: 'el-X', version: 1 });
     const v2 = makeElement({ id: 'el-X', version: 2, x: 50 });
 
-    handler({ roomId, elements: [v1] });
-    handler({ roomId, elements: [v2] });
+    await handler({ roomId, elements: [v1] });
+    await handler({ roomId, elements: [v2] });
 
     // Latest version must win (last-write-wins)
     expect(roomElements.get(roomId)?.get('el-X')).toEqual(v2);

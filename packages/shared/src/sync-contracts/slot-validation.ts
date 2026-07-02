@@ -99,7 +99,7 @@ function hasValidSlotValue(slot: SyncSlot, value: Record<string, unknown>): bool
     case 'transform.position':
       return isFiniteNumber(value.x) && isFiniteNumber(value.y);
     case 'transform.size':
-      return isFiniteNumber(value.width) && isFiniteNumber(value.height);
+      return isNonNegativeNumber(value.width) && isNonNegativeNumber(value.height);
     case 'transform.rotation':
       return isFiniteNumber(value.angle);
     case 'style.strokeColor':
@@ -107,7 +107,7 @@ function hasValidSlotValue(slot: SyncSlot, value: Record<string, unknown>): bool
     case 'style.fillColor':
       return typeof value.fillColor === 'string';
     case 'style.strokeWidth':
-      return isFiniteNumber(value.strokeWidth);
+      return isPositiveNumber(value.strokeWidth);
     case 'style.strokeStyle':
       return (
         value.strokeStyle === 'solid' ||
@@ -115,13 +115,13 @@ function hasValidSlotValue(slot: SyncSlot, value: Record<string, unknown>): bool
         value.strokeStyle === 'dotted'
       );
     case 'style.opacity':
-      return isFiniteNumber(value.opacity);
+      return isRatio(value.opacity);
     case 'style.roughness':
       return value.roughness === null || isFiniteNumber(value.roughness);
     case 'text.text':
       return value.text === null || typeof value.text === 'string';
     case 'text.fontSize':
-      return value.fontSize === null || isFiniteNumber(value.fontSize);
+      return value.fontSize === null || isPositiveNumber(value.fontSize);
     case 'text.fontFamily':
       return value.fontFamily === null || typeof value.fontFamily === 'string';
     case 'text.textAlign':
@@ -156,4 +156,16 @@ function hasValidSlotValue(slot: SyncSlot, value: Record<string, unknown>): bool
     case 'state.locked':
       return typeof value.locked === 'boolean';
   }
+}
+
+function isNonNegativeNumber(value: unknown): value is number {
+  return isFiniteNumber(value) && value >= 0;
+}
+
+function isPositiveNumber(value: unknown): value is number {
+  return isFiniteNumber(value) && value > 0;
+}
+
+function isRatio(value: unknown): value is number {
+  return isFiniteNumber(value) && value >= 0 && value <= 1;
 }

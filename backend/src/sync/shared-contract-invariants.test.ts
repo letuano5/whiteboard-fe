@@ -95,9 +95,9 @@ describe('P5-02 shared sync invariants', () => {
     };
     const currentSlotClocks = new Map([
       [getSlotClockKey('shape-1', 'style.fillColor'), 1],
-      [getSlotClockKey('shape-1', 'transform.position'), 4],
-      [getSlotClockKey('shape-1', 'transform.size'), 5],
-      [getSlotClockKey('arrow-1', 'geometry.points'), 6],
+      [getSlotClockKey('shape-1', 'transform.position'), 6],
+      [getSlotClockKey('shape-1', 'transform.size'), 7],
+      [getSlotClockKey('arrow-1', 'geometry.points'), 8],
     ]);
 
     expect(
@@ -111,7 +111,10 @@ describe('P5-02 shared sync invariants', () => {
       validateSyncCommand(
         {
           ...command,
-          readPreconditions: [{ ...command.readPreconditions![0], onStale: 'rebase' }],
+          readPreconditions: command.readPreconditions!.map((precondition) => ({
+            ...precondition,
+            onStale: 'rebase' as const,
+          })),
         },
         { currentSlotClocks },
       ),
@@ -132,6 +135,12 @@ describe('P5-02 shared sync invariants', () => {
     expect(validateSyncCommand({ ...command, binding: { elementId: 'shape-1' } })).toMatchObject({
       ok: false,
     });
+    expect(
+      validateSyncCommand({
+        ...command,
+        binding: { elementId: 'shape-1', anchorRatio: { x: 1.25, y: 0.5 } },
+      }),
+    ).toMatchObject({ ok: false });
     expect(validateSyncCommand({ ...command, batchId: 'batch-1' })).toEqual({
       ok: false,
       errors: ['SyncCommand must not include batchId.'],

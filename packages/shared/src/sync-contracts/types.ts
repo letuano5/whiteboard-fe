@@ -1,4 +1,4 @@
-import type { Element } from '../index';
+import type { ArrowEndpointBinding, Element } from '../index';
 
 export const SYNC_PROTOCOL_VERSION = 1;
 export const SYNC_SCHEMA_VERSION = 1;
@@ -33,11 +33,6 @@ export type SyncSlot =
   | 'state.locked';
 
 export type PointTuple = [number, number];
-
-export interface ArrowEndpointBinding {
-  elementId: string;
-  anchorRatio: { x: number; y: number };
-}
 
 export interface SyncSlotValueMap {
   'transform.position': { x: number; y: number };

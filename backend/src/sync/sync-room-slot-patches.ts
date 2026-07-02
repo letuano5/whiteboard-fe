@@ -110,12 +110,12 @@ export function applySlotPatch(element: Element, patch: SlotPatch): Element {
       return next;
     case 'binding.start': {
       const changes = patch.changes as SlotValue<'binding.start'>;
-      next.props.startBinding = changes.binding?.elementId ?? null;
+      next.props.startBinding = changes.binding;
       return next;
     }
     case 'binding.end': {
       const changes = patch.changes as SlotValue<'binding.end'>;
-      next.props.endBinding = changes.binding?.elementId ?? null;
+      next.props.endBinding = changes.binding;
       return next;
     }
     case 'asset.src': {

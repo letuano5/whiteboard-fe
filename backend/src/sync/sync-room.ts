@@ -58,6 +58,11 @@ export interface SyncRoomExecutionResult {
   changeSet: CommittedChangeSet;
 }
 
+interface SyncRoomCriticalSectionResult {
+  result: SyncRoomExecutionResult;
+  afterApply?: (changeSet: CommittedChangeSet) => void | Promise<void>;
+}
+
 export interface SyncRoomReferenceValidator {
   canUseAssetSrc?: (src: string, actorContext: SyncRoomActorContext) => boolean;
 }
@@ -76,6 +81,7 @@ interface SyncRoomOptions {
 
 export class SyncRoom {
   private readonly actor = new RoomActor();
+  private outputTail: Promise<void> = Promise.resolve();
   private readonly elements = new Map<string, Element>();
   private readonly slotClocks = new Map<string, SyncClock>();
   private readonly tombstoneElementIds = new Set<string>();
@@ -107,7 +113,14 @@ export class SyncRoom {
       throw new Error(`Room mismatch: ${command.roomId} !== ${this.options.roomId}.`);
     }
 
-    return this.actor.enqueue(() => this.executeCriticalSection(command, actorContext));
+    return this.actor
+      .enqueue(() => this.executeCriticalSection(command, actorContext))
+      .then(async ({ result, afterApply }) => {
+        if (afterApply) {
+          await this.enqueueOutput(() => afterApply(result.changeSet));
+        }
+        return result;
+      });
   }
 
   getStateSnapshot(): SyncRoomStateSnapshot {
@@ -124,10 +137,15 @@ export class SyncRoom {
   private async executeCriticalSection(
     command: SharedSyncCommand,
     actorContext: SyncRoomActorContext,
-  ): Promise<SyncRoomExecutionResult> {
+  ): Promise<SyncRoomCriticalSectionResult> {
     const idempotencyKey = toProcessedRequestKey(actorContext.actorId, command.requestId);
     const processed = this.processedRequests.get(idempotencyKey);
-    if (processed) return processed;
+    if (processed) {
+      if (toPayloadHash(processed.command) !== toPayloadHash(command)) {
+        throw new SyncRoomCommandError('DUPLICATE_REQUEST_CONFLICT');
+      }
+      return { result: processed };
+    }
 
     assertCanMutate(actorContext);
     const serverClock = this.documentClock + 1;
@@ -143,7 +161,6 @@ export class SyncRoom {
 
     await plan.commit?.();
     this.applyCommitted(changeSet);
-    await plan.afterApply?.(changeSet);
 
     const result: SyncRoomExecutionResult = {
       command,
@@ -151,7 +168,7 @@ export class SyncRoom {
       changeSet,
     };
     this.processedRequests.set(idempotencyKey, result);
-    return result;
+    return { result, afterApply: plan.afterApply };
   }
 
   private applyCommitted(changeSet: CommittedChangeSet): void {
@@ -172,6 +189,15 @@ export class SyncRoom {
     for (const slotClock of changeSet.slotClocks) {
       this.slotClocks.set(toSlotClockKey(slotClock.elementId, slotClock.slot), slotClock.clock);
     }
+  }
+
+  private enqueueOutput(task: () => void | Promise<void>): Promise<void> {
+    const run = this.outputTail.catch(() => undefined).then(task);
+    this.outputTail = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
   }
 }
 
@@ -265,4 +291,19 @@ function toProcessedRequestKey(actorId: string | null, requestId: string): strin
 
 function toSlotClockKey(elementId: string, slot: string): string {
   return `${elementId}:${slot}`;
+}
+
+function toPayloadHash(value: unknown): string {
+  return JSON.stringify(toCanonicalValue(value));
+}
+
+function toCanonicalValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(toCanonicalValue);
+  if (value === null || typeof value !== 'object') return value;
+
+  return Object.fromEntries(
+    Object.entries(value)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, entryValue]) => [key, toCanonicalValue(entryValue)]),
+  );
 }

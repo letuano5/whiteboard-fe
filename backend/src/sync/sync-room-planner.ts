@@ -1,39 +1,74 @@
 import {
+  materializeCreatedElement,
   validateSyncCommand,
   type DeleteElementsCommand,
   type Element,
   type PatchSlotsCommand,
   type SlotPatch,
+  type SyncSlot,
 } from '@vdt/shared';
 import { SyncRoomCommandError, type SyncRoomErrorCode } from './sync-room-errors.js';
 import { MAX_ELEMENTS_PER_DELETE, MAX_PATCHES_PER_COMMAND } from './sync-room-limits.js';
 import { applySlotPatch, validateSlotForElement } from './sync-room-slot-patches.js';
 import type { SyncRoomPlan, SyncRoomPlannerContext } from './sync-room.js';
 
+const INITIAL_SYNC_SLOTS: SyncSlot[] = [
+  'transform.position',
+  'transform.size',
+  'transform.rotation',
+  'style.strokeColor',
+  'style.fillColor',
+  'style.strokeWidth',
+  'style.strokeStyle',
+  'style.opacity',
+  'style.roughness',
+  'text.text',
+  'text.fontSize',
+  'text.fontFamily',
+  'text.textAlign',
+  'geometry.points',
+  'geometry.route',
+  'geometry.startPoint',
+  'geometry.endPoint',
+  'binding.start',
+  'binding.end',
+  'order',
+  'asset.src',
+  'embed.url',
+  'grouping.groupId',
+  'grouping.frameId',
+  'state.locked',
+];
+
 export function defaultSyncRoomPlanner(context: SyncRoomPlannerContext): SyncRoomPlan {
   validateCommandBoundary(context);
 
   switch (context.command.kind) {
-    case 'create-element':
+    case 'create-element': {
+      const materialized = materializeCreatedElement(context.command);
       return {
-        created: [context.command.element],
-        normalizedOrder: [
-          { elementId: context.command.element.id, zIndex: context.command.element.zIndex },
-        ],
+        created: [materialized.element],
+        normalizedOrder: [materialized.normalizedOrder],
+        slotClocks: createInitialSlotClocks(materialized.element.id, context.serverClock),
       };
+    }
     case 'patch-slots':
       return planPatchSlots(context, context.command);
     case 'delete-elements':
       return planDeleteElements(context, context.command);
     case 'replace-document': {
-      const replacementIds = new Set(context.command.elements.map((element) => element.id));
+      const created = context.command.elements.map((element) => ({ ...element, isDeleted: false }));
+      const replacementIds = new Set(created.map((element) => element.id));
       return {
-        created: context.command.elements,
+        created,
         deleted: [...context.state.elements.keys()].filter(
           (elementId) => !replacementIds.has(elementId),
         ),
+        slotClocks: created.flatMap((element) =>
+          createInitialSlotClocks(element.id, context.serverClock),
+        ),
         roomEpoch: context.state.roomEpoch + 1,
-        normalizedOrder: context.command.elements.map((element) => ({
+        normalizedOrder: created.map((element) => ({
           elementId: element.id,
           zIndex: element.zIndex,
         })),
@@ -45,6 +80,10 @@ export function defaultSyncRoomPlanner(context: SyncRoomPlannerContext): SyncRoo
         `${context.command.kind} planning is owned by later P5 phases.`,
       );
   }
+}
+
+function createInitialSlotClocks(elementId: string, clock: number) {
+  return INITIAL_SYNC_SLOTS.map((slot) => ({ elementId, slot, clock }));
 }
 
 function validateCommandBoundary(context: SyncRoomPlannerContext): void {

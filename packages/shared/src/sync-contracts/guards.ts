@@ -1,6 +1,5 @@
-import type { Element } from '../index';
+import type { ArrowEndpointBinding, Element } from '../index';
 import type {
-  ArrowEndpointBinding,
   PointTuple,
   SyncOrderHint,
   SyncReadPrecondition,
@@ -54,9 +53,13 @@ export function isArrowEndpointBinding(value: unknown): value is ArrowEndpointBi
     isRecord(value) &&
     typeof value.elementId === 'string' &&
     isRecord(value.anchorRatio) &&
-    isFiniteNumber(value.anchorRatio.x) &&
-    isFiniteNumber(value.anchorRatio.y)
+    isRatio(value.anchorRatio.x) &&
+    isRatio(value.anchorRatio.y)
   );
+}
+
+function isRatio(value: unknown): value is number {
+  return isFiniteNumber(value) && value >= 0 && value <= 1;
 }
 
 function isReadPreconditionStaleAction(value: unknown): value is SyncReadPrecondition['onStale'] {

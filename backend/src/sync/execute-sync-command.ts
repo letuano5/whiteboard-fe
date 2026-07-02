@@ -1,4 +1,5 @@
 import { getRoomClock, saveRoomElements } from '../persistence/room-repository.js';
+import { RoomActorRegistry } from './room-actor.js';
 import type {
   LegacyElementUpdateCommand,
   LegacyElementUpdateResult,
@@ -9,10 +10,12 @@ import type {
   SyncCommandResult,
 } from './types.js';
 
+const commandActors = new RoomActorRegistry();
+
 export function executeSyncCommand(
   command: LegacyElementUpdateCommand,
   actorContext: SyncActorContext,
-): LegacyElementUpdateResult | Promise<LegacyElementUpdateResult>;
+): Promise<LegacyElementUpdateResult>;
 export function executeSyncCommand(
   command: NativeFileImportCommand,
   actorContext: SyncActorContext,
@@ -21,22 +24,28 @@ export function executeSyncCommand(
   command: SyncCommand,
   actorContext: SyncActorContext,
 ): SyncCommandResult | Promise<SyncCommandResult> {
-  switch (command.kind) {
-    case 'legacy-element-update':
-      return executeLegacyElementUpdate(command, actorContext);
-    case 'native-file-import':
-      return executeNativeFileImport(command, actorContext);
-  }
+  return commandActors.enqueue<SyncCommandResult>(command.roomId, () => {
+    switch (command.kind) {
+      case 'legacy-element-update':
+        return executeLegacyElementUpdate(command, actorContext);
+      case 'native-file-import':
+        return executeNativeFileImport(command, actorContext);
+    }
+  });
 }
 
-function executeLegacyElementUpdate(
+async function executeLegacyElementUpdate(
   command: LegacyElementUpdateCommand,
   actorContext: SyncActorContext,
-): LegacyElementUpdateResult | Promise<LegacyElementUpdateResult> {
+): Promise<LegacyElementUpdateResult> {
   const { roomElements, roomClocks, autosave } = actorContext;
 
   if (!roomElements || !roomClocks || !autosave) {
     throw new Error('legacy-element-update requires room state, room clocks, and autosave.');
+  }
+
+  if (!roomClocks.has(command.roomId)) {
+    await loadRoomClock(command, actorContext);
   }
 
   if (!roomElements.has(command.roomId)) {
@@ -47,17 +56,13 @@ function executeLegacyElementUpdate(
     elementMap.set(element.id, element);
   }
 
-  if (!roomClocks.has(command.roomId)) {
-    return loadRoomClockAndCommitLegacyElementUpdate(command, actorContext);
-  }
-
   return commitLegacyElementUpdate(command, actorContext);
 }
 
-async function loadRoomClockAndCommitLegacyElementUpdate(
+async function loadRoomClock(
   command: LegacyElementUpdateCommand,
   actorContext: SyncActorContext,
-): Promise<LegacyElementUpdateResult> {
+): Promise<void> {
   const { db, roomClocks, logger = console } = actorContext;
 
   try {
@@ -66,8 +71,6 @@ async function loadRoomClockAndCommitLegacyElementUpdate(
     logger.error(`[delta-clock] Failed to load room clock for ${command.roomId}:`, error);
     roomClocks?.set(command.roomId, 0);
   }
-
-  return commitLegacyElementUpdate(command, actorContext);
 }
 
 function commitLegacyElementUpdate(

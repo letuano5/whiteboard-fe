@@ -91,6 +91,44 @@ describe('executeSyncCommand', () => {
     expect(result.documentClock).toBe(1);
   });
 
+  it('serializes legacy element updates per room while loading the initial room clock', async () => {
+    const clockLoad = createDeferred<number>();
+    vi.mocked(getRoomClock).mockReturnValue(clockLoad.promise);
+    const roomElements = new Map();
+    const roomClocks = new Map();
+    const autosave = {
+      markDirty: vi.fn(),
+      flushRoomNow: vi.fn(),
+    };
+    const db = {} as PrismaClient;
+
+    const first = executeSyncCommand(
+      {
+        kind: 'legacy-element-update',
+        roomId: 'room-1',
+        elements: [makeElement({ id: 'first' })],
+      },
+      { actorId: 'user-1', db, roomElements, roomClocks, autosave },
+    );
+    const second = executeSyncCommand(
+      {
+        kind: 'legacy-element-update',
+        roomId: 'room-1',
+        elements: [makeElement({ id: 'second' })],
+      },
+      { actorId: 'user-2', db, roomElements, roomClocks, autosave },
+    );
+
+    clockLoad.resolve(4);
+    await expect(first).resolves.toMatchObject({ documentClock: 5 });
+    await expect(second).resolves.toMatchObject({ documentClock: 6 });
+
+    expect(getRoomClock).toHaveBeenCalledTimes(1);
+    expect(roomClocks.get('room-1')).toBe(6);
+    expect(roomElements.get('room-1')?.has('first')).toBe(true);
+    expect(roomElements.get('room-1')?.has('second')).toBe(true);
+  });
+
   it('executes native file import persistence through the sync module boundary', async () => {
     // @covers AC-2
     const db = {} as PrismaClient;
@@ -124,3 +162,14 @@ describe('executeSyncCommand', () => {
     expect('native-file-import').toContain('import');
   });
 });
+
+function createDeferred<T>(): {
+  promise: Promise<T>;
+  resolve: (value: T | PromiseLike<T>) => void;
+} {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  const promise = new Promise<T>((innerResolve) => {
+    resolve = innerResolve;
+  });
+  return { promise, resolve };
+}

@@ -29,9 +29,14 @@ export interface ElementProps {
   fontFamily?: string;
   textAlign?: 'left' | 'center' | 'right';
   src?: string; // image
-  startBinding?: string | null; // arrow
-  endBinding?: string | null; // arrow
+  startBinding?: ArrowEndpointBinding | string | null; // arrow; string is legacy P1-P4 format
+  endBinding?: ArrowEndpointBinding | string | null; // arrow; string is legacy P1-P4 format
   url?: string; // embed
+}
+
+export interface ArrowEndpointBinding {
+  elementId: string;
+  anchorRatio: { x: number; y: number };
 }
 
 export interface Element {

@@ -8,7 +8,7 @@ import {
   type AppUserRepository,
   type AuthenticatedRequest,
 } from '../auth/index.js';
-import { saveRoomElements } from '../persistence/room-repository.js';
+import { executeSyncCommand } from '../sync/index.js';
 
 interface LocalBoardSaveDeps {
   authVerifier: AuthVerifier;
@@ -68,7 +68,17 @@ export async function saveLocalBoardAsRoom(
     select: { id: true },
   });
 
-  await saveRoomElements(db, room.id, elements, 1);
+  await executeSyncCommand(
+    {
+      kind: 'native-file-import',
+      roomId: room.id,
+      elements,
+    },
+    {
+      actorId: userId,
+      db,
+    },
+  );
 
   return { roomId: room.id };
 }
