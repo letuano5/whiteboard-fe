@@ -155,11 +155,15 @@ export const WS_EVENTS = {
   USER_JOIN: 'user-join',
   USER_LEAVE: 'user-leave',
   ROOM_DIFF: 'room-diff', // AC-12: distinct WS event for reconnect incremental diff (P3A-03)
+  ROOM_DIFF_REQUEST: 'room-diff-request',
   ROOM_SNAPSHOT: 'room-snapshot',
   ROOM_RESYNC: 'room-resync',
   ROOM_ACCESS: 'room-access',
   ROOM_ROLE_UPDATE: 'room-role-update',
   ROOM_ACCESS_ERROR: 'room-access-error',
+  SYNC_COMMAND: 'sync-command',
+  SYNC_ACK: 'sync-ack',
+  SYNC_BROADCAST: 'sync-broadcast',
 } as const;
 
 export type WsEvent = (typeof WS_EVENTS)[keyof typeof WS_EVENTS];

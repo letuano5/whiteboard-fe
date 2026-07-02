@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { WS_EVENTS } from '../../types/shared';
+import { SYNC_PROTOCOL_VERSION, SYNC_SCHEMA_VERSION, WS_EVENTS } from '../../types/shared';
 import { useElementsStore } from '../../store/elements.store';
 import { useInteractionStore } from '../../store/interaction.store';
 import { useCameraStore } from '../../store/camera.store';
-import type { Presence } from '../../types/shared';
+import type { CommittedChangeSet, Presence } from '../../types/shared';
 
 vi.mock('../camera-persistence', () => ({
   saveCamera: vi.fn(),
@@ -972,6 +972,29 @@ function makeFakeElement(id: string, version = 1) {
   };
 }
 
+function changeSet(
+  overrides: Partial<CommittedChangeSet> & Pick<CommittedChangeSet, 'requestId' | 'serverClock'>,
+): CommittedChangeSet {
+  return {
+    protocolVersion: SYNC_PROTOCOL_VERSION,
+    schemaVersion: SYNC_SCHEMA_VERSION,
+    roomId: 'room-abc',
+    roomEpoch: 0,
+    originActorId: 'peer-actor',
+    originRequestIds: [overrides.requestId],
+    reason: 'patch_clean',
+    slotPatches: [],
+    puts: [],
+    deletes: [],
+    created: [],
+    patched: [],
+    deleted: [],
+    slotClocks: [],
+    normalizedOrder: [],
+    ...overrides,
+  };
+}
+
 describe('socket-client — P3A-03/AC-3 (T008) ROOM_DIFF calls applyRemoteElements with changed', () => {
   // @covers AC-3
   it('ROOM_DIFF received → applyRemoteElements called with changed elements', async () => {
@@ -1031,6 +1054,42 @@ describe('socket-client — P3A-03/AC-12 (T008) ROOM_DIFF is a distinct handler 
     expect(_handlers[WS_EVENTS.ROOM_SNAPSHOT]).toBeDefined();
     // They should be different functions
     expect(_handlers[WS_EVENTS.ROOM_DIFF]).not.toBe(_handlers[WS_EVENTS.ROOM_SNAPSHOT]);
+  });
+});
+
+describe('socket-client — P5-05 sync broadcast handler', () => {
+  it('applies a slot-only sync broadcast through change-set reconciliation', async () => {
+    const { initSocketClient } = await import('../socket-client');
+    const { useElementsStore: elementStore } = await import('../../store/elements.store');
+    initSocketClient('room-abc');
+
+    elementStore.setState({
+      elements: [makeFakeElement('shape-1')],
+    });
+
+    const handler = _handlers[WS_EVENTS.SYNC_BROADCAST];
+    expect(handler).toBeDefined();
+    handler({
+      protocolVersion: SYNC_PROTOCOL_VERSION,
+      schemaVersion: SYNC_SCHEMA_VERSION,
+      roomId: 'room-abc',
+      serverClock: 1,
+      changeSet: changeSet({
+        requestId: 'peer-patch',
+        serverClock: 1,
+        slotPatches: [
+          {
+            elementId: 'shape-1',
+            slot: 'style.fillColor',
+            baseClock: 0,
+            clock: 1,
+            changes: { fillColor: '#00ff00' },
+          },
+        ],
+      }),
+    });
+
+    expect(elementStore.getState().elements[0]?.props.fillColor).toBe('#00ff00');
   });
 });
 

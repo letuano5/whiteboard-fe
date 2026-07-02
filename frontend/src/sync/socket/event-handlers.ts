@@ -1,5 +1,6 @@
 import { WS_EVENTS } from '../../types/shared';
-import type { Element, Presence } from '../../types/shared';
+import type { Element, Presence, SyncAck, SyncBroadcast } from '../../types/shared';
+import { useAuthStore } from '../../auth/auth.store';
 import { useCameraStore } from '../../store/camera.store';
 import { useElementsStore } from '../../store/elements.store';
 import { useInteractionStore } from '../../store/interaction.store';
@@ -8,6 +9,7 @@ import { applyRemoteElements } from '../apply-remote';
 import { saveCamera } from '../camera-persistence';
 import { LOCAL_PRESENCE } from '../presence';
 import { clearPendingQueue, replayPendingQueue } from './pending-queue';
+import { processSyncAck, processSyncBroadcast, replayBufferedSyncEvents } from './p5-reconciliation';
 import { getSocketState, setLastServerClock } from './state';
 import type {
   CursorMovePayload,
@@ -49,6 +51,7 @@ export function registerSocketEventHandlers(): void {
       clearPendingQueue();
       current.reconnectPending = false;
     }
+    replayBufferedSyncEvents({ localActorId: getLocalActorId() });
   });
 
   state.socket.on(WS_EVENTS.ROOM_DIFF, (data: RoomDiffPayload) => {
@@ -57,7 +60,16 @@ export function registerSocketEventHandlers(): void {
     applyRemoteElements(data.changed);
     useElementsStore.getState().removeElements(data.deleted.map((d) => d.id));
     current.reconnectPending = false;
+    replayBufferedSyncEvents({ localActorId: getLocalActorId() });
     replayPendingQueue();
+  });
+
+  state.socket.on(WS_EVENTS.SYNC_ACK, (data: SyncAck) => {
+    processSyncAck(data, { localActorId: getLocalActorId() });
+  });
+
+  state.socket.on(WS_EVENTS.SYNC_BROADCAST, (data: SyncBroadcast) => {
+    processSyncBroadcast(data, { localActorId: getLocalActorId() });
   });
 
   state.socket.on(WS_EVENTS.ROOM_ACCESS, (data: RoomAccessPayload) => {
@@ -134,4 +146,8 @@ export function registerSocketEventHandlers(): void {
     }
     setRemoteDrafts(current);
   });
+}
+
+function getLocalActorId(): string | null {
+  return useAuthStore.getState().session?.user.id ?? null;
 }

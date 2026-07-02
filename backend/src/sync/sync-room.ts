@@ -225,6 +225,7 @@ function createChangeSet(
   const slotPatches = toCommittedSlotPatches(patched, slotClocks);
   const created = plan.created ?? [];
   const deleted = plan.deleted ?? [];
+  const reason = plan.reason ?? inferChangeSetReason(command);
 
   return {
     protocolVersion: SYNC_PROTOCOL_VERSION,
@@ -235,9 +236,9 @@ function createChangeSet(
     roomEpoch: plan.roomEpoch ?? roomEpoch,
     originActorId: actorContext.actorId,
     originRequestIds: [command.requestId],
-    reason: plan.reason ?? inferChangeSetReason(command),
+    reason,
     slotPatches,
-    puts: [...created, ...patched.map((entry) => entry.element)],
+    puts: reason === 'create' || reason === 'replace_document' ? created : [],
     deletes: deleted,
     created,
     patched,

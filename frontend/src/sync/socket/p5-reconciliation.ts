@@ -26,6 +26,9 @@ export function processSyncAck(
   clearPendingRequest(ack.requestId);
 
   if (ack.status === 'reject') {
+    if (ack.serverChangeSet) {
+      return applyIncomingChangeSet(ack.serverChangeSet, options);
+    }
     return { status: 'applied', serverClock: ack.serverClock };
   }
 
@@ -46,6 +49,20 @@ export function processSyncBroadcast(
   }
 
   return applyIncomingChangeSet(broadcast.changeSet, options);
+}
+
+export function replayBufferedSyncEvents(options: ReconciliationOptions = {}): void {
+  const state = getSocketState();
+  const buffered = state.bufferedSyncEvents;
+  state.bufferedSyncEvents = [];
+
+  for (const event of buffered) {
+    if ('status' in event) {
+      processSyncAck(event, options);
+    } else {
+      processSyncBroadcast(event, options);
+    }
+  }
 }
 
 function clearPendingRequest(requestId: string): void {
@@ -90,7 +107,7 @@ function requestRoomDiff(changeSet: CommittedChangeSet, options: ReconciliationO
     options.requestRoomDiff(changeSet.roomId, state.lastServerClock, changeSet.serverClock);
     return;
   }
-  state.socket?.emit(WS_EVENTS.ROOM_DIFF, {
+  state.socket?.emit(WS_EVENTS.ROOM_DIFF_REQUEST, {
     roomId: changeSet.roomId,
     fromClock: state.lastServerClock,
     toClock: changeSet.serverClock,

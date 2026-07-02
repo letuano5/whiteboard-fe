@@ -31,7 +31,7 @@ describe('P5-05 SyncRoom change-set ACK helpers', () => {
       originRequestIds: ['patch-clean'],
       reason: 'patch_clean',
       deletes: [],
-      puts: [expect.objectContaining({ id: 'shape' })],
+      puts: [],
       slotPatches: [
         expect.objectContaining({
           elementId: 'shape',

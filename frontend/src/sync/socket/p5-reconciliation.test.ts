@@ -1,5 +1,5 @@
 import type { CommittedChangeSet, Element, SyncAck, SyncBroadcast } from '../../types/shared';
-import { SYNC_PROTOCOL_VERSION, SYNC_SCHEMA_VERSION } from '../../types/shared';
+import { SYNC_PROTOCOL_VERSION, SYNC_SCHEMA_VERSION, WS_EVENTS } from '../../types/shared';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useElementsStore } from '../../store/elements.store';
 import { processSyncAck, processSyncBroadcast, queuePendingSyncRequest } from './p5-reconciliation';
@@ -165,6 +165,20 @@ describe('P5 reconciliation pending and change-set handling', () => {
     expect(useElementsStore.getState().elements[0]?.props.fillColor).toBe('#ffffff');
     expect(requestRoomDiff).toHaveBeenCalledWith('room-1', 3, 5);
     expect(getSocketState().bufferedSyncEvents).toHaveLength(1);
+  });
+
+  it('requests a room diff over the dedicated request event on future clock gaps', () => {
+    setLastServerClock(3);
+    const emit = vi.fn();
+    getSocketState().socket = { emit } as never;
+
+    processSyncBroadcast(broadcast(changeSet({ requestId: 'gap-1', serverClock: 5 })));
+
+    expect(emit).toHaveBeenCalledWith(WS_EVENTS.ROOM_DIFF_REQUEST, {
+      roomId: 'room-1',
+      fromClock: 3,
+      toClock: 5,
+    });
   });
 });
 

@@ -204,6 +204,8 @@ model Record {
   typeName    String // = Element.type
   state       Json   // toàn bộ Element object
   recordClock BigInt
+  // P5-13: thêm cột `slotClocks Json` = map slot -> { clock, lastActorId?, lastRequestId? }.
+  // Bỏ bảng RecordSlotClock; recordClock = max(slotClock) để làm coarse filter cho diff.
   room        Room   @relation(fields: [roomId], references: [id], onDelete: Cascade)
   @@id([roomId, recordId])
   @@index([roomId, recordClock])
@@ -220,6 +222,8 @@ model Tombstone {
 }
 
 // P5+: clock theo conflict slot, dùng để merge slot-level.
+// ⚠️ [P5-13] refactor: layout đích chuyển slotClocks sang cột JSON trong Record (bỏ bảng này).
+// Bảng vẫn đúng semantics; giữ mô tả ở đây cho P5-01..P5-05 đã implement, xem [P5-13] cho target.
 model RecordSlotClock {
   roomId        String @db.Uuid
   recordId      String
@@ -1410,6 +1414,112 @@ Delete => delete-wins.
 - [ ] Không biến Redis thành durable source of truth cho sync core; nếu dùng Redis thì chỉ là
   scale/cache/presence/pubsub layer, tài liệu vẫn recover từ Postgres.
 
+### [P5-13] Phase 1 implementation decisions & refactor — [BE/FE]
+
+> **Bối cảnh:** [P5-01]…[P5-05] đã được implement theo mô tả gốc. Task này chốt lại các quyết định
+> triển khai (storage layout, ownership/lock, durability, idempotency, backpressure, dependent-slot
+> API) sau review kiến trúc và **refactor phần đã code cho khớp**. Task này **điều chỉnh, không phủ
+> định** kiến trúc chính: vẫn giữ slot-level patches, server-authoritative `SyncRoom`, per-room
+> serialized actor, `roomEpoch`, tombstone và durable idempotency.
+>
+> **Refactor scope (áp lên code P5-01..P5-05 + ràng buộc cho P5-06..P5-12 chưa code):** storage của
+> slot clocks (P5-02/§2.2), sequencer/lock (P5-03/P5-06), persistence + idempotency (P5-06),
+> reconnect diff (P5-07), frontend flush/backpressure (P5-11), và API `readPreconditions` (P5-02).
+
+#### A. Slot clocks lưu JSON trong `Record`, bỏ bảng `RecordSlotClock`
+
+- [BE] `Record` có cột `slotClocks Json` = map `slot -> { clock, lastActorId?, lastRequestId? }`.
+  Bỏ bảng `RecordSlotClock` khỏi write path; `Tombstone` vẫn là bảng riêng.
+- [BE] Bất biến bắt buộc: `recordClock = max(slotClocks[*].clock)` cho mọi record (mọi slot touched
+  trong một command mang cùng `documentClock`, và `recordClock` cũng bằng `documentClock` đó).
+- [BE] Diff slot-aware chạy 2 bước: (1) coarse filter `recordClock > lastServerClock` bằng index
+  `(roomId, recordClock)`; (2) đọc `slotClocks` JSON của các record đó, chỉ lấy slot có
+  `clock > lastServerClock`. Không cần index JSON.
+
+**Acceptance:**
+
+- [ ] Không còn bảng `RecordSlotClock`; slot clocks nằm trong `Record.slotClocks` JSON.
+- [ ] Update một element chỉ ghi một row `Record` (state + slotClocks cùng transaction), không write bảng phụ.
+- [ ] Diff dùng `recordClock` làm coarse filter rồi lọc slot trong JSON; kết quả bằng bản dùng bảng riêng.
+
+#### B. Room ownership thay cho `SELECT … FOR UPDATE`
+
+- [BE] Bỏ `SELECT Room FOR UPDATE` trên hot path. Ở single-process, `documentClock` được tăng bên
+  trong critical section của room actor là đủ nhất quán (actor đã serialize toàn bộ command của room).
+- [BE] Backstop chống split-brain rẻ (thay cho row-lock): tăng clock bằng conditional update
+  `UPDATE Room SET documentClock = documentClock + 1 WHERE id = ? AND documentClock = :expected`;
+  nếu 0 row → mark room unhealthy, reload từ Postgres, không ACK command đó.
+- [BE] Sticky routing (mọi socket của room → đúng owner process) và ownership lease chỉ bắt buộc khi
+  bật multi-instance writes; phase đầu một process là owner của mọi room.
+
+**Acceptance:**
+
+- [ ] Hot path không dùng `SELECT … FOR UPDATE`; command trong một room vẫn commit theo thứ tự deterministic qua actor.
+- [ ] Conditional clock update fail (0 row) khiến room reload/unhealthy thay vì ghi đè clock đua.
+- [ ] Command vào room khác không bị serialize chung.
+
+#### C. Durability phân tầng (`synchronous_commit`)
+
+- [BE] `synchronous_commit = off` **không** phải durable đúng nghĩa — chỉ best-effort/relaxed: crash
+  app thường còn, nhưng crash host/VM/container cứng có thể mất ~vài trăm ms commit cuối.
+- [BE] Áp relaxed **chỉ** cho intermediate drag patch: `SET LOCAL synchronous_commit = off`.
+- [BE] Durable (`synchronous_commit` default/on) cho: final pointerup patch, text/style và mọi slot
+  patch "trạng thái nghỉ", và mọi discrete/domain command (create/delete/replace/binding/reorder).
+
+**Acceptance:**
+
+- [ ] Intermediate drag patch commit ở chế độ relaxed; final pointerup + discrete command commit durable.
+- [ ] Tài liệu/spec không mô tả `synchronous_commit = off` là "durable"; gọi đúng là relaxed/best-effort.
+
+#### D. `ProcessedRequest` theo tính resendable, không skip blanket
+
+- [BE] Nguyên lý: idempotency chỉ cần cho command **có thể bị resend**. Command không bao giờ vào
+  resend path thì không thể bị double-apply.
+- [BE] Bắt buộc ghi `ProcessedRequest` cho: create/delete/replace/binding/reorder, final pointerup
+  patch, và text/style/các slot patch "trạng thái nghỉ".
+- [BE] Chỉ được skip `ProcessedRequest` cho intermediate drag transient patch, và **bất biến**: skip
+  `ProcessedRequest` ⟺ command đó bị loại khỏi resend queue (đánh dấu transient, không tạo undo
+  entry, sẽ bị final pointerup patch ghi đè). Không skip vì "absolute value" đơn thuần — dù state
+  idempotent, apply lại vẫn tăng clock/broadcast lại/lệch `afterSlotClock`, nên phải chặn ở resend.
+
+**Acceptance:**
+
+- [ ] Retry final pointerup/discrete command cùng `requestId` replay ACK cũ, không tăng clock lần hai.
+- [ ] Intermediate drag patch không nằm trong resend queue; nếu mất thì final pointerup patch reconcile lại.
+- [ ] Không có command nào vừa skip `ProcessedRequest` vừa còn resendable.
+
+#### E. Drag flush & backpressure (số mặc định)
+
+- [FE] Durable drag flush = `100ms` (không commit DB mỗi `33ms` pointermove). Coalesce theo
+  `{ elementId, slot }`, giữ **latest changes** nhưng `inverseChanges` lấy từ **before đầu tiên** của window.
+- [FE] `PRESENCE_PREVIEW_THROTTLE_MS = 33` cho transient preview (ephemeral, không qua `SyncCommand`,
+  không tăng `documentClock`). Nếu phase đầu bỏ preview thì shape update mỗi ~100ms là chấp nhận được (<200ms).
+- [FE] `FINAL_POINTERUP_PATCH` luôn được gửi, không bị squash drop.
+- [FE] `MAX_IN_FLIGHT_COMMANDS_PER_CLIENT_ROOM = 2`, `MAX_QUEUED_COMMANDS_PER_CLIENT_ROOM = 64`,
+  `MAX_UNSENT_PATCHES_PER_ELEMENT_SLOT = 1`. Quá `MAX_QUEUED` thì squash intermediate drag,
+  không drop create/delete/replace/binding; vẫn quá tải thì pause sending và báo reconnect/resync.
+
+**Acceptance:**
+
+- [ ] Drag liên tục không tạo 1 DB commit/33ms; final pointerup patch luôn tới server.
+- [ ] Squash unsent patch giữ latest `changes` nhưng `inverseChanges` gốc (kéo `x: 0→10→20→30` cho `inverse.x = 0`).
+- [ ] Backpressure không drop discrete command; queue quá tải thì pause + resync thay vì phình vô hạn.
+
+#### F. `readPreconditions` là internal; dependent-slot đi qua domain command
+
+- [ ] `readPreconditions` **không** phải client-facing API phase đầu — đánh dấu internal/reserved trong
+  contract (P5-02) để client không gửi read-set tự khai.
+- [ ] Slot phụ thuộc (geometry phụ thuộc binding, `order`, `grouping.*`, `geometry.route`) không đi
+  qua generic `PatchSlotsCommand`; phải qua domain command và **server tự recompute** (`server_recompute`).
+- [ ] `geometry.route` phase đầu: server-derived hoàn toàn, hoặc chỉ cho patch khi route không phụ
+  thuộc bound endpoint. Client không gửi final bound endpoint/route như source of truth.
+
+**Acceptance:**
+
+- [ ] Client không gửi `readPreconditions`; command chứa read-set client tự khai bị bỏ qua/reject.
+- [ ] Đổi binding/di chuyển bound target → server recompute geometry trong cùng change set, client không tự tính final.
+- [ ] `PatchSlotsCommand` vào slot phụ thuộc (`order`, binding-derived geometry) bị từ chối; phải dùng domain command.
+
 ### Phase 5 Definition of Done
 
 - [ ] Saved-room realtime edit, reconnect, delete, binding repair, native import, restore snapshot
@@ -1418,6 +1528,9 @@ Delete => delete-wins.
 - [ ] Có unit tests cho planner/validator/conflict/idempotency/repository.
 - [ ] Có integration tests cho socket command -> DB transaction -> ack/broadcast -> reconnect diff.
 - [ ] Có regression tests cho import/restore không bypass `SyncRoom`.
+- [ ] [P5-13] implementation decisions đã áp: slotClocks JSON (bỏ `RecordSlotClock`), bỏ
+      `SELECT … FOR UPDATE`, durability phân tầng, `ProcessedRequest` theo resendable, backpressure
+      defaults, `readPreconditions` internal.
 - [ ] Typecheck, lint, test và format check pass trước khi mark phase done.
 
 ---
