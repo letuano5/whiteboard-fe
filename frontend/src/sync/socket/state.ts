@@ -1,9 +1,18 @@
-import type { Element, SyncAck, SyncBroadcast } from '../../types/shared';
+import type {
+  Element,
+  SlotClockUpdate,
+  SyncAck,
+  SyncBroadcast,
+  SyncClock,
+  SyncSlot,
+} from '../../types/shared';
 import type { WhiteboardSocket } from './types';
 
 interface SocketClientState {
   socket: WhiteboardSocket | null;
   lastServerClock: number;
+  roomEpoch: number;
+  knownSlotClocks: Map<string, Map<SyncSlot, SyncClock>>;
   unregisterHook: (() => void) | null;
   unsubCamera: (() => void) | null;
   unsubSelection: (() => void) | null;
@@ -27,6 +36,8 @@ export interface PendingSyncRequest {
 const state: SocketClientState = {
   socket: null,
   lastServerClock: 0,
+  roomEpoch: 0,
+  knownSlotClocks: new Map(),
   unregisterHook: null,
   unsubCamera: null,
   unsubSelection: null,
@@ -54,10 +65,44 @@ export function setLastServerClock(documentClock: number): void {
   state.lastServerClock = documentClock;
 }
 
+export function getRoomEpochState(): number {
+  return state.roomEpoch;
+}
+
+export function setRoomEpoch(roomEpoch: number): void {
+  state.roomEpoch = roomEpoch;
+}
+
+export function getKnownSlotClock(elementId: string, slot: SyncSlot): SyncClock {
+  return state.knownSlotClocks.get(elementId)?.get(slot) ?? 0;
+}
+
+export function hydrateKnownSlotClocks(slotClocks: SlotClockUpdate[]): void {
+  state.knownSlotClocks = new Map();
+  applyKnownSlotClocks(slotClocks);
+}
+
+export function applyKnownSlotClocks(slotClocks: SlotClockUpdate[]): void {
+  for (const slotClock of slotClocks) {
+    const elementClocks = state.knownSlotClocks.get(slotClock.elementId) ?? new Map();
+    elementClocks.set(
+      slotClock.slot,
+      Math.max(elementClocks.get(slotClock.slot) ?? 0, slotClock.clock),
+    );
+    state.knownSlotClocks.set(slotClock.elementId, elementClocks);
+  }
+}
+
+export function removeKnownSlotClocks(elementIds: string[]): void {
+  for (const elementId of elementIds) state.knownSlotClocks.delete(elementId);
+}
+
 export function resetReconnectState(): void {
   state.pendingQueue = [];
   state.pendingSyncRequests = [];
   state.bufferedSyncEvents = [];
+  state.knownSlotClocks = new Map();
+  state.roomEpoch = 0;
   state.hasJoined = false;
   state.reconnectPending = false;
 }

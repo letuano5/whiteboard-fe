@@ -178,6 +178,55 @@ export interface SlotClockUpdate {
   clock: SyncClock;
 }
 
+export type PendingRequestState = 'processed' | 'unknown' | 'conflict' | 'expired';
+
+export interface PendingRequestStatus {
+  requestId: string;
+  status: PendingRequestState;
+  serverClock?: SyncClock;
+  reason?: string;
+}
+
+export interface RoomSnapshot {
+  protocolVersion: typeof SYNC_PROTOCOL_VERSION;
+  schemaVersion: typeof SYNC_SCHEMA_VERSION;
+  roomId: string;
+  serverClock: SyncClock;
+  roomEpoch: SyncClock;
+  elements: Element[];
+  slotClocks: SlotClockUpdate[];
+  processedRequestHistoryStartsAtClock?: SyncClock;
+  wipeAll?: boolean;
+  pendingRequests?: PendingRequestStatus[];
+}
+
+export interface RoomDiff {
+  protocolVersion: typeof SYNC_PROTOCOL_VERSION;
+  schemaVersion: typeof SYNC_SCHEMA_VERSION;
+  roomId: string;
+  fromClock: SyncClock;
+  toClock: SyncClock;
+  serverClock: SyncClock;
+  roomEpoch: SyncClock;
+  changed: Element[];
+  deleted: Array<{ id: string }>;
+  slotClocks: SlotClockUpdate[];
+  hasMore: boolean;
+  nextFromClock?: SyncClock;
+  pendingRequests?: PendingRequestStatus[];
+}
+
+export interface ReconnectRequest {
+  roomId: string;
+  lastServerClock: SyncClock;
+  roomEpoch: SyncClock;
+  pendingRequestIds: string[];
+}
+
+export type ReconnectResponse =
+  | { kind: 'snapshot'; snapshot: RoomSnapshot; pendingRequests: PendingRequestStatus[] }
+  | { kind: 'diff'; diff: RoomDiff; pendingRequests: PendingRequestStatus[] };
+
 export type ChangeSetReason =
   | 'create'
   | 'patch_clean'

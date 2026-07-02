@@ -3,6 +3,7 @@ import type {
   Element,
   PointTuple,
   SlotPatch,
+  SyncSlot,
   SlotValue,
 } from '../../types/shared';
 
@@ -42,7 +43,7 @@ export function applyChangeSetToElements(
   return nextElements;
 }
 
-function applySlotPatch(element: Element, patch: SlotPatch): Element {
+export function applySlotPatch(element: Element, patch: SlotPatch): Element {
   const next: Element = { ...element, props: { ...element.props } };
 
   switch (patch.slot) {
@@ -155,6 +156,69 @@ function applySlotPatch(element: Element, patch: SlotPatch): Element {
     case 'geometry.route':
     case 'order':
       return next;
+  }
+}
+
+export function slotValueFromElement(slot: SyncSlot, element: Element): SlotValue {
+  switch (slot) {
+    case 'transform.position':
+      return { x: element.x, y: element.y };
+    case 'transform.size':
+      return { width: element.width, height: element.height };
+    case 'transform.rotation':
+      return { angle: element.angle };
+    case 'style.strokeColor':
+      return { strokeColor: element.props.strokeColor };
+    case 'style.fillColor':
+      return { fillColor: element.props.fillColor };
+    case 'style.strokeWidth':
+      return { strokeWidth: element.props.strokeWidth };
+    case 'style.strokeStyle':
+      return { strokeStyle: element.props.strokeStyle };
+    case 'style.opacity':
+      return { opacity: element.props.opacity };
+    case 'style.roughness':
+      return { roughness: element.props.roughness ?? null };
+    case 'text.text':
+      return { text: element.props.text ?? null };
+    case 'text.fontSize':
+      return { fontSize: element.props.fontSize ?? null };
+    case 'text.fontFamily':
+      return { fontFamily: element.props.fontFamily ?? null };
+    case 'text.textAlign':
+      return { textAlign: element.props.textAlign ?? null };
+    case 'geometry.points':
+      return { points: element.props.points ?? [] };
+    case 'geometry.route':
+      return { route: element.props.points ?? null };
+    case 'geometry.startPoint':
+      return { startPoint: element.props.points?.[0] ?? null };
+    case 'geometry.endPoint':
+      return { endPoint: element.props.points?.[element.props.points.length - 1] ?? null };
+    case 'binding.start':
+      return {
+        binding:
+          typeof element.props.startBinding === 'string'
+            ? null
+            : (element.props.startBinding ?? null),
+      };
+    case 'binding.end':
+      return {
+        binding:
+          typeof element.props.endBinding === 'string' ? null : (element.props.endBinding ?? null),
+      };
+    case 'order':
+      return { zIndex: element.zIndex };
+    case 'asset.src':
+      return { src: element.props.src ?? null };
+    case 'embed.url':
+      return { url: element.props.url ?? null };
+    case 'grouping.groupId':
+      return { groupId: element.groupId };
+    case 'grouping.frameId':
+      return { frameId: element.frameId };
+    case 'state.locked':
+      return { locked: element.locked };
   }
 }
 

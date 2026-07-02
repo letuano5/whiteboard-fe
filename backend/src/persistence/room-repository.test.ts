@@ -17,7 +17,12 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { saveRoomElements, loadRoomElements, getRoomClock, getRoomDiff } from './room-repository.js';
+import {
+  saveRoomElements,
+  loadRoomElements,
+  getRoomClock,
+  getRoomDiff,
+} from './room-repository.js';
 import { makeElement, makeDeletedElement } from '../test/element-fixtures.js';
 import type { PrismaClient } from '@prisma/client';
 
@@ -175,7 +180,11 @@ describe('saveRoomElements', () => {
   // =========================================================================
   describe('AC-2: documentClock increments once; shared recordClock', () => {
     it('increments documentClock exactly once regardless of batch size', async () => {
-      const elements = [makeElement({ id: 'el-1' }), makeElement({ id: 'el-2' }), makeElement({ id: 'el-3' })];
+      const elements = [
+        makeElement({ id: 'el-1' }),
+        makeElement({ id: 'el-2' }),
+        makeElement({ id: 'el-3' }),
+      ];
       const { db, roomUpdate } = buildMockDb(3n);
 
       await saveRoomElements(db, ROOM_ID, elements);
@@ -273,7 +282,11 @@ describe('saveRoomElements', () => {
       expect(tombstoneUpsert).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { roomId_recordId: { roomId: ROOM_ID, recordId: 'el-del' } },
-          create: expect.objectContaining({ roomId: ROOM_ID, recordId: 'el-del', deletedClock: 2n }),
+          create: expect.objectContaining({
+            roomId: ROOM_ID,
+            recordId: 'el-del',
+            deletedClock: 2n,
+          }),
         }),
       );
     });
@@ -630,9 +643,19 @@ function buildDiffMockDb({
 }: {
   minDeletedClock: bigint | null;
   documentClock: bigint;
-  changedRecords: Array<{ recordId: string; state: unknown; recordClock: bigint; slotClocks: Record<string, { clock: number }> }>;
+  changedRecords: Array<{
+    recordId: string;
+    state: unknown;
+    recordClock: bigint;
+    slotClocks: Record<string, { clock: number }>;
+  }>;
   deletedTombstones: Array<{ recordId: string }>;
-  allRecords?: Array<{ recordId: string; state: unknown; recordClock: bigint; slotClocks: Record<string, { clock: number }> }>;
+  allRecords?: Array<{
+    recordId: string;
+    state: unknown;
+    recordClock: bigint;
+    slotClocks: Record<string, { clock: number }>;
+  }>;
 }) {
   const tombstoneAggregate = vi.fn().mockResolvedValue({
     _min: { deletedClock: minDeletedClock },
@@ -641,9 +664,9 @@ function buildDiffMockDb({
   // Wipe path calls record.findMany once (all records, no clock filter).
   // Diff path calls record.findMany once (filtered by recordClock).
   // Use allRecords when provided (wipe scenario), changedRecords otherwise (diff scenario).
-  const recordFindMany = vi.fn().mockResolvedValue(
-    allRecords !== undefined ? allRecords : changedRecords,
-  );
+  const recordFindMany = vi
+    .fn()
+    .mockResolvedValue(allRecords !== undefined ? allRecords : changedRecords);
   const tombstoneFindMany = vi.fn().mockResolvedValue(deletedTombstones);
 
   const db = {
@@ -895,6 +918,7 @@ describe('getRoomDiff — P3A-03', () => {
   // =========================================================================
   describe('P5-13A: slot-aware 2-step diff filter', () => {
     it('returns only slot clocks with clock > lastServerClock from changed records', async () => {
+      // @covers AC-6
       const el = makeElement({ id: 'patched-el' });
       const { db } = buildDiffMockDb({
         minDeletedClock: null,

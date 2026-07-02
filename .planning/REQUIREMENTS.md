@@ -56,6 +56,25 @@
 - [ ] **P4-04-AC-5**: Loading a native file into a board/document that already has data requires
       explicit confirmation before replacing or merging.
 
+### P5 Load Reconnect And Diff
+
+- [ ] **P5-07-AC-1**: `ROOM_SNAPSHOT` hydrates full server state with protocol/schema versions,
+      room/server clocks, epoch, elements, slot clocks, and optional processed-request history start.
+- [ ] **P5-07-AC-2**: `ROOM_DIFF` returns changed records, deleted tombstones, newer slot clocks,
+      server clock/epoch, and pagination metadata for a valid base clock.
+- [ ] **P5-07-AC-3**: Reconnect requests include last applied server clock, room epoch, and pending
+      request IDs, and responses include snapshot/diff kind plus pending request statuses.
+- [ ] **P5-07-AC-4**: Pending statuses distinguish processed, unknown, conflict, and expired so
+      clients do not resend conflict/expired requests blindly.
+- [ ] **P5-07-AC-5**: Diff reads use a consistent target clock and return wipe-all snapshot for
+      stale history or replace-boundary gaps.
+- [ ] **P5-07-AC-6**: Diff slot clocks are coarse-filtered by record clock and then filtered per
+      slot clock greater than the requested base clock.
+- [ ] **P5-07-AC-7**: Clients update `lastServerClock` only after fully applying server payloads and
+      keep per-element per-slot known clocks.
+- [ ] **P5-07-AC-8**: Clients apply `ROOM_DIFF` slot-aware from `changed` plus `slotClocks` without
+      requiring `originRequestIds`.
+
 ## Out of Scope
 
 | Feature                                  | Reason                  |
@@ -98,11 +117,19 @@
 | P4-04-AC-3  | Phase 4.4 | Complete |
 | P4-04-AC-4  | Phase 4.4 | Complete |
 | P4-04-AC-5  | Phase 4.4 | Complete |
+| P5-07-AC-1  | Phase 5.7 | Complete |
+| P5-07-AC-2  | Phase 5.7 | Complete |
+| P5-07-AC-3  | Phase 5.7 | Complete |
+| P5-07-AC-4  | Phase 5.7 | Complete |
+| P5-07-AC-5  | Phase 5.7 | Complete |
+| P5-07-AC-6  | Phase 5.7 | Complete |
+| P5-07-AC-7  | Phase 5.7 | Complete |
+| P5-07-AC-8  | Phase 5.7 | Complete |
 
 **Coverage:**
 
-- v1 requirements: 30 total
-- Mapped to phases: 30
+- v1 requirements: 38 total
+- Mapped to phases: 38
 - Unmapped: 0
 
 ---

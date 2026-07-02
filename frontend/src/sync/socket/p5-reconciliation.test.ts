@@ -2,8 +2,14 @@ import type { CommittedChangeSet, Element, SyncAck, SyncBroadcast } from '../../
 import { SYNC_PROTOCOL_VERSION, SYNC_SCHEMA_VERSION, WS_EVENTS } from '../../types/shared';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useElementsStore } from '../../store/elements.store';
-import { processSyncAck, processSyncBroadcast, queuePendingSyncRequest } from './p5-reconciliation';
-import { getSocketState, setLastServerClock } from './state';
+import {
+  applyRoomDiff,
+  applyRoomSnapshot,
+  processSyncAck,
+  processSyncBroadcast,
+  queuePendingSyncRequest,
+} from './p5-reconciliation';
+import { getKnownSlotClock, getSocketState, setLastServerClock } from './state';
 
 beforeEach(() => {
   useElementsStore.setState({ elements: [] });
@@ -174,11 +180,88 @@ describe('P5 reconciliation pending and change-set handling', () => {
 
     processSyncBroadcast(broadcast(changeSet({ requestId: 'gap-1', serverClock: 5 })));
 
+    // @covers AC-3
     expect(emit).toHaveBeenCalledWith(WS_EVENTS.ROOM_DIFF_REQUEST, {
       roomId: 'room-1',
+      lastServerClock: 3,
+      roomEpoch: 0,
+      pendingRequestIds: [],
       fromClock: 3,
       toClock: 5,
     });
+  });
+
+  it('hydrates snapshot clocks only after replacing the full server state', () => {
+    // @covers AC-1, AC-7
+    useElementsStore.setState({ elements: [makeElement({ id: 'stale-local' })] });
+
+    applyRoomSnapshot({
+      protocolVersion: SYNC_PROTOCOL_VERSION,
+      schemaVersion: SYNC_SCHEMA_VERSION,
+      roomId: 'room-1',
+      serverClock: 9,
+      roomEpoch: 4,
+      elements: [makeElement({ id: 'server-shape' })],
+      slotClocks: [{ elementId: 'server-shape', slot: 'style.fillColor', clock: 9 }],
+    });
+
+    expect(useElementsStore.getState().elements.map((element) => element.id)).toEqual([
+      'server-shape',
+    ]);
+    expect(getSocketState().lastServerClock).toBe(9);
+    expect(getSocketState().roomEpoch).toBe(4);
+    expect(getKnownSlotClock('server-shape', 'style.fillColor')).toBe(9);
+  });
+
+  it('applies ROOM_DIFF slot-aware without originRequestIds or whole-element replacement', () => {
+    // @covers AC-7, AC-8
+    const existing = makeElement({
+      id: 'shape-1',
+      x: 10,
+      y: 20,
+      props: { ...makeElement().props, fillColor: '#ffffff', strokeColor: '#000000' },
+    });
+    useElementsStore.setState({ elements: [existing] });
+    applyRoomSnapshot({
+      protocolVersion: SYNC_PROTOCOL_VERSION,
+      schemaVersion: SYNC_SCHEMA_VERSION,
+      roomId: 'room-1',
+      serverClock: 3,
+      roomEpoch: 0,
+      elements: [existing],
+      slotClocks: [
+        { elementId: 'shape-1', slot: 'transform.position', clock: 3 },
+        { elementId: 'shape-1', slot: 'style.fillColor', clock: 3 },
+      ],
+    });
+
+    applyRoomDiff({
+      protocolVersion: SYNC_PROTOCOL_VERSION,
+      schemaVersion: SYNC_SCHEMA_VERSION,
+      roomId: 'room-1',
+      fromClock: 3,
+      toClock: 5,
+      serverClock: 5,
+      roomEpoch: 0,
+      changed: [
+        makeElement({
+          id: 'shape-1',
+          x: 999,
+          y: 999,
+          props: { ...makeElement().props, fillColor: '#00ff00', strokeColor: '#ff0000' },
+        }),
+      ],
+      deleted: [],
+      slotClocks: [{ elementId: 'shape-1', slot: 'style.fillColor', clock: 5 }],
+      hasMore: false,
+    });
+
+    const updated = useElementsStore.getState().elements[0];
+    expect(updated).toMatchObject({ id: 'shape-1', x: 10, y: 20 });
+    expect(updated?.props.fillColor).toBe('#00ff00');
+    expect(updated?.props.strokeColor).toBe('#000000');
+    expect(getSocketState().lastServerClock).toBe(5);
+    expect(getKnownSlotClock('shape-1', 'style.fillColor')).toBe(5);
   });
 });
 

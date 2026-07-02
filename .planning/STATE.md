@@ -2,10 +2,10 @@
 gsd_state_version: '1.0'
 status: complete
 progress:
-  total_phases: 11
-  completed_phases: 11
-  total_plans: 13
-  completed_plans: 13
+  total_phases: 12
+  completed_phases: 12
+  total_plans: 14
+  completed_plans: 14
   percent: 100
 ---
 
@@ -16,14 +16,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-30)
 
 **Core value:** Users can create tactical whiteboards without losing work, then collaborate or persist documents when the workflow calls for it.
-**Current focus:** Phase 5.6: P5-06 Transactional persistence & idempotency
+**Current focus:** Phase 5.7: P5-07 Load, reconnect & diff
 
 ## Current Position
 
-Phase: 5.6 of active GSD bootstrap (P5-06 Transactional persistence & idempotency)
-Plan: 3 of 3 in current phase
+Phase: 5.7 of active GSD bootstrap (P5-07 Load, reconnect & diff)
+Plan: 1 of 1 in current phase
 Status: Phase complete
-Last activity: 2026-07-02 - Implemented and verified P5-06 transactional persistence and persisted idempotency.
+Last activity: 2026-07-02 - Implemented and verified P5-07 load, reconnect, and diff.
 
 Progress: [##########] 100%
 
@@ -53,6 +53,10 @@ Progress: [##########] 100%
 - [Phase 5.6]: `ProcessedRequest` persistence is the durable idempotency source of truth; memory cache is only a fast path.
 - [Phase 5.6]: `synchronous_commit = off` is a relaxed/best-effort path only for non-resendable intermediate drag patches, never durable.
 - [Phase 5.6]: Persistence recovery rebuilds hot room indexes/maps from Postgres before accepting subsequent commands.
+- [Phase 5.7]: Reconnect/load payloads use P5 `serverClock`, `roomEpoch`, and slot clocks; legacy
+  clock aliases are compatibility only.
+- [Phase 5.7]: Diff must not cross `roomEpoch`; replace-boundary or stale-history requests return
+  wipe-all snapshots.
 
 ### Pending Todos
 
@@ -68,6 +72,7 @@ Progress: [##########] 100%
 - P5-04 conflict resolution and validation implemented and verified against 12 acceptance criteria.
 - P5-05 change-set, ACK/reject/rebase, broadcast, and reconciliation primitives implemented and verified against 5 acceptance criteria.
 - P5-06 transactional persistence, durable idempotency, relaxed transient policy, and unhealthy-room recovery implemented and verified against 10 acceptance criteria.
+- P5-07 load/reconnect/diff implemented and verified against 8 acceptance criteria.
 
 ### Blockers/Concerns
 

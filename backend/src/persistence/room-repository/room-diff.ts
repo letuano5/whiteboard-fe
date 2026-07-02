@@ -1,6 +1,19 @@
 import type { PrismaClient } from '@prisma/client';
-import type { Element, SlotClockUpdate, SyncSlot } from '@vdt/shared';
+import type {
+  Element,
+  PendingRequestStatus,
+  SlotClockUpdate,
+  SyncClock,
+  SyncSlot,
+} from '@vdt/shared';
 import type { RecordSlotClocksJson, RoomDiffResult } from './types.js';
+import { toProcessedRequestActorId } from '../../sync/sync-room-persistence.js';
+
+interface RoomDiffOptions {
+  roomEpoch?: SyncClock;
+  pendingRequestIds?: string[];
+  actorId?: string | null;
+}
 
 /**
  * Computes the reconnect diff for a room since `lastServerClock`.
@@ -30,33 +43,61 @@ export async function getRoomDiff(
   roomId: string,
   lastServerClock: number,
   inMemoryElements: Element[],
+  options: RoomDiffOptions = {},
 ): Promise<RoomDiffResult> {
   const tombstoneAgg = await db.tombstone.aggregate({
     where: { roomId },
     _min: { deletedClock: true },
   });
-
   const minDeletedClockRaw = tombstoneAgg._min.deletedClock;
-  const hasTombstones = minDeletedClockRaw !== null;
-  const tombstoneHistoryStartsAtClock = hasTombstones ? Number(minDeletedClockRaw) : Infinity;
 
   const room = await db.room.findUnique({
     where: { id: roomId },
-    select: { documentClock: true },
+    select: {
+      documentClock: true,
+      roomEpoch: true,
+      tombstoneHistoryStartsAtClock: true,
+      processedRequestHistoryStartsAtClock: true,
+    },
   });
   const documentClock = room ? Number(room.documentClock) : 0;
+  const roomEpoch = room ? Number(room.roomEpoch ?? 0n) : 0;
+  const tombstoneHistoryStartsAtClock =
+    room && room.tombstoneHistoryStartsAtClock !== undefined
+      ? Number(room.tombstoneHistoryStartsAtClock ?? 0n)
+      : minDeletedClockRaw !== null
+        ? Number(minDeletedClockRaw)
+        : 0;
+  const processedRequestHistoryStartsAtClock = room
+    ? Number(room.processedRequestHistoryStartsAtClock ?? 0n)
+    : 0;
+  const pendingRequests = await getPendingRequestStatuses(db, roomId, {
+    actorId: options.actorId,
+    pendingRequestIds: options.pendingRequestIds ?? [],
+    processedRequestHistoryStartsAtClock,
+  });
 
-  if (hasTombstones && lastServerClock < tombstoneHistoryStartsAtClock) {
+  if (lastServerClock < roomEpoch || lastServerClock < tombstoneHistoryStartsAtClock) {
     const activeElements = inMemoryElements.filter((element) => !element.isDeleted);
     const allRecords = await db.record.findMany({ where: { roomId } });
     const wipeSlotClocks = extractSlotClocks(allRecords, 0);
-    return { mode: 'wipe', elements: activeElements, documentClock, slotClocks: wipeSlotClocks };
+    return {
+      mode: 'wipe',
+      elements: activeElements,
+      documentClock,
+      serverClock: documentClock,
+      roomEpoch,
+      slotClocks: wipeSlotClocks,
+      processedRequestHistoryStartsAtClock,
+      pendingRequests,
+    };
   }
 
   const clock = BigInt(lastServerClock);
+  const targetClock = BigInt(documentClock);
 
   const changedRecords = await db.record.findMany({
-    where: { roomId, recordClock: { gt: clock } },
+    where: { roomId, recordClock: { gt: clock, lte: targetClock } },
     orderBy: { recordClock: 'asc' },
   });
   const changedFromDb: Element[] = changedRecords.map(
@@ -64,7 +105,7 @@ export async function getRoomDiff(
   );
 
   const deletedTombstones = await db.tombstone.findMany({
-    where: { roomId, deletedClock: { gt: clock } },
+    where: { roomId, deletedClock: { gt: clock, lte: targetClock } },
     select: { recordId: true },
   });
   const deleted = deletedTombstones.map((tombstone) => ({ id: tombstone.recordId }));
@@ -81,8 +122,49 @@ export async function getRoomDiff(
     changed: [...changedFromDb, ...inMemoryOverlay],
     deleted,
     documentClock,
+    serverClock: documentClock,
+    roomEpoch,
+    fromClock: lastServerClock,
+    toClock: documentClock,
     slotClocks: diffSlotClocks,
+    hasMore: false,
+    pendingRequests,
   };
+}
+
+export async function getPendingRequestStatuses(
+  db: PrismaClient,
+  roomId: string,
+  options: {
+    actorId?: string | null;
+    pendingRequestIds: string[];
+    processedRequestHistoryStartsAtClock?: number;
+  },
+): Promise<PendingRequestStatus[]> {
+  const uniqueIds = [...new Set(options.pendingRequestIds)].filter((id) => id.length > 0);
+  if (uniqueIds.length === 0) return [];
+
+  const actorId = toProcessedRequestActorId(options.actorId ?? null);
+  const processedRequests = await db.processedRequest.findMany({
+    where: { roomId, actorId, requestId: { in: uniqueIds } },
+    select: { requestId: true, serverClock: true, reason: true },
+  });
+  const processedById = new Map(processedRequests.map((request) => [request.requestId, request]));
+  const historyStart = options.processedRequestHistoryStartsAtClock ?? 0;
+
+  return uniqueIds.map((requestId) => {
+    const processed = processedById.get(requestId);
+    if (processed) {
+      return {
+        requestId,
+        status: 'processed',
+        serverClock: Number(processed.serverClock),
+        reason: processed.reason ?? undefined,
+      };
+    }
+    if (historyStart > 0) return { requestId, status: 'expired', reason: 'idempotency_history_gc' };
+    return { requestId, status: 'unknown' };
+  });
 }
 
 /**
@@ -96,7 +178,7 @@ function extractSlotClocks(
 ): SlotClockUpdate[] {
   const result: SlotClockUpdate[] = [];
   for (const record of records) {
-    const json = ((record.slotClocks ?? {}) as unknown) as RecordSlotClocksJson;
+    const json = (record.slotClocks ?? {}) as unknown as RecordSlotClocksJson;
     for (const [slot, entry] of Object.entries(json)) {
       if (entry.clock > sinceServerClock) {
         result.push({ elementId: record.recordId, slot: slot as SyncSlot, clock: entry.clock });

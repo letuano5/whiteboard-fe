@@ -1,5 +1,5 @@
 import type { Socket } from 'socket.io';
-import { WS_EVENTS } from '@vdt/shared';
+import { SYNC_PROTOCOL_VERSION, SYNC_SCHEMA_VERSION, WS_EVENTS } from '@vdt/shared';
 import { getRoomDiff } from '../../persistence/room-repository.js';
 import type { ResolvedWhiteboardServerDeps, RoomDiffRequestPayload } from '../types.js';
 
@@ -8,33 +8,66 @@ export async function handleRoomDiffRequest(
   deps: ResolvedWhiteboardServerDeps,
   payload: RoomDiffRequestPayload,
 ): Promise<void> {
-  const { roomId, fromClock } = payload;
+  const { roomId, fromClock, lastServerClock, roomEpoch, pendingRequestIds = [] } = payload;
+  const baseClock = lastServerClock ?? fromClock ?? 0;
   const inMemory = deps.roomElements.has(roomId)
     ? [...deps.roomElements.get(roomId)!.values()]
     : [];
 
   try {
-    const diffResult = await getRoomDiff(deps.db, roomId, fromClock, inMemory);
-    const documentClock = deps.roomClocks.get(roomId) ?? diffResult.documentClock;
+    const diffResult = await getRoomDiff(deps.db, roomId, baseClock, inMemory, {
+      roomEpoch,
+      pendingRequestIds,
+      actorId: socket.data?.auth?.user?.id ?? null,
+    });
+    const serverClock =
+      deps.roomClocks.get(roomId) ?? diffResult.serverClock ?? diffResult.documentClock;
 
     if (diffResult.mode === 'diff') {
       socket.emit(WS_EVENTS.ROOM_DIFF, {
+        protocolVersion: SYNC_PROTOCOL_VERSION,
+        schemaVersion: SYNC_SCHEMA_VERSION,
+        roomId,
+        fromClock: diffResult.fromClock,
+        toClock: diffResult.toClock,
+        serverClock,
+        documentClock: serverClock,
+        roomEpoch: diffResult.roomEpoch,
         changed: diffResult.changed,
         deleted: diffResult.deleted,
-        documentClock,
+        slotClocks: diffResult.slotClocks,
+        hasMore: diffResult.hasMore,
+        nextFromClock: diffResult.nextFromClock,
+        pendingRequests: diffResult.pendingRequests,
       });
       return;
     }
 
     socket.emit(WS_EVENTS.ROOM_SNAPSHOT, {
+      protocolVersion: SYNC_PROTOCOL_VERSION,
+      schemaVersion: SYNC_SCHEMA_VERSION,
+      roomId,
+      serverClock,
+      documentClock: serverClock,
+      roomEpoch: diffResult.roomEpoch,
       elements: diffResult.elements,
-      documentClock,
+      slotClocks: diffResult.slotClocks,
+      processedRequestHistoryStartsAtClock: diffResult.processedRequestHistoryStartsAtClock,
+      wipeAll: true,
+      pendingRequests: diffResult.pendingRequests,
     });
   } catch (error) {
     console.error(`[room-diff-request] Failed to compute diff for ${roomId}:`, error);
     socket.emit(WS_EVENTS.ROOM_SNAPSHOT, {
+      protocolVersion: SYNC_PROTOCOL_VERSION,
+      schemaVersion: SYNC_SCHEMA_VERSION,
+      roomId,
+      serverClock: deps.roomClocks.get(roomId) ?? baseClock,
+      documentClock: deps.roomClocks.get(roomId) ?? baseClock,
+      roomEpoch: roomEpoch ?? 0,
       elements: inMemory,
-      documentClock: deps.roomClocks.get(roomId) ?? fromClock,
+      slotClocks: [],
+      wipeAll: true,
     });
   }
 }

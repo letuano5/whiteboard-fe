@@ -9,7 +9,13 @@ import { applyRemoteElements } from '../apply-remote';
 import { saveCamera } from '../camera-persistence';
 import { LOCAL_PRESENCE } from '../presence';
 import { clearPendingQueue, replayPendingQueue } from './pending-queue';
-import { processSyncAck, processSyncBroadcast, replayBufferedSyncEvents } from './p5-reconciliation';
+import {
+  applyRoomDiff,
+  applyRoomSnapshot,
+  processSyncAck,
+  processSyncBroadcast,
+  replayBufferedSyncEvents,
+} from './p5-reconciliation';
 import { getSocketState, setLastServerClock } from './state';
 import type {
   CursorMovePayload,
@@ -38,6 +44,8 @@ export function registerSocketEventHandlers(): void {
       name: LOCAL_PRESENCE.name,
       color: LOCAL_PRESENCE.color,
       lastServerClock: current.hasJoined ? current.lastServerClock : 0,
+      roomEpoch: current.roomEpoch,
+      pendingRequestIds: current.pendingSyncRequests.map((request) => request.requestId),
     });
 
     current.hasJoined = true;
@@ -45,8 +53,8 @@ export function registerSocketEventHandlers(): void {
 
   state.socket.on(WS_EVENTS.ROOM_SNAPSHOT, (data: RoomSnapshotPayload) => {
     const current = getSocketState();
-    setLastServerClock(data.documentClock);
-    applyRemoteElements(data.elements);
+    if (data.protocolVersion === undefined) applyRemoteElements(data.elements);
+    applyRoomSnapshot(normalizeSnapshotPayload(data));
     if (current.reconnectPending) {
       clearPendingQueue();
       current.reconnectPending = false;
@@ -56,9 +64,11 @@ export function registerSocketEventHandlers(): void {
 
   state.socket.on(WS_EVENTS.ROOM_DIFF, (data: RoomDiffPayload) => {
     const current = getSocketState();
-    setLastServerClock(data.documentClock);
-    applyRemoteElements(data.changed);
-    useElementsStore.getState().removeElements(data.deleted.map((d) => d.id));
+    if (data.protocolVersion === undefined) {
+      applyRemoteElements(data.changed);
+      useElementsStore.getState().removeElements(data.deleted.map((d) => d.id));
+    }
+    applyRoomDiff(normalizeDiffPayload(data));
     current.reconnectPending = false;
     replayBufferedSyncEvents({ localActorId: getLocalActorId() });
     replayPendingQueue();
@@ -146,6 +156,34 @@ export function registerSocketEventHandlers(): void {
     }
     setRemoteDrafts(current);
   });
+}
+
+function normalizeSnapshotPayload(data: RoomSnapshotPayload): RoomSnapshotPayload {
+  return {
+    ...data,
+    protocolVersion: data.protocolVersion ?? 1,
+    schemaVersion: data.schemaVersion ?? 1,
+    roomId: data.roomId ?? getSocketState().roomId ?? '',
+    serverClock: data.serverClock ?? data.documentClock ?? 0,
+    roomEpoch: data.roomEpoch ?? 0,
+    slotClocks: data.slotClocks ?? [],
+  };
+}
+
+function normalizeDiffPayload(data: RoomDiffPayload): RoomDiffPayload {
+  const serverClock = data.serverClock ?? data.documentClock ?? 0;
+  return {
+    ...data,
+    protocolVersion: data.protocolVersion ?? 1,
+    schemaVersion: data.schemaVersion ?? 1,
+    roomId: data.roomId ?? getSocketState().roomId ?? '',
+    fromClock: data.fromClock ?? getSocketState().lastServerClock,
+    toClock: data.toClock ?? serverClock,
+    serverClock,
+    roomEpoch: data.roomEpoch ?? getSocketState().roomEpoch,
+    slotClocks: data.slotClocks ?? [],
+    hasMore: data.hasMore ?? false,
+  };
 }
 
 function getLocalActorId(): string | null {

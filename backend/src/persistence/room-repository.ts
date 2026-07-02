@@ -1,6 +1,7 @@
 export {
   getRoomClock,
   getRoomDiff,
+  getPendingRequestStatuses,
   loadRoomElements,
   saveRoomElements,
 } from './room-repository/index.js';

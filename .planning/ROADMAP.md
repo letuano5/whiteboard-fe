@@ -20,6 +20,7 @@ project roadmap, phase order, and product scope remain canonical in `docs/SPECS.
 - Repo roadmap ID `P5-04` maps to GSD Phase `5.4`.
 - Repo roadmap ID `P5-05` maps to GSD Phase `5.5`.
 - Repo roadmap ID `P5-06` maps to GSD Phase `5.6`.
+- Repo roadmap ID `P5-07` maps to GSD Phase `5.7`.
 - The source of truth is `docs/SPECS.md` feature sections.
 
 - [x] **Phase 4.0: P4-00 Anonymous local board + Login to save** - Anonymous local-only board can be converted into a private saved document after login.
@@ -33,6 +34,7 @@ project roadmap, phase order, and product scope remain canonical in `docs/SPECS.
 - [x] **Phase 5.4: P5-04 Conflict resolution & validation** - Backend sync planning enforces slot-level conflict rules, delete-wins semantics, permission boundaries, reference validation, linear geometry rules, and command limits.
 - [x] **Phase 5.5: P5-05 Change sets, ack/reject/rebase & broadcast** - Shared/backend/client primitives carry committed slot changes through ACKs and broadcasts.
 - [x] **Phase 5.6: P5-06 Transactional persistence & idempotency** - Accepted saved-room sync commands commit atomically with DB clocks, persisted idempotency, durability policy, and unhealthy-room recovery.
+- [x] **Phase 5.7: P5-07 Load, reconnect & diff** - Saved-room load and reconnect hydrate/apply server-authoritative snapshot/diff payloads with room epoch, slot clocks, pending request statuses, and wipe-all fallback.
 
 ## Phase Details
 
@@ -268,6 +270,31 @@ Plans:
 - [x] 05.6-02: Add SyncRoom transactional persistence, persisted idempotency, invariants, and recovery.
 - [x] 05.6-03: Enforce socket ACK safeguards and close P5-06 verification.
 
+### Phase 5.7: P5-07 Load, reconnect & diff
+
+**Goal**: Saved-room load and reconnect use P5 snapshot/diff contracts with `documentClock`,
+`roomEpoch`, slot clocks, pending request statuses, and safe wipe-all fallback when diff history
+is unavailable or crosses a replace boundary.
+**Depends on**: Phase 5.6
+**Source**: `docs/SPECS.md` `[P5-07]`
+**Canonical refs**: `docs/SPECS.md`, `specs/036-p5-07-load-reconnect-diff/acceptance.md`
+**Requirements**: [P5-07-AC-1, P5-07-AC-2, P5-07-AC-3, P5-07-AC-4, P5-07-AC-5, P5-07-AC-6, P5-07-AC-7, P5-07-AC-8]
+**Success Criteria** (what must be TRUE):
+
+1. `ROOM_SNAPSHOT` and `ROOM_DIFF` expose the P5 protocol/schema, room epoch, server clock, and
+   relevant slot clocks.
+2. Reconnect requests carry last applied server clock, room epoch, and pending request IDs, and
+   responses include pending request statuses derived from persisted idempotency.
+3. Diff reads are clock-bounded and slot-aware; stale history or replace-boundary gaps return a
+   wipe-all snapshot instead of an unsafe diff.
+4. Client reconciliation applies snapshot/diff only after full payload materialization, updates
+   `lastServerClock` afterward, and uses known slot clocks to copy only fresher slots.
+   **Plans**: 1 plan
+
+Plans:
+
+- [x] 05.7-01: Implement P5 snapshot/diff contracts, reconnect statuses, slot-aware client apply, and AC tests.
+
 ## Progress
 
 **Execution Order:**
@@ -286,3 +313,4 @@ Follow `docs/SPECS.md`; this bootstrap tracks active Phase 4 feature slices.
 | 5.4. P5-04 Conflict resolution & validation      | 1/1            | Complete | 2026-07-02 |
 | 5.5. P5-05 Change sets + ACK/broadcast           | 1/1            | Complete | 2026-07-02 |
 | 5.6. P5-06 Transactional persistence             | 3/3            | Complete | 2026-07-02 |
+| 5.7. P5-07 Load, reconnect & diff                | 1/1            | Complete | 2026-07-02 |

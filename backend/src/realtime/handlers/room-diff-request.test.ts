@@ -25,17 +25,43 @@ describe('handleRoomDiffRequest', () => {
       changed: [changed],
       deleted: [{ id: 'deleted' }],
       documentClock: 5,
+      serverClock: 5,
+      roomEpoch: 0,
+      fromClock: 3,
+      toClock: 5,
       slotClocks: [],
+      hasMore: false,
+      pendingRequests: [{ requestId: 'req-1', status: 'processed', serverClock: 5 }],
     });
 
-    await handleRoomDiffRequest(makeSocket(emit), deps, { roomId: 'room-1', fromClock: 3 });
-
-    expect(getRoomDiff).toHaveBeenCalledWith(deps.db, 'room-1', 3, []);
-    expect(emit).toHaveBeenCalledWith(WS_EVENTS.ROOM_DIFF, {
-      changed: [changed],
-      deleted: [{ id: 'deleted' }],
-      documentClock: 5,
+    await handleRoomDiffRequest(makeSocket(emit), deps, {
+      roomId: 'room-1',
+      lastServerClock: 3,
+      roomEpoch: 0,
+      pendingRequestIds: ['req-1'],
     });
+
+    // @covers AC-2, AC-3, AC-4
+    expect(getRoomDiff).toHaveBeenCalledWith(deps.db, 'room-1', 3, [], {
+      actorId: null,
+      pendingRequestIds: ['req-1'],
+      roomEpoch: 0,
+    });
+    expect(emit).toHaveBeenCalledWith(
+      WS_EVENTS.ROOM_DIFF,
+      expect.objectContaining({
+        roomId: 'room-1',
+        fromClock: 3,
+        toClock: 5,
+        serverClock: 5,
+        roomEpoch: 0,
+        changed: [changed],
+        deleted: [{ id: 'deleted' }],
+        slotClocks: [],
+        hasMore: false,
+        pendingRequests: [{ requestId: 'req-1', status: 'processed', serverClock: 5 }],
+      }),
+    );
   });
 
   it('falls back to ROOM_SNAPSHOT when tombstone history is insufficient', async () => {
@@ -46,15 +72,26 @@ describe('handleRoomDiffRequest', () => {
       mode: 'wipe',
       elements: [element],
       documentClock: 8,
+      serverClock: 8,
+      roomEpoch: 7,
       slotClocks: [],
+      processedRequestHistoryStartsAtClock: 0,
     });
 
     await handleRoomDiffRequest(makeSocket(emit), deps, { roomId: 'room-1', fromClock: 2 });
 
-    expect(emit).toHaveBeenCalledWith(WS_EVENTS.ROOM_SNAPSHOT, {
-      elements: [element],
-      documentClock: 8,
-    });
+    // @covers AC-1, AC-5
+    expect(emit).toHaveBeenCalledWith(
+      WS_EVENTS.ROOM_SNAPSHOT,
+      expect.objectContaining({
+        roomId: 'room-1',
+        serverClock: 8,
+        roomEpoch: 7,
+        elements: [element],
+        slotClocks: [],
+        wipeAll: true,
+      }),
+    );
   });
 });
 

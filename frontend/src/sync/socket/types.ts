@@ -1,18 +1,17 @@
 import type { Socket } from 'socket.io-client';
-import type { Element, RoomAccessErrorPayload, RoomAccessPayload } from '../../types/shared';
+import type {
+  Element,
+  RoomAccessErrorPayload,
+  RoomAccessPayload,
+  RoomDiff,
+  RoomSnapshot,
+} from '../../types/shared';
 
 export type WhiteboardSocket = Socket;
 
-export interface RoomSnapshotPayload {
-  elements: Element[];
-  documentClock: number;
-}
+export type RoomSnapshotPayload = RoomSnapshot & { documentClock?: number };
 
-export interface RoomDiffPayload {
-  changed: Element[];
-  deleted: Array<{ id: string }>;
-  documentClock: number;
-}
+export type RoomDiffPayload = RoomDiff & { documentClock?: number };
 
 export interface ElementUpdatePayload {
   elements: Element[];

@@ -34,7 +34,7 @@ export async function loadRoomElements(db: PrismaClient, roomId: string): Promis
 
   for (const record of room.records) {
     elements.push(record.state as unknown as Element);
-    const json = ((record.slotClocks ?? {}) as unknown) as RecordSlotClocksJson;
+    const json = (record.slotClocks ?? {}) as unknown as RecordSlotClocksJson;
     for (const [slot, entry] of Object.entries(json)) {
       slotClocks.push({ elementId: record.recordId, slot: slot as SyncSlot, clock: entry.clock });
     }
@@ -46,6 +46,9 @@ export async function loadRoomElements(db: PrismaClient, roomId: string): Promis
     roomEpoch: toSafeClockNumber(room.roomEpoch ?? 0n),
     slotClocks,
     tombstoneElementIds: (room.tombstones ?? []).map((tombstone) => tombstone.recordId),
+    processedRequestHistoryStartsAtClock: toSafeClockNumber(
+      room.processedRequestHistoryStartsAtClock ?? 0n,
+    ),
   };
 }
 

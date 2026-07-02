@@ -165,10 +165,16 @@ describe('AC-3 (P3A-02) socket layer: empty DB → ROOM_SNAPSHOT { elements: [],
     const handler = getHandler(socket, WS_EVENTS.JOIN_ROOM);
     await (handler as (p: typeof JOIN_PAYLOAD) => Promise<void>)(JOIN_PAYLOAD);
 
-    expect(socket.emit).toHaveBeenCalledWith(WS_EVENTS.ROOM_SNAPSHOT, {
-      elements: [],
-      documentClock: 0,
-    });
+    expect(socket.emit).toHaveBeenCalledWith(
+      WS_EVENTS.ROOM_SNAPSHOT,
+      expect.objectContaining({
+        elements: [],
+        documentClock: 0,
+        serverClock: 0,
+        roomEpoch: 0,
+        slotClocks: [],
+      }),
+    );
   });
 });
 

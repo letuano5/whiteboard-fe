@@ -1,4 +1,4 @@
-import type { Element, SlotClockUpdate } from '@vdt/shared';
+import type { Element, PendingRequestStatus, SlotClockUpdate } from '@vdt/shared';
 
 /**
  * Result of getRoomDiff:
@@ -15,13 +15,24 @@ export type RoomDiffResult =
       changed: Element[];
       deleted: Array<{ id: string }>;
       documentClock: number;
+      serverClock: number;
+      roomEpoch: number;
+      fromClock: number;
+      toClock: number;
       slotClocks: SlotClockUpdate[];
+      hasMore: boolean;
+      nextFromClock?: number;
+      pendingRequests?: PendingRequestStatus[];
     }
   | {
       mode: 'wipe';
       elements: Element[];
       documentClock: number;
+      serverClock: number;
+      roomEpoch: number;
       slotClocks: SlotClockUpdate[];
+      processedRequestHistoryStartsAtClock?: number;
+      pendingRequests?: PendingRequestStatus[];
     };
 
 export interface SaveRoomElementsResult {
@@ -40,6 +51,8 @@ export interface LoadRoomResult {
   slotClocks: SlotClockUpdate[];
   /** Deleted record IDs retained by tombstone history. */
   tombstoneElementIds: string[];
+  /** Optional lower bound for retained processed request history. */
+  processedRequestHistoryStartsAtClock?: number;
 }
 
 /**

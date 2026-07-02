@@ -1,8 +1,26 @@
-import type { CommittedChangeSet, SyncAck, SyncBroadcast, SyncClock } from '../../types/shared';
+import type {
+  CommittedChangeSet,
+  RoomDiff,
+  RoomSnapshot,
+  SlotClockUpdate,
+  SyncAck,
+  SyncBroadcast,
+  SyncClock,
+} from '../../types/shared';
 import { WS_EVENTS } from '../../types/shared';
 import { useElementsStore } from '../../store/elements.store';
-import { applyChangeSetToElements } from './p5-change-set';
-import { getSocketState, setLastServerClock, type PendingSyncRequest } from './state';
+import { applyChangeSetToElements, applySlotPatch, slotValueFromElement } from './p5-change-set';
+import {
+  applyKnownSlotClocks,
+  getKnownSlotClock,
+  getRoomEpochState,
+  getSocketState,
+  hydrateKnownSlotClocks,
+  removeKnownSlotClocks,
+  setLastServerClock,
+  setRoomEpoch,
+  type PendingSyncRequest,
+} from './state';
 
 export type P5ReconciliationResult =
   | { status: 'applied'; serverClock: SyncClock }
@@ -65,6 +83,56 @@ export function replayBufferedSyncEvents(options: ReconciliationOptions = {}): v
   }
 }
 
+export function applyRoomSnapshot(snapshot: RoomSnapshot): void {
+  useElementsStore.getState().setElements(snapshot.elements);
+  hydrateKnownSlotClocks(snapshot.slotClocks);
+  setRoomEpoch(snapshot.roomEpoch);
+  setLastServerClock(snapshot.serverClock);
+}
+
+export function applyRoomDiff(diff: RoomDiff): void {
+  const previousLastServerClock = getSocketState().lastServerClock;
+  const deletedIds = diff.deleted.map((deleted) => deleted.id);
+  const currentById = new Map(
+    useElementsStore.getState().elements.map((element) => [element.id, element]),
+  );
+  const slotClocksByElement = groupSlotClocks(diff.slotClocks);
+  const nextById = new Map(currentById);
+
+  for (const deletedId of deletedIds) nextById.delete(deletedId);
+
+  for (const incoming of diff.changed) {
+    const existing = nextById.get(incoming.id);
+    const slotClocks = slotClocksByElement.get(incoming.id) ?? [];
+    if (!existing) {
+      nextById.set(incoming.id, incoming);
+      continue;
+    }
+    if (slotClocks.length === 0) continue;
+
+    let next = existing;
+    for (const slotClock of slotClocks) {
+      const previousSlotClock = getKnownSlotClock(incoming.id, slotClock.slot);
+      if (slotClock.clock <= previousSlotClock || slotClock.clock <= previousLastServerClock) {
+        continue;
+      }
+      next = applySlotPatch(next, {
+        elementId: incoming.id,
+        slot: slotClock.slot,
+        baseClock: previousSlotClock,
+        changes: slotValueFromElement(slotClock.slot, incoming),
+      });
+    }
+    nextById.set(incoming.id, next);
+  }
+
+  useElementsStore.getState().setElements([...nextById.values()]);
+  removeKnownSlotClocks(deletedIds);
+  applyKnownSlotClocks(diff.slotClocks);
+  setRoomEpoch(diff.roomEpoch);
+  setLastServerClock(diff.serverClock);
+}
+
 function clearPendingRequest(requestId: string): void {
   const state = getSocketState();
   state.pendingSyncRequests = state.pendingSyncRequests.filter(
@@ -109,6 +177,9 @@ function requestRoomDiff(changeSet: CommittedChangeSet, options: ReconciliationO
   }
   state.socket?.emit(WS_EVENTS.ROOM_DIFF_REQUEST, {
     roomId: changeSet.roomId,
+    lastServerClock: state.lastServerClock,
+    roomEpoch: getRoomEpochState(),
+    pendingRequestIds: state.pendingSyncRequests.map((request) => request.requestId),
     fromClock: state.lastServerClock,
     toClock: changeSet.serverClock,
   });
@@ -117,4 +188,14 @@ function requestRoomDiff(changeSet: CommittedChangeSet, options: ReconciliationO
 function applyChangeSetToStore(changeSet: CommittedChangeSet): void {
   const elements = useElementsStore.getState().elements;
   useElementsStore.getState().setElements(applyChangeSetToElements(elements, changeSet));
+  applyKnownSlotClocks(changeSet.slotClocks);
+  setRoomEpoch(changeSet.roomEpoch);
+}
+
+function groupSlotClocks(slotClocks: SlotClockUpdate[]): Map<string, SlotClockUpdate[]> {
+  const grouped = new Map<string, SlotClockUpdate[]>();
+  for (const slotClock of slotClocks) {
+    grouped.set(slotClock.elementId, [...(grouped.get(slotClock.elementId) ?? []), slotClock]);
+  }
+  return grouped;
 }
