@@ -1,5 +1,11 @@
 import type { Element } from '../index';
-import type { PointTuple, SyncOrderHint, SyncReadPrecondition, SyncSlot } from './types';
+import type {
+  ArrowEndpointBinding,
+  PointTuple,
+  SyncOrderHint,
+  SyncReadPrecondition,
+  SyncSlot,
+} from './types';
 
 export const SYNC_SLOTS = new Set<SyncSlot>([
   'transform.position',
@@ -37,9 +43,24 @@ export function isReadPreconditions(value: unknown): value is SyncReadPreconditi
         isRecord(item) &&
         typeof item.elementId === 'string' &&
         isSyncSlot(item.slot) &&
-        isFiniteNumber(item.expectedClock),
+        isFiniteNumber(item.baseClock) &&
+        isReadPreconditionStaleAction(item.onStale),
     )
   );
+}
+
+export function isArrowEndpointBinding(value: unknown): value is ArrowEndpointBinding {
+  return (
+    isRecord(value) &&
+    typeof value.elementId === 'string' &&
+    isRecord(value.anchorRatio) &&
+    isFiniteNumber(value.anchorRatio.x) &&
+    isFiniteNumber(value.anchorRatio.y)
+  );
+}
+
+function isReadPreconditionStaleAction(value: unknown): value is SyncReadPrecondition['onStale'] {
+  return value === 'reject' || value === 'rebase' || value === 'server_recompute';
 }
 
 export function isOrderHint(value: unknown): value is SyncOrderHint {

@@ -706,17 +706,23 @@ Clone Repo chính thức tại: https://github.com/supabase/supabase/tree/master
 
 ## 12. Phase 3D — Horizontal scaling (Redis)
 
-**Chủ đề:** cho phép chạy nhiều Node.js instance song song; Redis thay thế in-process Map làm shared authoritative state.
+**Chủ đề:** cho phép chạy nhiều Node.js instance song song; Redis hỗ trợ hot room cache/pubsub và
+cross-instance coordination, nhưng PostgreSQL vẫn là durable source of truth.
 
 > Phase này là optional — chỉ cần khi muốn scale ngang hoặc zero-downtime deploy. P3A–P3C không phụ thuộc vào đây.
 
-### [P3D-01] Redis làm shared room state — [BE]
+> P3D là hướng scale optional trước refactor P5. Từ P5, mọi saved-room write vẫn phải đi qua
+> `SyncRoom`/room actor/repository transaction; Redis không được là authoritative/durable write path
+> song song với Postgres.
+
+### [P3D-01] Redis làm shared hot room cache — [BE]
 
 - [BE] Thay `roomElements: Map<roomId, Map<elementId, Element>>` bằng Redis Hash: `room:{roomId}:elements` → field = `elementId`, value = JSON-serialized `Element`.
 - [BE] Upsert element: `HSET room:{roomId}:elements {elementId} {json}`.
 - [BE] Load snapshot: `HGETALL room:{roomId}:elements`.
 - [BE] Tombstone: `SREM` khỏi hash + `SADD room:{roomId}:tombstones {elementId}`.
-- [BE] Redis persistence bật **AOF** (`appendfsync everysec`) để giảm cửa sổ mất data xuống ~1s.
+- [BE] Redis persistence/AOF có thể bật để giảm cache loss, nhưng không được coi là bảo đảm durable
+  cho document state; dữ liệu phải recover được từ PostgreSQL.
 
 ### [P3D-02] Socket.IO Redis Adapter — [BE]
 
@@ -727,7 +733,8 @@ Clone Repo chính thức tại: https://github.com/supabase/supabase/tree/master
 
 - [BE] Background job (setInterval hoặc Bull queue) flush `room:{roomId}:elements` → bảng `Record` trong PostgreSQL, throttle ~3s.
 - [BE] Flush ngay khi phòng trống (0 client) và khi nhận `SIGTERM`.
-- [BE] PostgreSQL vẫn là source of truth cho cold load (server restart); Redis là hot cache cho active rooms.
+- [BE] PostgreSQL vẫn là source of truth cho cold load/server restart; Redis chỉ là hot cache/pubsub
+  cho active rooms.
 
 ---
 
@@ -1028,6 +1035,14 @@ history đã có surface đủ để refactor thay đường bên dưới.
   `grouping.frameId`.
 - [ ] Có exhaustive field-to-slot mapping: mọi mutable field hoặc map vào slot, hoặc ghi rõ là
   non-sync / derived / legacy-only.
+- [ ] Mapping tối thiểu phải giữ các semantic slot sau: `x/y -> transform.position`,
+  `width/height -> transform.size`, `angle -> transform.rotation`, từng style field -> slot riêng,
+  `text/fontSize/fontFamily/textAlign -> text.*`, `points -> geometry.points`,
+  arrow endpoints/route -> `geometry.startPoint`/`geometry.endPoint`/`geometry.route`,
+  `startBinding/endBinding -> binding.start/binding.end`, `zIndex -> order`,
+  `src -> asset.src`, `url -> embed.url`, `groupId/frameId -> grouping.*`.
+- [ ] Shared sync contracts sống dưới namespace/folder sync rõ ràng, ví dụ
+  `packages/shared/src/sync/`, để frontend/backend dùng chung contract thay vì copy type cục bộ.
 - [ ] Định nghĩa `SlotPatch` chứa `elementId`, `slot`, `baseClock`, `changes`, optional
   `inverseChanges`; patch phải chứa full semantic slot value.
 - [ ] Định nghĩa `SyncCommand` gồm `CreateElementCommand`, `PatchSlotsCommand`,
@@ -1132,6 +1147,7 @@ Delete => delete-wins.
 
 - [ ] A move shape và B đổi fill cùng shape đồng thời: cả position và fill đều được giữ.
 - [ ] A đổi fill và B đổi strokeWidth cùng shape đồng thời: cả hai style slots đều được giữ.
+- [ ] A sửa text và B đổi style cùng shape đồng thời: text slot và style slot đều được giữ.
 - [ ] A move shape và B resize cùng shape đồng thời: `transform.position` và `transform.size` đều
       được giữ.
 - [ ] A move shape và B move cùng shape đồng thời: command commit sau trên server thắng slot
@@ -1152,6 +1168,8 @@ Delete => delete-wins.
   `serverClock` và trả `CommittedChangeSet`.
 - [ ] `CommittedChangeSet` chứa `serverClock`, `roomEpoch`, `originActorId`, `originRequestIds`,
   `reason`, `slotPatches`, `slotClocks`, `puts`, `deletes`.
+- [ ] `ChangeSetReason` tối thiểu gồm `create`, `patch_clean`, `patch_lww_conflict`,
+  `binding_update`, `delete`, `replace_document` và `repair`.
 - [ ] `slotPatches` là instruction apply chính cho patch/update/repair; `puts` là materialized
   element cho create, replace, reconnect, debug và persistence, không phải lệnh replace whole
   element cho mọi mutation nhỏ.
@@ -1170,7 +1188,7 @@ Delete => delete-wins.
 
 - [ ] Ack `commit/rebase` đều clear đúng pending request của sender.
 - [ ] Broadcast cùng origin của chính client cũng có thể clear pending nếu ack bị miss.
-- [ ] Reject không rollback mù slot đã có pending mới hơn.
+- [ ] Reject clear đúng pending request bị reject, nhưng không rollback mù slot đã có pending mới hơn.
 - [ ] Rebase đi qua reconciliation từ `changeSet`, không trigger push lại cùng command.
 - [ ] Client không replace nguyên element khi change set chỉ touch một slot.
 
@@ -1339,6 +1357,8 @@ Delete => delete-wins.
 ### [P5-11] Frontend reconciliation
 
 - [ ] Client tách `serverState` và `optimisticState`.
+- [ ] Frontend sync client nằm trong folder riêng, ví dụ `frontend/src/sync/`, gồm transport,
+  pending queue, ack/reconnect handlers, reconciliation, diff-to-slot helpers và materializers.
 - [ ] Local mutation tạo command từ before/after, group changed fields theo `SyncSlot`.
 - [ ] Coalesce drag patch theo `{ elementId, slot }` trong flush window; inverse lấy từ before đầu,
   changes lấy từ after cuối.

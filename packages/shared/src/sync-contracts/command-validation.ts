@@ -1,38 +1,45 @@
 import {
+  isArrowEndpointBinding,
   isElementLike,
   isFiniteNumber,
   isOrderHint,
   isReadPreconditions,
   isRecord,
 } from './guards';
+import { hasSyncCommandKind } from './command-kind';
+import { getCurrentSlotClock, getStaleReadPreconditions } from './read-preconditions';
 import { validateSlotPatch } from './slot-validation';
 import {
   SYNC_PROTOCOL_VERSION,
   SYNC_SCHEMA_VERSION,
-  type CreateValidationContext,
   type SyncCommand,
+  type SyncSlot,
+  type SyncValidationContext,
   type SyncValidationResult,
 } from './types';
 
 export function validateSyncCommand(
   value: unknown,
-  createContext: CreateValidationContext = {},
+  context: SyncValidationContext = {},
 ): SyncValidationResult {
   const errors: string[] = [];
   if (!isRecord(value)) {
-    return invalid('SyncCommand must be an object.');
+    return { ok: false, errors: ['SyncCommand must be an object.'] };
   }
   validateEnvelope(value, errors);
   if ('actorId' in value) {
     errors.push('SyncCommand payload must not include actorId.');
   }
+  if ('batchId' in value) {
+    errors.push('SyncCommand must not include batchId.');
+  }
 
   switch (value.kind) {
     case 'create-element':
-      validateCreateElementCommand(value, createContext, errors);
+      validateCreateElementCommand(value, context, errors);
       break;
     case 'patch-slots':
-      validatePatchSlotsCommand(value, errors);
+      validatePatchSlotsCommand(value, context, errors);
       break;
     case 'reorder-elements':
       validateReorderElementsCommand(value, errors);
@@ -48,6 +55,14 @@ export function validateSyncCommand(
       break;
     default:
       errors.push('SyncCommand kind is not supported.');
+  }
+
+  if (hasSyncCommandKind(value)) {
+    for (const stale of getStaleReadPreconditions(value as unknown as SyncCommand, context)) {
+      if (stale.onStale === 'reject') {
+        errors.push('STALE_CLIENT_STATE');
+      }
+    }
   }
 
   return errors.length === 0 ? { ok: true } : { ok: false, errors };
@@ -75,7 +90,7 @@ function validateEnvelope(value: Record<string, unknown>, errors: string[]): voi
 
 function validateCreateElementCommand(
   value: Record<string, unknown>,
-  context: CreateValidationContext,
+  context: SyncValidationContext,
   errors: string[],
 ): void {
   if (!isElementLike(value.element)) {
@@ -93,7 +108,11 @@ function validateCreateElementCommand(
   }
 }
 
-function validatePatchSlotsCommand(value: Record<string, unknown>, errors: string[]): void {
+function validatePatchSlotsCommand(
+  value: Record<string, unknown>,
+  context: SyncValidationContext,
+  errors: string[],
+): void {
   if (!Array.isArray(value.patches) || value.patches.length === 0) {
     errors.push('PatchSlotsCommand.patches must be a non-empty array.');
     return;
@@ -101,7 +120,13 @@ function validatePatchSlotsCommand(value: Record<string, unknown>, errors: strin
 
   const seen = new Set<string>();
   for (const patch of value.patches) {
-    validateSlotPatch(patch, errors);
+    validateSlotPatch(
+      patch,
+      errors,
+      context.currentSlotClocks
+        ? (elementId: string, slot: SyncSlot) => getCurrentSlotClock(context, elementId, slot)
+        : undefined,
+    );
     if (!isRecord(patch) || typeof patch.elementId !== 'string' || typeof patch.slot !== 'string') {
       continue;
     }
@@ -126,25 +151,20 @@ function validateReorderElementsCommand(value: Record<string, unknown>, errors: 
 }
 
 function validateUpdateArrowBindingCommand(value: Record<string, unknown>, errors: string[]): void {
-  if (typeof value.elementId !== 'string') {
-    errors.push('UpdateArrowBindingCommand.elementId is required.');
+  if (typeof value.arrowId !== 'string') {
+    errors.push('UpdateArrowBindingCommand.arrowId is required.');
+  }
+  if (value.terminal !== 'start' && value.terminal !== 'end') {
+    errors.push('UpdateArrowBindingCommand.terminal is invalid.');
+  }
+  if (value.binding !== null && !isArrowEndpointBinding(value.binding)) {
+    errors.push('UpdateArrowBindingCommand.binding is invalid.');
   }
   if (!isFiniteNumber(value.baseBindingClock)) {
     errors.push('UpdateArrowBindingCommand.baseBindingClock is required.');
   }
-  if (
-    value.startBinding !== undefined &&
-    typeof value.startBinding !== 'string' &&
-    value.startBinding !== null
-  ) {
-    errors.push('UpdateArrowBindingCommand.startBinding is invalid.');
-  }
-  if (
-    value.endBinding !== undefined &&
-    typeof value.endBinding !== 'string' &&
-    value.endBinding !== null
-  ) {
-    errors.push('UpdateArrowBindingCommand.endBinding is invalid.');
+  if (!isFiniteNumber(value.baseGeometryClock)) {
+    errors.push('UpdateArrowBindingCommand.baseGeometryClock is required.');
   }
 }
 
@@ -168,12 +188,8 @@ function validateReplaceDocumentCommand(value: Record<string, unknown>, errors: 
   if (
     value.reason !== 'import' &&
     value.reason !== 'restore' &&
-    value.reason !== 'manual-replace'
+    value.reason !== 'manual_replace'
   ) {
     errors.push('ReplaceDocumentCommand.reason is invalid.');
   }
-}
-
-function invalid(error: string): SyncValidationResult {
-  return { ok: false, errors: [error] };
 }

@@ -34,6 +34,11 @@ export type SyncSlot =
 
 export type PointTuple = [number, number];
 
+export interface ArrowEndpointBinding {
+  elementId: string;
+  anchorRatio: { x: number; y: number };
+}
+
 export interface SyncSlotValueMap {
   'transform.position': { x: number; y: number };
   'transform.size': { width: number; height: number };
@@ -52,8 +57,8 @@ export interface SyncSlotValueMap {
   'geometry.route': { route: PointTuple[] | null };
   'geometry.startPoint': { startPoint: PointTuple | null };
   'geometry.endPoint': { endPoint: PointTuple | null };
-  'binding.start': { startBinding: string | null };
-  'binding.end': { endBinding: string | null };
+  'binding.start': { binding: ArrowEndpointBinding | null };
+  'binding.end': { binding: ArrowEndpointBinding | null };
   order: { zIndex: number };
   'asset.src': { src: string | null };
   'embed.url': { url: string | null };
@@ -75,7 +80,8 @@ export interface SlotPatch<S extends SyncSlot = SyncSlot> {
 export interface SyncReadPrecondition {
   elementId: string;
   slot: SyncSlot;
-  expectedClock: SyncClock;
+  baseClock: SyncClock;
+  onStale: 'reject' | 'rebase' | 'server_recompute';
 }
 
 interface SyncCommandEnvelope {
@@ -119,10 +125,11 @@ export interface ReorderElementsCommand extends SyncCommandEnvelope {
 
 export interface UpdateArrowBindingCommand extends SyncCommandEnvelope {
   kind: 'update-arrow-binding';
-  elementId: string;
-  startBinding?: string | null;
-  endBinding?: string | null;
+  arrowId: string;
+  terminal: 'start' | 'end';
+  binding: ArrowEndpointBinding | null;
   baseBindingClock: SyncClock;
+  baseGeometryClock: SyncClock;
 }
 
 export interface DeleteElementsCommand extends SyncCommandEnvelope {
@@ -133,7 +140,7 @@ export interface DeleteElementsCommand extends SyncCommandEnvelope {
 export interface ReplaceDocumentCommand extends SyncCommandEnvelope {
   kind: 'replace-document';
   elements: Element[];
-  reason: 'import' | 'restore' | 'manual-replace';
+  reason: 'import' | 'restore' | 'manual_replace';
 }
 
 export type SyncCommand =
@@ -169,10 +176,13 @@ export interface CommittedChangeSet {
   normalizedOrder: SyncOrderEntry[];
 }
 
-export interface CreateValidationContext {
+export interface SyncValidationContext {
   activeElementIds?: ReadonlySet<string>;
   tombstoneElementIds?: ReadonlySet<string>;
+  currentSlotClocks?: ReadonlyMap<string, SyncClock>;
 }
+
+export type CreateValidationContext = SyncValidationContext;
 
 export interface MaterializeCreateOptions {
   zIndex?: number;

@@ -27,6 +27,14 @@
 - `isDeleted` is not patchable slot state; deletion uses `DeleteElementsCommand`.
 - Create commands may carry an input element plus order hints, but the change-set contract must
   represent the final server-materialized element and normalized order.
+- `SlotReadPrecondition` uses `baseClock` and `onStale` rather than `expectedClock`; shared helpers
+  must distinguish stale branches for `reject`, `rebase`, and `server_recompute`.
+- Slot clocks are normalized numbers. A slot that has never been set uses `baseClock = 0`, `null`
+  clocks are invalid, and `baseClock > currentSlotClock` is `STALE_CLIENT_STATE`.
+- `UpdateArrowBindingCommand` uses P5 `ArrowEndpointBinding` payloads with `arrowId`, `terminal`,
+  `binding`, `baseBindingClock`, and `baseGeometryClock`; it must not trust client geometry.
+- P5 command ACK semantics are command-level only: one `requestId` per command, no `batchId`, and no
+  patch-level request/ack fields in this first protocol slice.
 
 ## Non-Goals
 
@@ -45,3 +53,9 @@
   and final order in change-set types.
 - `AC-5`: covered by validation tests proving `PatchSlotsCommand` rejects `order` while
   `ReorderElementsCommand` accepts order changes.
+- `AC-6`: covered by slot clock validation tests for `baseClock = 0`, `null` clocks, and
+  `STALE_CLIENT_STATE`.
+- `AC-7`: covered by read-precondition helper tests for `reject`, `rebase`, and
+  `server_recompute` stale branches.
+- `AC-8`: covered by arrow-binding command tests and command-level request/patch-level ACK rejection
+  tests.

@@ -7,9 +7,9 @@ verified_at: 2026-07-02
 
 ## Automated Checks
 
-- PASS: `.agents/skills/implement-feature-gsd/scripts/check-ac-coverage.sh specs/031-p5-02-shared-sync-contracts/acceptance.md backend/src/sync/shared-contracts.test.ts`
+- PASS: `.agents/skills/implement-feature-gsd/scripts/check-ac-coverage.sh specs/031-p5-02-shared-sync-contracts/acceptance.md backend/src/sync`
 - PASS: `pnpm --filter @vdt/shared typecheck`
-- PASS: `pnpm --filter whiteboard-be test -- shared-contracts`
+- PASS: `pnpm --filter whiteboard-be test -- shared-contracts shared-contract-invariants`
 - PASS: `pnpm typecheck`
 
 ## AC Coverage
@@ -25,11 +25,21 @@ verified_at: 2026-07-02
   hints, rejects active/tombstone duplicate IDs, and materializes final server-normalized order.
 - `AC-5`: covered by `backend/src/sync/shared-contracts.test.ts`; direct `order` slot patching is
   rejected while `ReorderElementsCommand` is accepted.
+- `AC-6`: covered by `backend/src/sync/shared-contract-invariants.test.ts`; `baseClock = 0` is
+  accepted for unset slots, `null` clocks are invalid, and future base clocks reject as
+  `STALE_CLIENT_STATE`.
+- `AC-7`: covered by `backend/src/sync/shared-contract-invariants.test.ts`; stale
+  `SlotReadPrecondition` entries are classified into `reject`, `rebase`, or `server_recompute`,
+  with `reject` producing `STALE_CLIENT_STATE`.
+- `AC-8`: covered by `backend/src/sync/shared-contract-invariants.test.ts`; validates
+  `UpdateArrowBindingCommand` with `ArrowEndpointBinding`, rejects command `batchId`, rejects
+  patch-level request/ack fields, and accepts `manual_replace`.
 
 ## Source Inspection
 
 - `packages/shared/src/sync-contracts/` owns the P5 shared protocol vocabulary, field mapping,
   command types, validation helpers, and create materialization helper.
+- `backend/src/sync/shared-contracts.test.ts` covers base contract shape; `backend/src/sync/shared-contract-invariants.test.ts` covers revised P5-02 invariants from the updated `docs/SPECS.md`.
 - `packages/shared/src/index.ts` preserves package-level public exports while staying under the
   repo file-size guardrail.
 - P5-01 backend compatibility commands remain backend-internal and are not replaced by these

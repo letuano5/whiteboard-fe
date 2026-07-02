@@ -171,10 +171,11 @@ describe('P5-02 shared sync contracts', () => {
       {
         ...envelope,
         kind: 'update-arrow-binding',
-        elementId: 'arrow-1',
-        startBinding: 'shape-a:center',
-        endBinding: null,
+        arrowId: 'arrow-1',
+        terminal: 'start',
+        binding: { elementId: 'shape-a', anchorRatio: { x: 0.5, y: 0.5 } },
         baseBindingClock: 1,
+        baseGeometryClock: 2,
       },
       { ...envelope, kind: 'delete-elements', elementIds: ['el-1'] },
       {

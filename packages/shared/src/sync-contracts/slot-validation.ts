@@ -1,5 +1,12 @@
-import { isFiniteNumber, isPoint, isPointList, isRecord, isSyncSlot } from './guards';
-import type { SyncSlot } from './types';
+import {
+  isArrowEndpointBinding,
+  isFiniteNumber,
+  isPoint,
+  isPointList,
+  isRecord,
+  isSyncSlot,
+} from './guards';
+import type { SyncClock, SyncSlot } from './types';
 
 const SLOT_VALUE_KEYS = {
   'transform.position': ['x', 'y'],
@@ -19,8 +26,8 @@ const SLOT_VALUE_KEYS = {
   'geometry.route': ['route'],
   'geometry.startPoint': ['startPoint'],
   'geometry.endPoint': ['endPoint'],
-  'binding.start': ['startBinding'],
-  'binding.end': ['endBinding'],
+  'binding.start': ['binding'],
+  'binding.end': ['binding'],
   order: ['zIndex'],
   'asset.src': ['src'],
   'embed.url': ['url'],
@@ -29,7 +36,11 @@ const SLOT_VALUE_KEYS = {
   'state.locked': ['locked'],
 } as const satisfies Record<SyncSlot, readonly string[]>;
 
-export function validateSlotPatch(value: unknown, errors: string[]): void {
+export function validateSlotPatch(
+  value: unknown,
+  errors: string[],
+  getCurrentSlotClock?: (elementId: string, slot: SyncSlot) => SyncClock,
+): void {
   if (!isRecord(value)) {
     errors.push('SlotPatch must be an object.');
     return;
@@ -39,6 +50,8 @@ export function validateSlotPatch(value: unknown, errors: string[]): void {
   }
   if (!isFiniteNumber(value.baseClock)) {
     errors.push('SlotPatch.baseClock is required.');
+  } else if (value.baseClock < 0) {
+    errors.push('SlotPatch.baseClock must be non-negative.');
   }
   if (!isSyncSlot(value.slot)) {
     errors.push('SlotPatch.slot is invalid.');
@@ -46,6 +59,15 @@ export function validateSlotPatch(value: unknown, errors: string[]): void {
   }
   if (value.slot === 'order') {
     errors.push('SlotPatch cannot patch order; use ReorderElementsCommand.');
+  }
+  if (typeof value.elementId === 'string' && isFiniteNumber(value.baseClock)) {
+    const currentClock = getCurrentSlotClock?.(value.elementId, value.slot) ?? value.baseClock;
+    if (value.baseClock > currentClock) {
+      errors.push('STALE_CLIENT_STATE');
+    }
+  }
+  if ('batchId' in value || 'requestId' in value || 'ack' in value) {
+    errors.push('SlotPatch must not carry patch-level request or ack fields.');
   }
   validateSlotValue(value.slot, value.changes, 'SlotPatch.changes', errors);
   if (isRecord(value.changes) && 'isDeleted' in value.changes) {
@@ -118,9 +140,9 @@ function hasValidSlotValue(slot: SyncSlot, value: Record<string, unknown>): bool
     case 'geometry.endPoint':
       return value.endPoint === null || isPoint(value.endPoint);
     case 'binding.start':
-      return value.startBinding === null || typeof value.startBinding === 'string';
+      return value.binding === null || isArrowEndpointBinding(value.binding);
     case 'binding.end':
-      return value.endBinding === null || typeof value.endBinding === 'string';
+      return value.binding === null || isArrowEndpointBinding(value.binding);
     case 'order':
       return isFiniteNumber(value.zIndex);
     case 'asset.src':

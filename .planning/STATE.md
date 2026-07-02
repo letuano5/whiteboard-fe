@@ -2,10 +2,10 @@
 gsd_state_version: '1.0'
 status: planning
 progress:
-  total_phases: 7
-  completed_phases: 7
-  total_plans: 7
-  completed_plans: 7
+  total_phases: 9
+  completed_phases: 9
+  total_plans: 9
+  completed_plans: 9
   percent: 100
 ---
 
@@ -16,14 +16,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-30)
 
 **Core value:** Users can create tactical whiteboards without losing work, then collaborate or persist documents when the workflow calls for it.
-**Current focus:** Phase 5.2: P5-02 Shared sync contracts
+**Current focus:** Phase 5.4: P5-04 Conflict resolution & validation
 
 ## Current Position
 
-Phase: 5.2 of active GSD bootstrap (P5-02 Shared sync contracts)
+Phase: 5.4 of active GSD bootstrap (P5-04 Conflict resolution & validation)
 Plan: 1 of 1 in current phase
 Status: Phase complete
-Last activity: 2026-07-02 - Implemented and verified P5-02 shared sync contracts.
+Last activity: 2026-07-02 - Implemented and verified P5-04 conflict resolution and validation.
 
 Progress: [##########] 100%
 
@@ -43,6 +43,11 @@ Progress: [##########] 100%
 - [Phase 5.2]: P5-02 defines shared P5 protocol contracts in `@vdt/shared`; actor identity remains server context and is not trusted from command payloads.
 - [Phase 5.2]: Direct `order` patching is invalid in this phase; ordering changes use `ReorderElementsCommand`.
 - [Phase 5.2]: `Element.locked` is mapped to `state.locked` so mutable field coverage stays exhaustive even though it was not listed in the minimum P5 slot examples.
+- [Phase 5.2]: P5 arrow binding contracts use `ArrowEndpointBinding`; legacy `ElementProps.startBinding/endBinding` strings remain compatibility data until later migration.
+- [Phase 5.2]: Slot read preconditions carry `baseClock` and `onStale`; command validation rejects only stale `reject` branches while exposing `rebase` and `server_recompute` for later execution phases.
+- [Phase 5.3]: A backend `SyncRoom` owns hot saved-room execution state and serializes commands per room, not globally.
+- [Phase 5.3]: In-memory duplicate request protection is scoped to shared P5 command envelopes by actor/request ID; persisted idempotency remains P5-06.
+- [Phase 5.4]: Slot conflict resolution follows `different slot => merge`, `same slot => latest-to-server wins`, and `delete => delete-wins`.
 
 ### Pending Todos
 
@@ -53,12 +58,14 @@ Progress: [##########] 100%
 - P4-03 room lock, participant capacity, editor capacity, and effective-role presence are implemented and verified.
 - P4-04 native file export/import implemented and verified.
 - P5-01 backend sync module boundary implemented and verified.
-- P5-02 shared sync contracts implemented and verified.
+- P5-02 shared sync contracts implemented and verified against 8 acceptance criteria.
+- P5-03 server-authoritative `SyncRoom` implemented and verified against 3 acceptance criteria.
+- P5-04 conflict resolution and validation implemented and verified against 12 acceptance criteria.
 
 ### Blockers/Concerns
 
 - The working tree had pre-existing backend/auth and `docs/SPECS.md` edits before this workflow.
-- P5-03 may refine server execution semantics when `SyncRoom` is implemented, but P5-02 should keep the shared wire/data contract stable enough for downstream phases.
+- P5-04 intentionally does not implement P5-05 ack/reject/rebase broadcast protocol or P5-06 transactional persistence/idempotency.
 
 ## Session Continuity
 
