@@ -1,14 +1,21 @@
 import {
   materializeCreatedElement,
   validateSyncCommand,
+  type ArrowEndpointBinding,
   type DeleteElementsCommand,
   type Element,
   type PatchSlotsCommand,
+  type PointTuple,
   type SlotPatch,
   type SyncSlot,
+  type UpdateArrowBindingCommand,
 } from '@vdt/shared';
 import { SyncRoomCommandError, type SyncRoomErrorCode } from './sync-room-errors.js';
-import { MAX_ELEMENTS_PER_DELETE, MAX_PATCHES_PER_COMMAND } from './sync-room-limits.js';
+import {
+  MAX_ELEMENTS_PER_DELETE,
+  MAX_PATCHES_PER_COMMAND,
+  MAX_REPAIRED_ARROWS_PER_COMMAND,
+} from './sync-room-limits.js';
 import { applySlotPatch, validateSlotForElement } from './sync-room-slot-patches.js';
 import type { SyncRoomPlan, SyncRoomPlannerContext } from './sync-room.js';
 
@@ -56,8 +63,15 @@ export function defaultSyncRoomPlanner(context: SyncRoomPlannerContext): SyncRoo
       return planPatchSlots(context, context.command);
     case 'delete-elements':
       return planDeleteElements(context, context.command);
+    case 'update-arrow-binding':
+      return planUpdateArrowBinding(context, context.command);
     case 'replace-document': {
       const created = context.command.elements.map((element) => ({ ...element, isDeleted: false }));
+      for (const element of created) {
+        if (context.state.tombstoneElementIds.has(element.id)) {
+          throw new SyncRoomCommandError('DUPLICATE_ELEMENT_ID');
+        }
+      }
       const replacementIds = new Set(created.map((element) => element.id));
       return {
         created,
@@ -150,14 +164,33 @@ function planPatchSlots(context: SyncRoomPlannerContext, command: PatchSlotsComm
     patchedByElement.set(patch.elementId, entry);
   }
 
+  const patched = [...patchedByElement.values()];
+  const touchedTargets = new Map<string, Element>();
+  for (const patch of command.patches) {
+    if (isTargetRepairTrigger(patch.slot)) {
+      const patchedElement = patchedByElement.get(patch.elementId)?.element;
+      if (patchedElement) {
+        touchedTargets.set(patch.elementId, patchedElement);
+      }
+    }
+  }
+  const repairs = createBoundArrowRepairs({
+    context,
+    targetElements: touchedTargets,
+    existingPatched: patchedByElement,
+  });
+
   return {
     reason: hasLwwConflict ? 'patch_lww_conflict' : 'patch_clean',
-    patched: [...patchedByElement.values()],
-    slotClocks: command.patches.map((patch) => ({
-      elementId: patch.elementId,
-      slot: patch.slot,
-      clock: context.serverClock,
-    })),
+    patched: [...patched, ...(repairs.patched ?? [])],
+    slotClocks: [
+      ...command.patches.map((patch) => ({
+        elementId: patch.elementId,
+        slot: patch.slot,
+        clock: context.serverClock,
+      })),
+      ...(repairs.slotClocks ?? []),
+    ],
   };
 }
 
@@ -173,7 +206,41 @@ function planDeleteElements(
   for (const elementId of deleted) {
     getActiveElement(context, elementId);
   }
-  return { deleted };
+
+  const repairs = createDeleteBindingRepairs(context, new Set(deleted));
+  return {
+    reason: (repairs.patched?.length ?? 0) > 0 ? 'repair' : 'delete',
+    deleted,
+    patched: repairs.patched,
+    slotClocks: repairs.slotClocks,
+  };
+}
+
+function planUpdateArrowBinding(
+  context: SyncRoomPlannerContext,
+  command: UpdateArrowBindingCommand,
+): SyncRoomPlan {
+  const arrow = getActiveElement(context, command.arrowId);
+  if (arrow.type !== 'arrow') {
+    throw new SyncRoomCommandError('INVALID_SLOT_FOR_ELEMENT_TYPE');
+  }
+  if (command.binding) {
+    getBindingTarget(context, command.binding.elementId);
+  }
+
+  const patched = repairArrow({
+    context,
+    arrow,
+    startBinding: command.terminal === 'start' ? command.binding : arrow.props.startBinding,
+    endBinding: command.terminal === 'end' ? command.binding : arrow.props.endBinding,
+    forceBindingSlots: [command.terminal === 'start' ? 'binding.start' : 'binding.end'],
+  });
+
+  return {
+    reason: 'binding_update',
+    patched: [patched],
+    slotClocks: toSlotClocks(patched.patches, context.serverClock),
+  };
 }
 
 function getActiveElement(context: SyncRoomPlannerContext, elementId: string): Element {
@@ -183,4 +250,275 @@ function getActiveElement(context: SyncRoomPlannerContext, elementId: string): E
     throw new SyncRoomCommandError('ELEMENT_DELETED');
   }
   throw new SyncRoomCommandError('ELEMENT_NOT_FOUND');
+}
+
+function getBindingTarget(context: SyncRoomPlannerContext, elementId: string): Element {
+  const target = context.state.elements.get(elementId);
+  if (!target || target.isDeleted || context.state.tombstoneElementIds.has(elementId)) {
+    throw new SyncRoomCommandError('INVALID_BINDING_TARGET');
+  }
+  if (target.type === 'arrow' || target.type === 'line') {
+    throw new SyncRoomCommandError('INVALID_BINDING_TARGET');
+  }
+  return target;
+}
+
+function isTargetRepairTrigger(slot: SyncSlot): boolean {
+  return (
+    slot === 'transform.position' ||
+    slot === 'transform.size' ||
+    slot === 'transform.rotation' ||
+    slot === 'geometry.points' ||
+    slot === 'geometry.startPoint' ||
+    slot === 'geometry.endPoint'
+  );
+}
+
+function createDeleteBindingRepairs(
+  context: SyncRoomPlannerContext,
+  deletedIds: ReadonlySet<string>,
+): Pick<SyncRoomPlan, 'patched' | 'slotClocks'> {
+  const patched: NonNullable<SyncRoomPlan['patched']> = [];
+  for (const arrow of context.state.elements.values()) {
+    if (arrow.type !== 'arrow' || deletedIds.has(arrow.id)) continue;
+    const start = readBinding(arrow.props.startBinding);
+    const end = readBinding(arrow.props.endBinding);
+    const clearsStart = start !== null && deletedIds.has(start.elementId);
+    const clearsEnd = end !== null && deletedIds.has(end.elementId);
+    if (!clearsStart && !clearsEnd) continue;
+
+    patched.push(
+      repairArrow({
+        context,
+        arrow,
+        startBinding: clearsStart ? null : arrow.props.startBinding,
+        endBinding: clearsEnd ? null : arrow.props.endBinding,
+        forceBindingSlots: [
+          ...(clearsStart ? (['binding.start'] as const) : []),
+          ...(clearsEnd ? (['binding.end'] as const) : []),
+        ],
+      }),
+    );
+  }
+
+  assertRepairCountWithinLimit(patched);
+  return { patched, slotClocks: toSlotClocksFromPatched(patched, context.serverClock) };
+}
+
+function createBoundArrowRepairs({
+  context,
+  targetElements,
+  existingPatched,
+}: {
+  context: SyncRoomPlannerContext;
+  targetElements: ReadonlyMap<string, Element>;
+  existingPatched: ReadonlyMap<
+    string,
+    { elementId: string; patches: SlotPatch[]; element: Element }
+  >;
+}): Pick<SyncRoomPlan, 'patched' | 'slotClocks'> {
+  if (targetElements.size === 0) return { patched: [], slotClocks: [] };
+
+  const patched: NonNullable<SyncRoomPlan['patched']> = [];
+  for (const arrow of context.state.elements.values()) {
+    if (arrow.type !== 'arrow') continue;
+    if (existingPatched.has(arrow.id)) continue;
+    const startTargetId = readBinding(arrow.props.startBinding)?.elementId;
+    const endTargetId = readBinding(arrow.props.endBinding)?.elementId;
+    if (
+      (startTargetId === undefined || !targetElements.has(startTargetId)) &&
+      (endTargetId === undefined || !targetElements.has(endTargetId))
+    ) {
+      continue;
+    }
+    patched.push(repairArrow({ context, arrow, overrideTargets: targetElements }));
+  }
+
+  assertRepairCountWithinLimit(patched);
+  return { patched, slotClocks: toSlotClocksFromPatched(patched, context.serverClock) };
+}
+
+function repairArrow({
+  context,
+  arrow,
+  startBinding = arrow.props.startBinding,
+  endBinding = arrow.props.endBinding,
+  forceBindingSlots = [],
+  overrideTargets = new Map(),
+}: {
+  context: SyncRoomPlannerContext;
+  arrow: Element;
+  startBinding?: Element['props']['startBinding'];
+  endBinding?: Element['props']['endBinding'];
+  forceBindingSlots?: readonly ('binding.start' | 'binding.end')[];
+  overrideTargets?: ReadonlyMap<string, Element>;
+}): { elementId: string; patches: SlotPatch[]; element: Element } {
+  const originalPoints = ensureArrowPoints(arrow);
+  const nextStartPoint =
+    pointForBinding(context, startBinding, overrideTargets) ?? originalPoints[0];
+  const nextEndPoint =
+    pointForBinding(context, endBinding, overrideTargets) ??
+    originalPoints[originalPoints.length - 1];
+  const nextPoints: PointTuple[] = [clonePoint(nextStartPoint), clonePoint(nextEndPoint)];
+
+  const patches: SlotPatch[] = [];
+  if (forceBindingSlots.includes('binding.start')) {
+    patches.push({
+      elementId: arrow.id,
+      slot: 'binding.start',
+      baseClock: currentSlotClock(context, arrow.id, 'binding.start'),
+      changes: { binding: normalizeBinding(startBinding) },
+    });
+  }
+  if (forceBindingSlots.includes('binding.end')) {
+    patches.push({
+      elementId: arrow.id,
+      slot: 'binding.end',
+      baseClock: currentSlotClock(context, arrow.id, 'binding.end'),
+      changes: { binding: normalizeBinding(endBinding) },
+    });
+  }
+  patches.push(
+    {
+      elementId: arrow.id,
+      slot: 'geometry.startPoint',
+      baseClock: currentSlotClock(context, arrow.id, 'geometry.startPoint'),
+      changes: { startPoint: nextStartPoint },
+    },
+    {
+      elementId: arrow.id,
+      slot: 'geometry.endPoint',
+      baseClock: currentSlotClock(context, arrow.id, 'geometry.endPoint'),
+      changes: { endPoint: nextEndPoint },
+    },
+    {
+      elementId: arrow.id,
+      slot: 'geometry.route',
+      baseClock: currentSlotClock(context, arrow.id, 'geometry.route'),
+      changes: { route: null },
+    },
+  );
+
+  const element = patches.reduce(applySlotPatch, arrow);
+  return {
+    elementId: arrow.id,
+    patches,
+    element: { ...element, ...normalizeLinearBounds(nextPoints) },
+  };
+}
+
+function pointForBinding(
+  context: SyncRoomPlannerContext,
+  binding: Element['props']['startBinding'],
+  overrideTargets: ReadonlyMap<string, Element>,
+): PointTuple | null {
+  const parsed = readBinding(binding);
+  if (!parsed) return null;
+  const target =
+    overrideTargets.get(parsed.elementId) ?? getBindingTarget(context, parsed.elementId);
+  return computeAnchorPoint(target, parsed.anchorRatio);
+}
+
+function readBinding(
+  binding: Element['props']['startBinding'],
+): { elementId: string; anchorRatio: { x: number; y: number } } | null {
+  if (!binding) return null;
+  if (typeof binding === 'object') {
+    return { elementId: binding.elementId, anchorRatio: binding.anchorRatio };
+  }
+  const index = binding.lastIndexOf(':');
+  if (index === -1) return null;
+  const elementId = binding.slice(0, index);
+  const pointKey = binding.slice(index + 1);
+  const anchorRatio = pointKeyToAnchorRatio(pointKey);
+  return elementId && anchorRatio ? { elementId, anchorRatio } : null;
+}
+
+function normalizeBinding(binding: Element['props']['startBinding']): ArrowEndpointBinding | null {
+  const parsed = readBinding(binding);
+  return parsed ? { elementId: parsed.elementId, anchorRatio: parsed.anchorRatio } : null;
+}
+
+function pointKeyToAnchorRatio(pointKey: string): { x: number; y: number } | null {
+  switch (pointKey) {
+    case 'center':
+      return { x: 0.5, y: 0.5 };
+    case 'top':
+      return { x: 0.5, y: 0 };
+    case 'right':
+      return { x: 1, y: 0.5 };
+    case 'bottom':
+      return { x: 0.5, y: 1 };
+    case 'left':
+      return { x: 0, y: 0.5 };
+    default:
+      return null;
+  }
+}
+
+function computeAnchorPoint(target: Element, anchorRatio: { x: number; y: number }): PointTuple {
+  const center: PointTuple = [target.x + target.width / 2, target.y + target.height / 2];
+  const point: PointTuple = [
+    target.x + target.width * anchorRatio.x,
+    target.y + target.height * anchorRatio.y,
+  ];
+  if (target.angle === 0) return point;
+  const cos = Math.cos(target.angle);
+  const sin = Math.sin(target.angle);
+  const dx = point[0] - center[0];
+  const dy = point[1] - center[1];
+  return [center[0] + dx * cos - dy * sin, center[1] + dx * sin + dy * cos];
+}
+
+function ensureArrowPoints(arrow: Element): [PointTuple, PointTuple] {
+  const points = arrow.props.points ?? [
+    [arrow.x, arrow.y],
+    [arrow.x + arrow.width, arrow.y + arrow.height],
+  ];
+  return [
+    clonePoint(points[0] ?? [arrow.x, arrow.y]),
+    clonePoint(points.at(-1) ?? [arrow.x, arrow.y]),
+  ];
+}
+
+function normalizeLinearBounds(
+  points: readonly PointTuple[],
+): Pick<Element, 'x' | 'y' | 'width' | 'height'> {
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const [x, y] of points) {
+    minX = Math.min(minX, x);
+    minY = Math.min(minY, y);
+    maxX = Math.max(maxX, x);
+    maxY = Math.max(maxY, y);
+  }
+  return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+}
+
+function clonePoint(point: PointTuple): PointTuple {
+  return [point[0], point[1]];
+}
+
+function currentSlotClock(
+  context: SyncRoomPlannerContext,
+  elementId: string,
+  slot: SyncSlot,
+): number {
+  return context.state.slotClocks.get(`${elementId}:${slot}`) ?? 0;
+}
+
+function toSlotClocksFromPatched(patched: NonNullable<SyncRoomPlan['patched']>, clock: number) {
+  return patched.flatMap((entry) => toSlotClocks(entry.patches, clock));
+}
+
+function toSlotClocks(patches: readonly SlotPatch[], clock: number) {
+  return patches.map((patch) => ({ elementId: patch.elementId, slot: patch.slot, clock }));
+}
+
+function assertRepairCountWithinLimit(patched: NonNullable<SyncRoomPlan['patched']>): void {
+  if (patched.length > MAX_REPAIRED_ARROWS_PER_COMMAND) {
+    throw new SyncRoomCommandError('TOO_LARGE');
+  }
 }

@@ -2,10 +2,10 @@
 gsd_state_version: '1.0'
 status: complete
 progress:
-  total_phases: 12
-  completed_phases: 12
-  total_plans: 14
-  completed_plans: 14
+  total_phases: 13
+  completed_phases: 13
+  total_plans: 15
+  completed_plans: 15
   percent: 100
 ---
 
@@ -16,14 +16,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-30)
 
 **Core value:** Users can create tactical whiteboards without losing work, then collaborate or persist documents when the workflow calls for it.
-**Current focus:** Phase 5.7: P5-07 Load, reconnect & diff
+**Current focus:** Phase 5.8: P5-08 Delete, tombstone & binding repair
 
 ## Current Position
 
-Phase: 5.7 of active GSD bootstrap (P5-07 Load, reconnect & diff)
+Phase: 5.8 of active GSD bootstrap (P5-08 Delete, tombstone & binding repair)
 Plan: 1 of 1 in current phase
-Status: Phase complete
-Last activity: 2026-07-02 - Implemented and verified P5-07 load, reconnect, and diff.
+Status: Phase in progress
+Last activity: 2026-07-02 - Implemented and verified P5-08 delete, tombstone, and binding repair.
 
 Progress: [##########] 100%
 
@@ -57,6 +57,8 @@ Progress: [##########] 100%
   clock aliases are compatibility only.
 - [Phase 5.7]: Diff must not cross `roomEpoch`; replace-boundary or stale-history requests return
   wipe-all snapshots.
+- [Phase 5.8]: Arrow binding repair is server-authoritative; repaired binding and geometry slots
+  must be emitted in the same committed change set as the triggering delete or target mutation.
 
 ### Pending Todos
 
@@ -73,6 +75,7 @@ Progress: [##########] 100%
 - P5-05 change-set, ACK/reject/rebase, broadcast, and reconciliation primitives implemented and verified against 5 acceptance criteria.
 - P5-06 transactional persistence, durable idempotency, relaxed transient policy, and unhealthy-room recovery implemented and verified against 10 acceptance criteria.
 - P5-07 load/reconnect/diff implemented and verified against 8 acceptance criteria.
+- P5-08 delete, tombstone, and binding repair implemented and verified against 8 acceptance criteria.
 
 ### Blockers/Concerns
 
@@ -82,5 +85,5 @@ Progress: [##########] 100%
 ## Session Continuity
 
 Last session: 2026-07-01
-Stopped at: P4-04 implemented and verified
+Stopped at: P5-08 implemented and verified
 Resume file: None

@@ -75,6 +75,17 @@
 - [ ] **P5-07-AC-8**: Clients apply `ROOM_DIFF` slot-aware from `changed` plus `slotClocks` without
       requiring `originRequestIds`.
 
+### P5 Delete Tombstone And Binding Repair
+
+- [ ] **P5-08-AC-1**: DeleteElementsCommand for a bound target removes the deleted record, records a tombstone, and clears every arrow binding that references the deleted element so no active arrow points at a dead id.
+- [ ] **P5-08-AC-2**: Delete repair emits full slot patches for repaired arrows, including binding and geometry slots, so peers applying the same CommittedChangeSet reach the same arrow state as the sender.
+- [ ] **P5-08-AC-3**: Create/import/replace paths must not resurrect an element id that is inside tombstone retention unless the replace/import path explicitly owns that behavior in a later phase.
+- [ ] **P5-08-AC-4**: Commands that exceed delete, repaired-arrow, or change-set limits reject with TOO_LARGE and leave document state unchanged.
+- [ ] **P5-08-AC-5**: Moving, resizing, or rotating a bound target recomputes affected arrow endpoint geometry in the same server clock as the target mutation.
+- [ ] **P5-08-AC-6**: Concurrent updates to startBinding and endBinding on the same arrow preserve both terminals and recompute geometry from server-current arrow and target state.
+- [ ] **P5-08-AC-7**: Binding to a missing or deleted target rejects with INVALID_BINDING_TARGET before commit.
+- [ ] **P5-08-AC-8**: A new delete request for an already tombstoned element rejects with ELEMENT_DELETED, while retrying the original delete request with the same actor/request id replays the original ACK.
+
 ## Out of Scope
 
 | Feature                                  | Reason                  |
@@ -125,11 +136,19 @@
 | P5-07-AC-6  | Phase 5.7 | Complete |
 | P5-07-AC-7  | Phase 5.7 | Complete |
 | P5-07-AC-8  | Phase 5.7 | Complete |
+| P5-08-AC-1  | Phase 5.8 | Complete |
+| P5-08-AC-2  | Phase 5.8 | Complete |
+| P5-08-AC-3  | Phase 5.8 | Complete |
+| P5-08-AC-4  | Phase 5.8 | Complete |
+| P5-08-AC-5  | Phase 5.8 | Complete |
+| P5-08-AC-6  | Phase 5.8 | Complete |
+| P5-08-AC-7  | Phase 5.8 | Complete |
+| P5-08-AC-8  | Phase 5.8 | Complete |
 
 **Coverage:**
 
-- v1 requirements: 38 total
-- Mapped to phases: 38
+- v1 requirements: 46 total
+- Mapped to phases: 46
 - Unmapped: 0
 
 ---

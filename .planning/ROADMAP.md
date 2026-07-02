@@ -21,6 +21,7 @@ project roadmap, phase order, and product scope remain canonical in `docs/SPECS.
 - Repo roadmap ID `P5-05` maps to GSD Phase `5.5`.
 - Repo roadmap ID `P5-06` maps to GSD Phase `5.6`.
 - Repo roadmap ID `P5-07` maps to GSD Phase `5.7`.
+- Repo roadmap ID `P5-08` maps to GSD Phase `5.8`.
 - The source of truth is `docs/SPECS.md` feature sections.
 
 - [x] **Phase 4.0: P4-00 Anonymous local board + Login to save** - Anonymous local-only board can be converted into a private saved document after login.
@@ -35,6 +36,7 @@ project roadmap, phase order, and product scope remain canonical in `docs/SPECS.
 - [x] **Phase 5.5: P5-05 Change sets, ack/reject/rebase & broadcast** - Shared/backend/client primitives carry committed slot changes through ACKs and broadcasts.
 - [x] **Phase 5.6: P5-06 Transactional persistence & idempotency** - Accepted saved-room sync commands commit atomically with DB clocks, persisted idempotency, durability policy, and unhealthy-room recovery.
 - [x] **Phase 5.7: P5-07 Load, reconnect & diff** - Saved-room load and reconnect hydrate/apply server-authoritative snapshot/diff payloads with room epoch, slot clocks, pending request statuses, and wipe-all fallback.
+- [x] **Phase 5.8: P5-08 Delete, tombstone & binding repair** - Saved-room deletes write tombstones and repair arrow bindings/geometry in the same authoritative change set.
 
 ## Phase Details
 
@@ -295,6 +297,26 @@ Plans:
 
 - [x] 05.7-01: Implement P5 snapshot/diff contracts, reconnect statuses, slot-aware client apply, and AC tests.
 
+### Phase 5.8: P5-08 Delete, tombstone & binding repair
+
+**Goal**: Saved-room delete and binding mutations keep tombstones, arrow bindings, and arrow geometry consistent through the server-authoritative sync path.
+**Depends on**: Phase 5.7
+**Source**: `docs/SPECS.md` `[P5-08]`
+**Canonical refs**: `docs/SPECS.md`, `specs/037-p5-08-delete-tombstone-binding-repair/acceptance.md`
+**Requirements**: [P5-08-AC-1, P5-08-AC-2, P5-08-AC-3, P5-08-AC-4, P5-08-AC-5, P5-08-AC-6, P5-08-AC-7, P5-08-AC-8]
+**Success Criteria** (what must be TRUE):
+
+1. Deleting an active bound target deletes the target, tombstones its id, and repairs affected arrows in the same change set.
+2. Binding updates validate target state, preserve the untouched terminal, and recompute arrow geometry from server-current state.
+3. Target transform/geometry changes repair bound arrows in the same server clock as the target mutation.
+4. Delete/binding/repair limit violations reject atomically without partial state changes.
+5. Tombstone retention prevents accidental resurrection and idempotent delete retry replays the original ACK.
+   **Plans**: 1 plan
+
+Plans:
+
+- [x] 05.8-01: Implement authoritative delete tombstones, binding update planning, arrow repair, and AC tests.
+
 ## Progress
 
 **Execution Order:**
@@ -314,3 +336,4 @@ Follow `docs/SPECS.md`; this bootstrap tracks active Phase 4 feature slices.
 | 5.5. P5-05 Change sets + ACK/broadcast           | 1/1            | Complete | 2026-07-02 |
 | 5.6. P5-06 Transactional persistence             | 3/3            | Complete | 2026-07-02 |
 | 5.7. P5-07 Load, reconnect & diff                | 1/1            | Complete | 2026-07-02 |
+| 5.8. P5-08 Delete, tombstone & binding repair    | 1/1            | Complete | 2026-07-02 |
