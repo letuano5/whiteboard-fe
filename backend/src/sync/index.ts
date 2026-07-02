@@ -12,6 +12,7 @@ export {
 } from './sync-room-limits.js';
 export type {
   SyncRoomActorContext,
+  SyncRoomCommitOutcome,
   SyncRoomExecutionResult,
   SyncRoomPlan,
   SyncRoomPlanner,

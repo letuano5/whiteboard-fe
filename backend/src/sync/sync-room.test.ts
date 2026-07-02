@@ -150,7 +150,9 @@ describe('SyncRoom', () => {
     const first = await room.execute(command, { actorId: 'actor-1' });
     const retry = await room.execute(command, { actorId: 'actor-1' });
 
-    expect(retry).toBe(first);
+    expect(first.replayed).toBe(false);
+    expect(retry.replayed).toBe(true);
+    expect(retry.changeSet).toBe(first.changeSet);
     expect(sideEffects).toBe(1);
     expect(room.getStateSnapshot().documentClock).toBe(1);
     expect(room.getStateSnapshot().processedRequests.size).toBe(1);

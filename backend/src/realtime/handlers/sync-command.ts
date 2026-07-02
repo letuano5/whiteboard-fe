@@ -41,10 +41,14 @@ export async function handleSyncCommand(
     };
 
     mirrorSyncRoomState(deps, command.roomId, room);
-    deps.autosave.markDirty(command.roomId);
 
+    // Idempotent replays re-send the original ACK to the caller but must not
+    // re-broadcast to peers or re-mark the room dirty: the state did not change.
     socket.emit(WS_EVENTS.SYNC_ACK, ack);
-    socket.to(command.roomId).emit(WS_EVENTS.SYNC_BROADCAST, broadcast);
+    if (!result.replayed) {
+      deps.autosave.markDirty(command.roomId);
+      socket.to(command.roomId).emit(WS_EVENTS.SYNC_BROADCAST, broadcast);
+    }
   } catch (error) {
     emitReject(socket, deps, command, error);
   }

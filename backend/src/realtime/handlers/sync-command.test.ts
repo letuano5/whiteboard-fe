@@ -55,6 +55,26 @@ describe('handleSyncCommand', () => {
     expect(markDirty).toHaveBeenCalledWith('room-1');
   });
 
+  it('replays the ACK on a duplicate request without re-broadcasting or re-marking dirty', async () => {
+    const emit = vi.fn();
+    const peerEmit = vi.fn();
+    const socket = makeSocket(emit, peerEmit);
+    const deps = makeDeps(markDirty);
+    const command = createCommand('create-dup', makeElement({ id: 'dup-shape' }));
+
+    await handleSyncCommand(socket, deps, command);
+    await handleSyncCommand(socket, deps, command);
+
+    const ackCalls = emit.mock.calls.filter(([event]) => event === WS_EVENTS.SYNC_ACK);
+    expect(ackCalls).toHaveLength(2);
+    expect(ackCalls[1][1]).toEqual(
+      expect.objectContaining({ status: 'commit', requestId: 'create-dup', serverClock: 1 }),
+    );
+    // The replay must not double-commit side effects.
+    expect(peerEmit).toHaveBeenCalledTimes(1);
+    expect(markDirty).toHaveBeenCalledTimes(1);
+  });
+
   it('rejects viewer commands as sync ACKs without broadcasting or marking dirty', async () => {
     const emit = vi.fn();
     const peerEmit = vi.fn();

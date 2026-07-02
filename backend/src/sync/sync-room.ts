@@ -1,71 +1,34 @@
-import type {
-  ChangeSetReason,
-  CommittedChangeSet,
-  EffectiveRoomRole,
-  Element,
-  SlotPatch,
-  SlotClockUpdate,
-  SyncCommand as SharedSyncCommand,
-  SyncClock,
-  SyncOrderEntry,
-} from '@vdt/shared';
-import { SYNC_PROTOCOL_VERSION, SYNC_SCHEMA_VERSION } from '@vdt/shared';
+import type { CommittedChangeSet, Element, SlotClockUpdate, SyncClock } from '@vdt/shared';
+import type { SyncCommand as SharedSyncCommand } from '@vdt/shared';
 import { RoomActor } from './room-actor.js';
+import {
+  assertChangeSetWithinLimit,
+  createChangeSet,
+  toSlotClockKey,
+} from './sync-room-change-set.js';
 import { SyncRoomCommandError } from './sync-room-errors.js';
 import { MAX_CHANGESET_BYTES } from './sync-room-limits.js';
+import { toPayloadHash } from './sync-room-payload-hash.js';
 import { defaultSyncRoomPlanner } from './sync-room-planner.js';
+import type {
+  SyncRoomActorContext,
+  SyncRoomCommitOutcome,
+  SyncRoomExecutionResult,
+  SyncRoomPlanner,
+  SyncRoomReferenceValidator,
+  SyncRoomStateSnapshot,
+} from './sync-room-contracts.js';
 
-export type SyncRoomActorContext = {
-  actorId: string | null;
-  effectiveRole?: EffectiveRoomRole;
-};
-
-export interface SyncRoomStateSnapshot {
-  elements: ReadonlyMap<string, Element>;
-  documentClock: SyncClock;
-  roomEpoch: SyncClock;
-  slotClocks: ReadonlyMap<string, SyncClock>;
-  tombstoneElementIds: ReadonlySet<string>;
-  processedRequests: ReadonlyMap<string, SyncRoomExecutionResult>;
-}
-
-export interface SyncRoomPlan {
-  created?: Element[];
-  patched?: CommittedChangeSet['patched'];
-  deleted?: string[];
-  slotClocks?: SlotClockUpdate[];
-  normalizedOrder?: SyncOrderEntry[];
-  roomEpoch?: SyncClock;
-  reason?: ChangeSetReason;
-  commit?: () => void | Promise<void>;
-  afterApply?: (changeSet: CommittedChangeSet) => void | Promise<void>;
-}
-
-export interface SyncRoomPlannerContext {
-  command: SharedSyncCommand;
-  actorContext: SyncRoomActorContext;
-  state: SyncRoomStateSnapshot;
-  serverClock: SyncClock;
-  referenceValidator?: SyncRoomReferenceValidator;
-}
-
-type MaybePromise<T> = T | Promise<T>;
-export type SyncRoomPlanner = (context: SyncRoomPlannerContext) => MaybePromise<SyncRoomPlan>;
-
-export interface SyncRoomExecutionResult {
-  command: SharedSyncCommand;
-  actorId: string | null;
-  changeSet: CommittedChangeSet;
-}
-
-interface SyncRoomCriticalSectionResult {
-  result: SyncRoomExecutionResult;
-  afterApply?: (changeSet: CommittedChangeSet) => void | Promise<void>;
-}
-
-export interface SyncRoomReferenceValidator {
-  canUseAssetSrc?: (src: string, actorContext: SyncRoomActorContext) => boolean;
-}
+export type {
+  SyncRoomActorContext,
+  SyncRoomCommitOutcome,
+  SyncRoomExecutionResult,
+  SyncRoomPlan,
+  SyncRoomPlanner,
+  SyncRoomPlannerContext,
+  SyncRoomReferenceValidator,
+  SyncRoomStateSnapshot,
+} from './sync-room-contracts.js';
 
 interface SyncRoomOptions {
   roomId: string;
@@ -77,6 +40,12 @@ interface SyncRoomOptions {
   planner?: SyncRoomPlanner;
   referenceValidator?: SyncRoomReferenceValidator;
   maxChangeSetBytes?: number;
+}
+
+interface SyncRoomCriticalSectionResult {
+  result: SyncRoomExecutionResult;
+  replayed: boolean;
+  afterApply?: (changeSet: CommittedChangeSet) => void | Promise<void>;
 }
 
 export class SyncRoom {
@@ -108,18 +77,18 @@ export class SyncRoom {
   execute(
     command: SharedSyncCommand,
     actorContext: SyncRoomActorContext,
-  ): Promise<SyncRoomExecutionResult> {
+  ): Promise<SyncRoomCommitOutcome> {
     if (command.roomId !== this.options.roomId) {
       throw new Error(`Room mismatch: ${command.roomId} !== ${this.options.roomId}.`);
     }
 
     return this.actor
       .enqueue(() => this.executeCriticalSection(command, actorContext))
-      .then(async ({ result, afterApply }) => {
+      .then(async ({ result, afterApply, replayed }) => {
         if (afterApply) {
           await this.enqueueOutput(() => afterApply(result.changeSet));
         }
-        return result;
+        return { ...result, replayed };
       });
   }
 
@@ -144,7 +113,7 @@ export class SyncRoom {
       if (toPayloadHash(processed.command) !== toPayloadHash(command)) {
         throw new SyncRoomCommandError('DUPLICATE_REQUEST_CONFLICT');
       }
-      return { result: processed };
+      return { result: processed, replayed: true };
     }
 
     assertCanMutate(actorContext);
@@ -168,7 +137,7 @@ export class SyncRoom {
       changeSet,
     };
     this.processedRequests.set(idempotencyKey, result);
-    return { result, afterApply: plan.afterApply };
+    return { result, replayed: false, afterApply: plan.afterApply };
   }
 
   private applyCommitted(changeSet: CommittedChangeSet): void {
@@ -207,104 +176,6 @@ function assertCanMutate(actorContext: SyncRoomActorContext): void {
   }
 }
 
-function assertChangeSetWithinLimit(changeSet: CommittedChangeSet, maxBytes: number): void {
-  if (JSON.stringify(changeSet).length > maxBytes) {
-    throw new SyncRoomCommandError('TOO_LARGE');
-  }
-}
-
-function createChangeSet(
-  command: SharedSyncCommand,
-  actorContext: SyncRoomActorContext,
-  serverClock: SyncClock,
-  roomEpoch: SyncClock,
-  plan: SyncRoomPlan,
-): CommittedChangeSet {
-  const patched = plan.patched ?? [];
-  const slotClocks = plan.slotClocks ?? [];
-  const slotPatches = toCommittedSlotPatches(patched, slotClocks);
-  const created = plan.created ?? [];
-  const deleted = plan.deleted ?? [];
-  const reason = plan.reason ?? inferChangeSetReason(command);
-
-  return {
-    protocolVersion: SYNC_PROTOCOL_VERSION,
-    schemaVersion: SYNC_SCHEMA_VERSION,
-    roomId: command.roomId,
-    requestId: command.requestId,
-    serverClock,
-    roomEpoch: plan.roomEpoch ?? roomEpoch,
-    originActorId: actorContext.actorId,
-    originRequestIds: [command.requestId],
-    reason,
-    slotPatches,
-    puts: reason === 'create' || reason === 'replace_document' ? created : [],
-    deletes: deleted,
-    created,
-    patched,
-    deleted,
-    slotClocks,
-    normalizedOrder: plan.normalizedOrder ?? [],
-  };
-}
-
-function toCommittedSlotPatches(
-  patched: CommittedChangeSet['patched'],
-  slotClocks: SlotClockUpdate[],
-): CommittedChangeSet['slotPatches'] {
-  const clocks = new Map(
-    slotClocks.map((slotClock) => [
-      toSlotClockKey(slotClock.elementId, slotClock.slot),
-      slotClock.clock,
-    ]),
-  );
-  const slotPatches: Array<SlotPatch & { clock: SyncClock }> = [];
-  for (const entry of patched) {
-    for (const patch of entry.patches) {
-      const clock = clocks.get(toSlotClockKey(patch.elementId, patch.slot));
-      if (clock === undefined) continue;
-      slotPatches.push({ ...patch, clock });
-    }
-  }
-  return slotPatches;
-}
-
-function inferChangeSetReason(command: SharedSyncCommand): ChangeSetReason {
-  switch (command.kind) {
-    case 'create-element':
-      return 'create';
-    case 'patch-slots':
-      return 'patch_clean';
-    case 'delete-elements':
-      return 'delete';
-    case 'replace-document':
-      return 'replace_document';
-    case 'update-arrow-binding':
-      return 'binding_update';
-    default:
-      return 'repair';
-  }
-}
-
 function toProcessedRequestKey(actorId: string | null, requestId: string): string {
   return `${actorId ?? 'anonymous'}:${requestId}`;
-}
-
-function toSlotClockKey(elementId: string, slot: string): string {
-  return `${elementId}:${slot}`;
-}
-
-function toPayloadHash(value: unknown): string {
-  return JSON.stringify(toCanonicalValue(value));
-}
-
-function toCanonicalValue(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(toCanonicalValue);
-  if (value === null || typeof value !== 'object') return value;
-
-  return Object.fromEntries(
-    Object.entries(value)
-      .sort(([left], [right]) => left.localeCompare(right))
-      .map(([key, entryValue]) => [key, toCanonicalValue(entryValue)]),
-  );
 }
