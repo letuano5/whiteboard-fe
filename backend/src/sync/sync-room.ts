@@ -1,7 +1,9 @@
 import type {
+  ChangeSetReason,
   CommittedChangeSet,
   EffectiveRoomRole,
   Element,
+  SlotPatch,
   SlotClockUpdate,
   SyncCommand as SharedSyncCommand,
   SyncClock,
@@ -34,6 +36,7 @@ export interface SyncRoomPlan {
   slotClocks?: SlotClockUpdate[];
   normalizedOrder?: SyncOrderEntry[];
   roomEpoch?: SyncClock;
+  reason?: ChangeSetReason;
   commit?: () => void | Promise<void>;
   afterApply?: (changeSet: CommittedChangeSet) => void | Promise<void>;
 }
@@ -135,7 +138,7 @@ export class SyncRoom {
       serverClock,
       referenceValidator: this.options.referenceValidator,
     });
-    const changeSet = createChangeSet(command, serverClock, this.roomEpoch, plan);
+    const changeSet = createChangeSet(command, actorContext, serverClock, this.roomEpoch, plan);
     assertChangeSetWithinLimit(changeSet, this.options.maxChangeSetBytes ?? MAX_CHANGESET_BYTES);
 
     await plan.commit?.();
@@ -186,10 +189,17 @@ function assertChangeSetWithinLimit(changeSet: CommittedChangeSet, maxBytes: num
 
 function createChangeSet(
   command: SharedSyncCommand,
+  actorContext: SyncRoomActorContext,
   serverClock: SyncClock,
   roomEpoch: SyncClock,
   plan: SyncRoomPlan,
 ): CommittedChangeSet {
+  const patched = plan.patched ?? [];
+  const slotClocks = plan.slotClocks ?? [];
+  const slotPatches = toCommittedSlotPatches(patched, slotClocks);
+  const created = plan.created ?? [];
+  const deleted = plan.deleted ?? [];
+
   return {
     protocolVersion: SYNC_PROTOCOL_VERSION,
     schemaVersion: SYNC_SCHEMA_VERSION,
@@ -197,12 +207,56 @@ function createChangeSet(
     requestId: command.requestId,
     serverClock,
     roomEpoch: plan.roomEpoch ?? roomEpoch,
-    created: plan.created ?? [],
-    patched: plan.patched ?? [],
-    deleted: plan.deleted ?? [],
-    slotClocks: plan.slotClocks ?? [],
+    originActorId: actorContext.actorId,
+    originRequestIds: [command.requestId],
+    reason: plan.reason ?? inferChangeSetReason(command),
+    slotPatches,
+    puts: [...created, ...patched.map((entry) => entry.element)],
+    deletes: deleted,
+    created,
+    patched,
+    deleted,
+    slotClocks,
     normalizedOrder: plan.normalizedOrder ?? [],
   };
+}
+
+function toCommittedSlotPatches(
+  patched: CommittedChangeSet['patched'],
+  slotClocks: SlotClockUpdate[],
+): CommittedChangeSet['slotPatches'] {
+  const clocks = new Map(
+    slotClocks.map((slotClock) => [
+      toSlotClockKey(slotClock.elementId, slotClock.slot),
+      slotClock.clock,
+    ]),
+  );
+  const slotPatches: Array<SlotPatch & { clock: SyncClock }> = [];
+  for (const entry of patched) {
+    for (const patch of entry.patches) {
+      const clock = clocks.get(toSlotClockKey(patch.elementId, patch.slot));
+      if (clock === undefined) continue;
+      slotPatches.push({ ...patch, clock });
+    }
+  }
+  return slotPatches;
+}
+
+function inferChangeSetReason(command: SharedSyncCommand): ChangeSetReason {
+  switch (command.kind) {
+    case 'create-element':
+      return 'create';
+    case 'patch-slots':
+      return 'patch_clean';
+    case 'delete-elements':
+      return 'delete';
+    case 'replace-document':
+      return 'replace_document';
+    case 'update-arrow-binding':
+      return 'binding_update';
+    default:
+      return 'repair';
+  }
 }
 
 function toProcessedRequestKey(actorId: string | null, requestId: string): string {

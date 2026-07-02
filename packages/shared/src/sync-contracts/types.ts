@@ -162,6 +162,19 @@ export interface SlotClockUpdate {
   clock: SyncClock;
 }
 
+export type ChangeSetReason =
+  | 'create'
+  | 'patch_clean'
+  | 'patch_lww_conflict'
+  | 'binding_update'
+  | 'delete'
+  | 'replace_document'
+  | 'repair';
+
+export type CommittedSlotPatch<S extends SyncSlot = SyncSlot> = SlotPatch<S> & {
+  clock: SyncClock;
+};
+
 export interface CommittedChangeSet {
   protocolVersion: typeof SYNC_PROTOCOL_VERSION;
   schemaVersion: typeof SYNC_SCHEMA_VERSION;
@@ -169,11 +182,53 @@ export interface CommittedChangeSet {
   requestId: string;
   serverClock: SyncClock;
   roomEpoch: SyncClock;
+  originActorId: string | null;
+  originRequestIds: string[];
+  reason: ChangeSetReason;
+  slotPatches: CommittedSlotPatch[];
+  puts: Element[];
+  deletes: string[];
   created: Element[];
   patched: Array<{ elementId: string; patches: SlotPatch[]; element: Element }>;
   deleted: string[];
   slotClocks: SlotClockUpdate[];
   normalizedOrder: SyncOrderEntry[];
+}
+
+export type SyncAckStatus = 'commit' | 'rebase' | 'reject';
+
+interface SyncAckBase {
+  protocolVersion: typeof SYNC_PROTOCOL_VERSION;
+  schemaVersion: typeof SYNC_SCHEMA_VERSION;
+  roomId: string;
+  requestId: string;
+  serverClock: SyncClock;
+}
+
+export interface SyncCommitAck extends SyncAckBase {
+  status: 'commit';
+  changeSet: CommittedChangeSet;
+}
+
+export interface SyncRebaseAck extends SyncAckBase {
+  status: 'rebase';
+  changeSet: CommittedChangeSet;
+}
+
+export interface SyncRejectAck extends SyncAckBase {
+  status: 'reject';
+  reason: string;
+  serverChangeSet?: CommittedChangeSet;
+}
+
+export type SyncAck = SyncCommitAck | SyncRebaseAck | SyncRejectAck;
+
+export interface SyncBroadcast {
+  protocolVersion: typeof SYNC_PROTOCOL_VERSION;
+  schemaVersion: typeof SYNC_SCHEMA_VERSION;
+  roomId: string;
+  serverClock: SyncClock;
+  changeSet: CommittedChangeSet;
 }
 
 export interface SyncValidationContext {

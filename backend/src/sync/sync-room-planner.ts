@@ -90,10 +90,15 @@ function planPatchSlots(context: SyncRoomPlannerContext, command: PatchSlotsComm
     string,
     { elementId: string; patches: SlotPatch[]; element: Element }
   >();
+  let hasLwwConflict = false;
 
   for (const patch of command.patches) {
     const currentElement = patchedByElement.get(patch.elementId)?.element;
     const element = currentElement ?? getActiveElement(context, patch.elementId);
+    const currentClock = context.state.slotClocks.get(`${patch.elementId}:${patch.slot}`) ?? 0;
+    if (patch.baseClock < currentClock) {
+      hasLwwConflict = true;
+    }
     validateSlotForElement(context, element, patch);
     const patchedElement = applySlotPatch(element, patch);
     const entry = patchedByElement.get(patch.elementId) ?? {
@@ -107,6 +112,7 @@ function planPatchSlots(context: SyncRoomPlannerContext, command: PatchSlotsComm
   }
 
   return {
+    reason: hasLwwConflict ? 'patch_lww_conflict' : 'patch_clean',
     patched: [...patchedByElement.values()],
     slotClocks: command.patches.map((patch) => ({
       elementId: patch.elementId,

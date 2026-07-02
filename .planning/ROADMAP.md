@@ -18,6 +18,7 @@ project roadmap, phase order, and product scope remain canonical in `docs/SPECS.
 - Repo roadmap ID `P5-02` maps to GSD Phase `5.2`.
 - Repo roadmap ID `P5-03` maps to GSD Phase `5.3`.
 - Repo roadmap ID `P5-04` maps to GSD Phase `5.4`.
+- Repo roadmap ID `P5-05` maps to GSD Phase `5.5`.
 - The source of truth is `docs/SPECS.md` feature sections.
 
 - [x] **Phase 4.0: P4-00 Anonymous local board + Login to save** - Anonymous local-only board can be converted into a private saved document after login.
@@ -29,6 +30,7 @@ project roadmap, phase order, and product scope remain canonical in `docs/SPECS.
 - [x] **Phase 5.2: P5-02 Shared sync contracts** - Shared P5 slot-level sync contracts, field mapping, command envelopes, and validation helpers are defined in `@vdt/shared`.
 - [x] **Phase 5.3: P5-03 Server-authoritative SyncRoom + room actor** - Saved-room commands execute through backend hot state and per-room serialized actors.
 - [x] **Phase 5.4: P5-04 Conflict resolution & validation** - Backend sync planning enforces slot-level conflict rules, delete-wins semantics, permission boundaries, reference validation, linear geometry rules, and command limits.
+- [x] **Phase 5.5: P5-05 Change sets, ack/reject/rebase & broadcast** - Shared/backend/client primitives carry committed slot changes through ACKs and broadcasts.
 
 ## Phase Details
 
@@ -215,6 +217,27 @@ Plans:
 
 - [x] 05.4-01: Implement conflict resolution, validation rules, limit checks, and AC tests.
 
+### Phase 5.5: P5-05 Change sets, ack/reject/rebase & broadcast
+
+**Goal**: Committed sync changes are represented as canonical change sets and delivered through
+ACK/reject/rebase responses and broadcasts, with client reconciliation handling pending requests,
+stale clocks, gaps, and slot-only updates.
+**Depends on**: Phase 5.4
+**Source**: `docs/SPECS.md` `[P5-05]`
+**Canonical refs**: `docs/SPECS.md`, `specs/034-p5-05-change-sets-ack-broadcast/acceptance.md`
+**Requirements**: [P5-05-AC-1, P5-05-AC-2, P5-05-AC-3, P5-05-AC-4, P5-05-AC-5]
+**Success Criteria** (what must be TRUE):
+
+1. Backend committed change sets expose reason, origin, slot patch, put, delete, and clock metadata.
+2. Sync ACKs distinguish `commit`, `rebase`, and `reject` and always carry protocol/schema/request/clock metadata.
+3. Broadcasts carry committed change sets and may clear same-origin pending requests when ACK is missing.
+4. Client reconciliation ignores stale clocks, requests diff on gaps, and applies slot-only change sets without whole-element replacement.
+   **Plans**: 1 plan
+
+Plans:
+
+- [x] 05.5-01: Implement change sets, ACK/reject/rebase, broadcast primitives, and AC tests.
+
 ## Progress
 
 **Execution Order:**
@@ -231,3 +254,4 @@ Follow `docs/SPECS.md`; this bootstrap tracks active Phase 4 feature slices.
 | 5.2. P5-02 Shared sync contracts                 | 1/1            | Complete | 2026-07-02 |
 | 5.3. P5-03 Server-authoritative SyncRoom         | 1/1            | Complete | 2026-07-02 |
 | 5.4. P5-04 Conflict resolution & validation      | 1/1            | Complete | 2026-07-02 |
+| 5.5. P5-05 Change sets + ACK/broadcast           | 1/1            | Complete | 2026-07-02 |

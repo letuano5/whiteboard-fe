@@ -1,4 +1,4 @@
-import type { Element } from '../../types/shared';
+import type { Element, SyncAck, SyncBroadcast } from '../../types/shared';
 import type { WhiteboardSocket } from './types';
 
 interface SocketClientState {
@@ -15,6 +15,13 @@ interface SocketClientState {
   hasJoined: boolean;
   reconnectPending: boolean;
   pendingQueue: Element[];
+  pendingSyncRequests: PendingSyncRequest[];
+  bufferedSyncEvents: Array<SyncAck | SyncBroadcast>;
+}
+
+export interface PendingSyncRequest {
+  requestId: string;
+  actorId: string | null;
 }
 
 const state: SocketClientState = {
@@ -31,6 +38,8 @@ const state: SocketClientState = {
   hasJoined: false,
   reconnectPending: false,
   pendingQueue: [],
+  pendingSyncRequests: [],
+  bufferedSyncEvents: [],
 };
 
 export function getSocketState(): SocketClientState {
@@ -47,6 +56,8 @@ export function setLastServerClock(documentClock: number): void {
 
 export function resetReconnectState(): void {
   state.pendingQueue = [];
+  state.pendingSyncRequests = [];
+  state.bufferedSyncEvents = [];
   state.hasJoined = false;
   state.reconnectPending = false;
 }
