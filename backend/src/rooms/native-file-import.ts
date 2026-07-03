@@ -18,6 +18,7 @@ import {
 } from '../auth/index.js';
 import { executeSyncCommand, type SyncRoom } from '../sync/index.js';
 import { canMutateRoom, resolveRoomAccess, RoomAccessError } from './room-roles.js';
+import { captureRoomSnapshot } from './room-snapshots.js';
 
 interface NativeFileImportDeps {
   authVerifier: AuthVerifier;
@@ -125,6 +126,12 @@ async function executeNativeFileReplace(
   opts: RoomStateMirrors = {},
   report: NativeFileImportReport = createNativeFileReport(document.elements.length),
 ): Promise<NativeFileImportResponse> {
+  await captureRoomSnapshot(db as never, {
+    roomId,
+    reason: 'import_safety',
+    createdBy: user.id,
+  });
+
   const result = await executeSyncCommand(
     {
       kind: 'native-file-import',

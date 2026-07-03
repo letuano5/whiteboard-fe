@@ -65,6 +65,11 @@ export interface PrismaSyncRoomPersistenceClient {
   $transaction: <T>(task: (tx: PrismaSyncRoomTransaction) => Promise<T>) => Promise<T>;
 }
 
+interface PrismaSyncRoomPersistenceOptions {
+  afterCommit?: (commit: SyncRoomPersistenceCommit) => Promise<void> | void;
+  logger?: Pick<Console, 'error'>;
+}
+
 export interface PrismaSyncRoomTransaction {
   $executeRawUnsafe: (query: string) => Promise<unknown>;
   room: {
@@ -139,6 +144,7 @@ interface RecordWrite {
 
 export function createPrismaSyncRoomPersistence(
   db: PrismaSyncRoomPersistenceClient & Pick<PrismaSyncRoomTransaction, 'processedRequest'>,
+  options: PrismaSyncRoomPersistenceOptions = {},
 ): SyncRoomPersistence {
   return {
     async findProcessedRequest({ roomId, actorId, requestId }) {
@@ -161,6 +167,13 @@ export function createPrismaSyncRoomPersistence(
     },
     async commitChangeSet(commit) {
       await db.$transaction(async (tx) => commitPrismaChangeSet(tx, commit));
+      if (options.afterCommit) {
+        try {
+          await options.afterCommit(commit);
+        } catch (error) {
+          (options.logger ?? console).error('[sync-room-persistence] afterCommit failed:', error);
+        }
+      }
     },
     async reloadState({ roomId }) {
       return db.$transaction(async (tx) => {

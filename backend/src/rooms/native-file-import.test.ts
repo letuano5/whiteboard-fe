@@ -88,8 +88,9 @@ beforeEach(() => {
 describe('native file import', () => {
   it('persists editor imports through the sync module entrypoint', async () => {
     // @covers AC-2
+    // @covers AC-6 (P4-07)
     vi.mocked(resolveRoomAccess).mockResolvedValue(makeAccessPayload('editor'));
-    const db = {} as PrismaClient;
+    const { db, snapshotCreate } = buildImportDb();
 
     await expect(importNativeFileIntoRoom(db, 'room-1', user, document)).resolves.toEqual({
       importedElementCount: 1,
@@ -113,6 +114,14 @@ describe('native file import', () => {
         db,
       },
     );
+    expect(snapshotCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        roomId: 'room-1',
+        reason: 'import_safety',
+        records: document.elements,
+      }),
+      select: { id: true },
+    });
   });
 
   it('rejects viewer imports before persistence', async () => {
@@ -214,4 +223,19 @@ function makeAccessPayload(effectiveRole: 'owner' | 'editor' | 'viewer'): RoomAc
     members: [],
     invitations: [],
   };
+}
+
+function buildImportDb() {
+  const snapshotCreate = vi.fn().mockResolvedValue({ id: 'import-safety-1' });
+  const roomFindUnique = vi.fn().mockResolvedValue({
+    documentClock: 2n,
+    roomEpoch: 1n,
+    records: document.elements.map((state) => ({ state })),
+    tombstones: [],
+  });
+  const db = {
+    room: { findUnique: roomFindUnique },
+    snapshot: { create: snapshotCreate },
+  } as unknown as PrismaClient;
+  return { db, snapshotCreate, roomFindUnique };
 }

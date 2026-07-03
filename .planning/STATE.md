@@ -2,10 +2,10 @@
 gsd_state_version: '1.0'
 status: complete
 progress:
-  total_phases: 20
-  completed_phases: 20
-  total_plans: 23
-  completed_plans: 23
+  total_phases: 21
+  completed_phases: 21
+  total_plans: 24
+  completed_plans: 24
   percent: 100
 ---
 
@@ -16,14 +16,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-30)
 
 **Core value:** Users can create tactical whiteboards without losing work, then collaborate or persist documents when the workflow calls for it.
-**Current focus:** Phase 3.34: P3C-04 Eraser (completed)
+**Current focus:** Phase 4.7: P4-07 Version history (completed)
 
 ## Current Position
 
-Phase: 3.34 of active GSD bootstrap (P3C-04 Eraser)
+Phase: 4.7 of active GSD bootstrap (P4-07 Version history)
 Plan: 1 of 1 in current phase
 Status: Complete
-Last activity: 2026-07-02 - Completed P3C-04 eraser implementation and verification.
+Last activity: 2026-07-03 - Completed P4-07 automatic/safety snapshots and owner restore.
 
 Progress: [##########] 100%
 
@@ -39,6 +39,8 @@ Progress: [##########] 100%
 - [Phase 4.2]: Server computes both `baseRole` and `effectiveRole`; frontend role controls are only UX.
 - [Phase 4.3]: Realtime auto-promotion after editor leave is optional; rejoin/reload may claim a newly available editor slot.
 - [Phase 4.4]: Native `.vdt.json` is the only P4-04 file format; Excalidraw/draw.io/PNG/SVG belong to P4-05.
+- [Phase 4.7]: Manual snapshot creation is deferred; version history uses automatic interval snapshots plus import/restore safety snapshots.
+- [Phase 4.7]: Snapshot restore is owner-only and must run through `ReplaceDocumentCommand`/`SyncRoom`, broadcasting existing `ROOM_REPLACED`.
 - [Phase 5.1]: P5-01 establishes a backend sync module boundary first; P5-02 owns shared sync contracts, so this phase keeps legacy `ELEMENT_UPDATE` as a compatibility adapter while moving saved-room mutation execution behind `executeSyncCommand`.
 - [Phase 5.2]: P5-02 defines shared P5 protocol contracts in `@vdt/shared`; actor identity remains server context and is not trusted from command payloads.
 - [Phase 5.2]: Direct `order` patching is invalid in this phase; ordering changes use `ReorderElementsCommand`.
@@ -83,6 +85,7 @@ Progress: [##########] 100%
 - P4-02 sharing access modes, invite claim, and backend permission enforcement are implemented and verified.
 - P4-03 room lock, participant capacity, editor capacity, and effective-role presence are implemented and verified.
 - P4-04 native file export/import implemented and verified.
+- P4-07 version history snapshots and owner restore implemented and verified.
 - P5-01 backend sync module boundary implemented and verified.
 - P5-02 shared sync contracts implemented and verified against 8 acceptance criteria.
 - P5-03 server-authoritative `SyncRoom` implemented and verified against 3 acceptance criteria.

@@ -7,6 +7,7 @@ import {
   type RoomReplacedPayload,
 } from '@vdt/shared';
 import { getRoomClock, loadRoomElements } from '../persistence/room-repository.js';
+import { captureIntervalSnapshotForCommit } from '../rooms/room-snapshots.js';
 import { RoomActorRegistry } from './room-actor.js';
 import { SyncRoom } from './sync-room.js';
 import { getOrCreateSyncRoom } from './sync-room-registry.js';
@@ -201,6 +202,14 @@ async function resolveReplaceTargetRoom(
     tombstoneElementIds: loaded.tombstoneElementIds,
     persistence: createPrismaSyncRoomPersistence(
       actorContext.db as unknown as Parameters<typeof createPrismaSyncRoomPersistence>[0],
+      {
+        afterCommit: async (commit) => {
+          await captureIntervalSnapshotForCommit(
+            actorContext.db as unknown as Parameters<typeof captureIntervalSnapshotForCommit>[0],
+            commit,
+          );
+        },
+      },
     ),
   });
 }

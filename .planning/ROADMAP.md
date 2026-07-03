@@ -14,6 +14,7 @@ project roadmap, phase order, and product scope remain canonical in `docs/SPECS.
 - Repo roadmap ID `P4-02` maps to GSD Phase `4.2`.
 - Repo roadmap ID `P4-03` maps to GSD Phase `4.3`.
 - Repo roadmap ID `P4-04` maps to GSD Phase `4.4`.
+- Repo roadmap ID `P4-07` maps to GSD Phase `4.7`.
 - Repo roadmap ID `P5-01` maps to GSD Phase `5.1`.
 - Repo roadmap ID `P5-02` maps to GSD Phase `5.2`.
 - Repo roadmap ID `P5-03` maps to GSD Phase `5.3`.
@@ -40,6 +41,7 @@ project roadmap, phase order, and product scope remain canonical in `docs/SPECS.
 - [x] **Phase 4.2: P4-02 Sharing, public/private access, invited users** - Owners can share saved documents by link or invite while the server enforces effective room roles.
 - [x] **Phase 4.3: P4-03 Room lock + admission control** - Owners can lock saved rooms and the server enforces participant/editor capacity through effective roles.
 - [x] **Phase 4.4: P4-04 Native file lifecycle: save/load `.vdt.json`** - Users can export and import the native backup format for local boards and permitted saved documents.
+- [x] **Phase 4.7: P4-07 Version history (snapshot) + owner restore** - Saved documents keep automatic/safety server snapshots and owners can restore snapshots through the authoritative replace path.
 - [x] **Phase 5.1: P5-01 Module boundary & legacy removal** - Saved-room writes are routed through a backend sync module entrypoint instead of socket/import handlers mutating document state directly.
 - [x] **Phase 5.2: P5-02 Shared sync contracts** - Shared P5 slot-level sync contracts, field mapping, command envelopes, and validation helpers are defined in `@vdt/shared`.
 - [x] **Phase 5.3: P5-03 Server-authoritative SyncRoom + room actor** - Saved-room commands execute through backend hot state and per-room serialized actors.
@@ -243,6 +245,29 @@ Plans:
 Plans:
 
 - [x] 04.4-01: Implement native file export/import contract, local/saved import flows, UI, and AC tests.
+
+### Phase 4.7: P4-07 Version history (snapshot) + owner restore
+
+**Goal**: Saved documents keep automatic interval snapshots and import/restore safety snapshots,
+and owners can restore snapshots through the existing authoritative replace path.
+**Depends on**: Phase 4.4, Phase 5.9
+**Source**: `docs/SPECS.md` `[P4-07]`
+**Canonical refs**: `docs/SPECS.md`, `specs/045-p4-07-version-history/acceptance.md`
+**Requirements**: [P4-07-AC-1, P4-07-AC-2, P4-07-AC-3, P4-07-AC-4, P4-07-AC-5, P4-07-AC-6, P4-07-AC-7, P4-07-AC-8]
+**Success Criteria** (what must be TRUE):
+
+1. Saved-room users can list snapshot metadata from the server.
+2. Owners can restore a snapshot only after explicit confirmation.
+3. Restore runs through `ReplaceDocumentCommand`/`SyncRoom` and broadcasts `ROOM_REPLACED`.
+4. Import and restore write safety snapshots before replacing the document.
+5. Backend committed changes create interval snapshots after the 30s/clock threshold.
+6. Non-owner restore attempts are rejected server-side.
+7. `ROOM_REPLACED` clears pending client work and undo/redo history.
+   **Plans**: 1 plan
+
+Plans:
+
+- [x] 04.7-01: Implement snapshot persistence, interval/safety capture, owner restore API, history UI, and AC tests.
 
 ### Phase 5.1: P5-01 Module boundary & legacy removal
 
@@ -495,6 +520,7 @@ Follow `docs/SPECS.md`; this bootstrap tracks active Phase 4 feature slices.
 | 4.2. P4-02 Sharing, public/private access        | 1/1            | Complete | 2026-06-30 |
 | 4.3. P4-03 Room lock + admission control         | 1/1            | Complete | 2026-07-01 |
 | 4.4. P4-04 Native file lifecycle                 | 1/1            | Complete | 2026-07-01 |
+| 4.7. P4-07 Version history + owner restore       | 1/1            | Complete | 2026-07-03 |
 | 5.1. P5-01 Module boundary & legacy removal      | 1/1            | Complete | 2026-07-02 |
 | 5.2. P5-02 Shared sync contracts                 | 1/1            | Complete | 2026-07-02 |
 | 5.3. P5-03 Server-authoritative SyncRoom         | 1/1            | Complete | 2026-07-02 |

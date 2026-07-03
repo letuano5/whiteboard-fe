@@ -2,6 +2,7 @@ import type { CommittedChangeSet, Element, SyncAck, SyncBroadcast } from '../../
 import { SYNC_PROTOCOL_VERSION, SYNC_SCHEMA_VERSION, WS_EVENTS } from '../../types/shared';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useElementsStore } from '../../store/elements.store';
+import { useHistoryStore } from '../../store/history.store';
 import {
   applyRoomDiff,
   applyRoomReplaced,
@@ -15,6 +16,7 @@ import { getKnownSlotClock, getSocketState, setLastServerClock, setRoomEpoch } f
 
 beforeEach(() => {
   useElementsStore.setState({ elements: [] });
+  useHistoryStore.setState({ undoStack: [], redoStack: [], isApplying: false });
   setLastServerClock(0);
   const state = getSocketState();
   state.pendingSyncRequests = [];
@@ -223,10 +225,16 @@ describe('P5 reconciliation pending and change-set handling', () => {
   });
 
   it('applies ROOM_REPLACED as server truth and ignores old ACKs for cleared pending', () => {
+    // @covers AC-4 (P4-07)
     // @covers AC-6
     const serverElement = makeElement({ id: 'server-shape' });
     queuePendingSyncRequest({ requestId: 'old-pending', actorId: 'actor-1', clientClock: 0 });
     useElementsStore.setState({ elements: [makeElement({ id: 'local-draft' })] });
+    useHistoryStore.setState({
+      undoStack: [{ before: [], after: [makeElement({ id: 'undo-shape' })] }],
+      redoStack: [{ before: [], after: [makeElement({ id: 'redo-shape' })] }],
+      isApplying: false,
+    });
     getSocketState().bufferedSyncEvents = [
       broadcast(changeSet({ requestId: 'buffered', serverClock: 12 })),
     ];
@@ -266,6 +274,8 @@ describe('P5 reconciliation pending and change-set handling', () => {
     expect(getSocketState().lastServerClock).toBe(10);
     expect(getSocketState().roomEpoch).toBe(3);
     expect(getKnownSlotClock('server-shape', 'style.fillColor')).toBe(10);
+    expect(useHistoryStore.getState().undoStack).toEqual([]);
+    expect(useHistoryStore.getState().redoStack).toEqual([]);
   });
 
   it('applies ROOM_DIFF slot-aware without originRequestIds or whole-element replacement', () => {

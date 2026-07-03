@@ -14,6 +14,7 @@ import { AuthMenu } from '../auth/AuthMenu';
 import { LoginToSave } from '../local-board/LoginToSave';
 import { NativeFileControls } from '../files/NativeFileControls';
 import { canEditRoom, useRoomAccessStore } from '../rooms/room-access.store';
+import { RoomHistoryButton } from '../rooms/RoomHistoryButton';
 import { useSpacePanMode } from './hooks/use-space-pan-mode';
 import { useWheelPanZoom } from './hooks/use-wheel-pan-zoom';
 import { useWhiteboardPointerHandlers } from './hooks/use-whiteboard-pointer-handlers';
@@ -117,6 +118,7 @@ export default function Whiteboard({ mode = 'saved' }: WhiteboardProps) {
           <>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <NativeFileControls mode="saved" roomId={roomId} canImport={canEdit} />
+              <RoomHistoryButton roomId={roomId} canRestore={role === 'owner'} />
               <ShareLinkButton />
               <AuthMenu />
             </div>

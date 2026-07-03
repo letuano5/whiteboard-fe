@@ -7,6 +7,7 @@ import { createDocumentDashboardRouter } from './documents/document-dashboard.js
 import { createLocalBoardSaveRouter } from './rooms/local-board-save.js';
 import { createNativeFileExportRouter } from './rooms/native-file-export.js';
 import { createNativeFileImportRouter } from './rooms/native-file-import.js';
+import { createRoomHistoryRouter } from './rooms/room-history.js';
 import { createRoomSharingRouter } from './rooms/room-sharing.js';
 import type { SyncRoom } from './sync/index.js';
 
@@ -59,6 +60,17 @@ export function createAppServer(options: AppServerOptions = {}) {
         authVerifier: options.authVerifier,
         appUserRepository: options.appUserRepository,
         db: options.db,
+        ioServer: io,
+        syncRooms: options.syncRooms,
+        roomElements: options.roomElements,
+        roomClocks: options.roomClocks,
+      }),
+    );
+    app.use(
+      createRoomHistoryRouter({
+        authVerifier: options.authVerifier,
+        appUserRepository: options.appUserRepository,
+        db: options.db as never,
         ioServer: io,
         syncRooms: options.syncRooms,
         roomElements: options.roomElements,

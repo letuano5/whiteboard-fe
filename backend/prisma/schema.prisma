@@ -35,6 +35,7 @@ model Room {
   records                       Record[]
   tombstones                    Tombstone[]
   processedRequests             ProcessedRequest[]
+  snapshots                     Snapshot[]
 
   @@index([ownerId, updatedAt, id])
   @@index([updatedAt, id])
@@ -126,4 +127,20 @@ model ProcessedRequest {
   @@id([roomId, actorId, requestId])
   @@index([roomId, serverClock])
   @@index([roomId, createdAt])
+}
+
+model Snapshot {
+  id            String   @id @default(uuid())
+  roomId        String
+  documentClock BigInt
+  roomEpoch     BigInt   @default(0)
+  createdBy     String?
+  createdAt     DateTime @default(now())
+  reason        String
+  records       Json
+  tombstones    Json
+  room          Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@index([roomId, createdAt])
+  @@index([roomId, documentClock])
 }
