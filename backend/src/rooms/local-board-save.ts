@@ -72,7 +72,7 @@ export async function saveLocalBoardAsRoom(
     {
       kind: 'native-file-import',
       roomId: room.id,
-      elements,
+      elements: elements.filter((e) => !e.isDeleted),
     },
     {
       actorId: userId,

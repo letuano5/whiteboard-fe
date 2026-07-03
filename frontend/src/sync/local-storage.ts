@@ -64,7 +64,7 @@ export function startLocalStoragePersistence(): () => void {
 
   function flushWrite(): void {
     writeScene({
-      elements: useElementsStore.getState().elements,
+      elements: useElementsStore.getState().elements.filter((e) => !e.isDeleted),
       camera: useCameraStore.getState().camera,
     });
   }

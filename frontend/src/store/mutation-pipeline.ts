@@ -202,6 +202,37 @@ export function applySnapshot(elements: Element[], options: MutationOptions = {}
     return current ? [current] : [];
   });
   // Use the Zustand store setter directly (NOT the pipeline updateElements) to avoid version-doubling
-  useElementsStore.getState().updateElements(bumped);
+  const toUpdate = bumped.filter((el) => currentById.has(el.id));
+  const toAdd = bumped.filter((el) => !currentById.has(el.id));
+  if (toUpdate.length > 0) useElementsStore.getState().updateElements(toUpdate);
+  if (toAdd.length > 0) useElementsStore.getState().addElements(toAdd);
   fireHooks({ type: 'update', elements: bumped, before, sync: options.sync });
+}
+
+/**
+ * Re-adds elements that were previously created then undone. Handles the case
+ * where connected-mode reconciliation removed them from the store entirely.
+ * Fires 'create' so the sync layer can attempt a create-element command.
+ */
+export function reApplyCreate(elements: Element[]): void {
+  if (elements.length === 0) return;
+  const now = Date.now();
+  const storeElements = useElementsStore.getState().elements;
+  const currentById = new Map(storeElements.map((el) => [el.id, el]));
+  const bumped = elements.map((el) => {
+    const current = currentById.get(el.id);
+    const baseVersion = current ? current.version : el.version;
+    return {
+      ...el,
+      isDeleted: false,
+      version: baseVersion + 1,
+      versionNonce: nextNonce(),
+      updatedAt: now,
+    };
+  });
+  const toAdd = bumped.filter((el) => !currentById.has(el.id));
+  const toUpdate = bumped.filter((el) => currentById.has(el.id));
+  if (toAdd.length > 0) useElementsStore.getState().addElements(toAdd);
+  if (toUpdate.length > 0) useElementsStore.getState().updateElements(toUpdate);
+  fireHooks({ type: 'create', elements: bumped, before: [] });
 }

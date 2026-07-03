@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { Element, SyncReadPrecondition } from '../types/shared';
-import { deleteElements, applySnapshot } from './mutation-pipeline';
+import { deleteElements, applySnapshot, reApplyCreate } from './mutation-pipeline';
 
 export interface HistoryEntry {
   before: Element[];
@@ -51,7 +51,9 @@ export const useHistoryStore = create<HistoryState & HistoryActions>()((set, get
       // Undo of createElement: soft-delete the created elements
       deleteElements(entry.after.map((e) => e.id));
     } else {
-      applySnapshot(entry.before, { sync: { readPreconditions: entry.readPreconditions } });
+      // Omit stored readPreconditions: they captured baseClock before the original op was ACKed,
+      // so passing them after the server bumped the slot clock always triggers STALE_CLIENT_STATE.
+      applySnapshot(entry.before);
     }
 
     set({ isApplying: false });
@@ -64,7 +66,13 @@ export const useHistoryStore = create<HistoryState & HistoryActions>()((set, get
     const entry = redoStack[redoStack.length - 1];
     set({ isApplying: true, redoStack: redoStack.slice(0, -1), undoStack: [...undoStack, entry] });
 
-    applySnapshot(entry.after, { sync: { readPreconditions: entry.readPreconditions } });
+    if (entry.before.length === 0) {
+      // Redo of createElement: re-add the elements (may have been evicted from store after
+      // connected-mode reconciliation; reApplyCreate upserts and fires 'create' for sync).
+      reApplyCreate(entry.after);
+    } else {
+      applySnapshot(entry.after);
+    }
 
     set({ isApplying: false });
   },

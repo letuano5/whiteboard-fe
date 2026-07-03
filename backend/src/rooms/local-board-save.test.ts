@@ -99,18 +99,22 @@ describe('saveLocalBoardAsRoom', () => {
     );
   });
 
-  it('passes deleted elements to persistence so tombstone semantics are preserved', async () => {
+  it('filters out soft-deleted elements so they are not resurrected on save', async () => {
     // @covers AC-9
+    // Soft-deleted elements (isDeleted: true) must not reach the sync layer because
+    // replace-document forces isDeleted: false on every element it receives, which would
+    // resurrect elements the user already removed via undo.
     const { db } = buildDb('room-deleted');
     const deleted = makeDeletedElement({ id: 'deleted-el', version: 8 });
+    const visible = makeElement({ id: 'visible-el', version: 3 });
 
-    await saveLocalBoardAsRoom(db, 'user-123', [deleted]);
+    await saveLocalBoardAsRoom(db, 'user-123', [deleted, visible]);
 
     expect(executeSyncCommand).toHaveBeenCalledWith(
       {
         kind: 'native-file-import',
         roomId: 'room-deleted',
-        elements: [deleted],
+        elements: [visible],
       },
       {
         actorId: 'user-123',

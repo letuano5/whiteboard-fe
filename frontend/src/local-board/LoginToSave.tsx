@@ -25,7 +25,7 @@ export function LoginToSave() {
     setErrorMessage(null);
 
     try {
-      const result = await saveLocalBoard({ elements, camera });
+      const result = await saveLocalBoard({ elements: elements.filter((e) => !e.isDeleted), camera });
       saveCamera(result.roomId, camera);
       clearLocalScene();
       window.history.pushState({}, '', '/?room=' + result.roomId);
