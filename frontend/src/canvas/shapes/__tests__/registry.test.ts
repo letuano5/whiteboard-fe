@@ -18,6 +18,12 @@ describe('shape registry', () => {
     expect(getShapeUtil('diamond')).toBeDefined();
     expect(getShapeUtil('diamond')?.type).toBe('diamond');
 
+    expect(getShapeUtil('triangle')).toBeDefined();
+    expect(getShapeUtil('triangle')?.type).toBe('triangle');
+
+    expect(getShapeUtil('polygon')).toBeDefined();
+    expect(getShapeUtil('polygon')?.type).toBe('polygon');
+
     expect(getShapeUtil('line')).toBeDefined();
     expect(getShapeUtil('line')?.type).toBe('line');
 

@@ -3,8 +3,7 @@ import { useInteractionStore } from '../../../store/interaction.store';
 import type { Point } from '../../../types/geometry';
 import type { HandleId, ResizeHandleId } from '../../../types/interaction';
 import type { Element } from '../../../types/shared';
-import { getShapeUtil } from '../../shapes';
-import { unrotatePoint } from '../../../utils/geometry';
+import { hitTestElementAtWorldPoint } from '../../shapes/hit-test';
 import { isFullyBoundArrow } from './bound-arrows';
 import { normalizeRect } from './geometry';
 import { getResizeAnchor, resizeBoundsFromAnchorAndPointer } from './resize';
@@ -23,10 +22,7 @@ export function onSelectPointerDown(worldPt: Point, shiftKey = false): void {
   } = useInteractionStore.getState();
 
   for (const el of visible) {
-    const util = getShapeUtil(el.type);
-    const center = { x: el.x + el.width / 2, y: el.y + el.height / 2 };
-    const localPt = el.angle !== 0 ? unrotatePoint(worldPt, center, el.angle) : worldPt;
-    if (util && util.hitTest(el, localPt.x, localPt.y)) {
+    if (hitTestElementAtWorldPoint(el, worldPt)) {
       setMarquee(null);
       if (shiftKey) {
         // @covers AC-4, AC-5, AC-6: shift-click toggles element in/out of selection

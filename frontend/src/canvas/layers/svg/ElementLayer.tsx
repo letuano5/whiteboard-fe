@@ -1,7 +1,9 @@
 import { memo, useMemo } from 'react';
-import type { Element } from '../../../types/shared';
+import type { Element, ElementType } from '../../../types/shared';
 import { useInteractionStore } from '../../../store/interaction.store';
 import { getShapeUtil } from '../../shapes';
+
+const warnedUnknownTypes = new Set<ElementType>();
 
 interface ElementLayerProps {
   elements: Element[];
@@ -60,7 +62,13 @@ const CommittedElement = memo(function CommittedElement({
   isEditing,
 }: CommittedElementProps) {
   const util = getShapeUtil(element.type);
-  if (!util) return null;
+  if (!util) {
+    if (!warnedUnknownTypes.has(element.type)) {
+      warnedUnknownTypes.add(element.type);
+      console.warn(`[ElementLayer] No ShapeUtil registered for element type "${element.type}".`);
+    }
+    return null;
+  }
 
   return <g opacity={isEditing ? 0 : undefined}>{util.render(element)}</g>;
 });

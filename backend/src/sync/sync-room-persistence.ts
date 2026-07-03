@@ -72,6 +72,11 @@ export interface PrismaSyncRoomTransaction {
       where: { id: string; documentClock: bigint };
       data: { documentClock: bigint; roomEpoch: bigint };
     }) => Promise<{ count: number }>;
+    upsert: (args: {
+      where: { id: string };
+      create: { id: string; documentClock: bigint; roomEpoch: bigint };
+      update: Record<string, never>;
+    }) => Promise<unknown>;
     findUnique: (args: {
       where: { id: string };
       select: {
@@ -206,7 +211,9 @@ async function commitPrismaChangeSet(
   });
 
   if (updatedRoom.count !== 1) {
-    throw new SyncRoomPersistenceError('CONDITIONAL_CLOCK_CONFLICT');
+    if (commit.expectedDocumentClock !== 0 || !(await tryCreateFreshRoomRow(tx, commit))) {
+      throw new SyncRoomPersistenceError('CONDITIONAL_CLOCK_CONFLICT');
+    }
   }
 
   for (const element of materializedElements(changeSet)) {
@@ -259,6 +266,33 @@ async function commitPrismaChangeSet(
       },
     });
   }
+}
+
+// A room created client-side (e.g. "Create new room") has no Room DB row until its first
+// commit. Restores the lazy-creation behavior `save-room.ts`'s legacy autosave path already
+// has via `tx.room.upsert`, so the very first write to a brand-new room succeeds instead of
+// permanently failing `CONDITIONAL_CLOCK_CONFLICT` (the conditional updateMany above always
+// matches 0 rows when the room has never been persisted).
+async function tryCreateFreshRoomRow(
+  tx: PrismaSyncRoomTransaction,
+  commit: SyncRoomPersistenceCommit,
+): Promise<boolean> {
+  const changeSet = commit.result.changeSet;
+  // Create at the same documentClock=0 baseline a missing room's hot state already assumes
+  // (see loadRoomElements). If the row already exists (lost a create race, or genuinely
+  // predates this room's hot state with a real clock), this is a no-op and the conditional
+  // update below correctly fails, falling through to the existing unhealthy/reload path.
+  await tx.room.upsert({
+    where: { id: changeSet.roomId },
+    create: { id: changeSet.roomId, documentClock: 0n, roomEpoch: 0n },
+    update: {},
+  });
+
+  const retried = await tx.room.updateMany({
+    where: { id: changeSet.roomId, documentClock: 0n },
+    data: { documentClock: BigInt(changeSet.serverClock), roomEpoch: BigInt(changeSet.roomEpoch) },
+  });
+  return retried.count === 1;
 }
 
 function materializedElements(changeSet: CommittedChangeSet): Element[] {

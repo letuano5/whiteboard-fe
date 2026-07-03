@@ -137,6 +137,26 @@ describe('eraser tool', () => {
     expect(updated?.props.points).toEqual(highlighter.props.points);
   });
 
+  // @covers H1 audit fix — hit-test un-rotates the sample point by element.angle
+  it('accounts for element rotation when sweeping a rotated shape', () => {
+    const rotated = createElement(
+      makeDraft({
+        type: 'rectangle',
+        x: -50,
+        y: -10,
+        width: 100,
+        height: 20,
+        angle: Math.PI / 4,
+      }),
+    );
+
+    // Along the rotated long axis: visually inside the shape, outside its unrotated bbox.
+    expect(findEraserHitIds([rotated], { x: 28, y: 28 }, { x: 28, y: 28 })).toEqual([rotated.id]);
+
+    // Inside the stale unrotated bbox corner, but outside the actual rotated shape.
+    expect(findEraserHitIds([rotated], { x: 40, y: 8 }, { x: 40, y: 8 })).toEqual([]);
+  });
+
   // @covers AC-5
   it('can undo an eraser delete through the history store', () => {
     const unregisterHistory = initHistoryCapture();

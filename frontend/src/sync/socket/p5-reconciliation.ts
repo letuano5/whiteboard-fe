@@ -12,6 +12,7 @@ import type {
 } from '../../types/shared';
 import { WS_EVENTS } from '../../types/shared';
 import { useElementsStore } from '../../store/elements.store';
+import { useHistoryStore } from '../../store/history.store';
 import { applyChangeSetToElements, applySlotPatch, slotValueFromElement } from './p5-change-set';
 import { clearPendingQueue } from './pending-queue';
 import {
@@ -24,6 +25,7 @@ import {
   applyKnownSlotClocks,
   consumeStaleAckRequest,
   getKnownSlotClock,
+  getPendingRequestRefs,
   getRoomEpochState,
   getSocketState,
   hydrateKnownSlotClocks,
@@ -133,6 +135,7 @@ export function applyRoomReplaced(payload: RoomReplacedPayload): void {
   hydrateKnownSlotClocks(payload.slotClocks);
   setRoomEpoch(payload.roomEpoch);
   setLastServerClock(payload.serverClock);
+  useHistoryStore.getState().clear();
 }
 
 export function applyRoomDiff(diff: RoomDiff): void {
@@ -238,7 +241,7 @@ function requestRoomDiff(changeSet: CommittedChangeSet, options: ReconciliationO
     roomId: changeSet.roomId,
     lastServerClock: state.lastServerClock,
     roomEpoch: getRoomEpochState(),
-    pendingRequestIds: state.pendingSyncRequests.map((request) => request.requestId),
+    pendingRequests: getPendingRequestRefs(),
     fromClock: state.lastServerClock,
     toClock: changeSet.serverClock,
   });

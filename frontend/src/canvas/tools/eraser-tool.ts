@@ -3,7 +3,7 @@ import type { Point } from '../../types/geometry';
 import { useInteractionStore } from '../../store/interaction.store';
 import { useElementsStore } from '../../store/elements.store';
 import { deleteElements } from '../../store/mutation-pipeline';
-import { getShapeUtil } from '../shapes';
+import { hitTestElementAtWorldPoint } from '../shapes/hit-test';
 
 const SWEEP_SAMPLE_SPACING = 4;
 
@@ -32,10 +32,8 @@ export function findEraserHitIds(elements: Element[], start: Point, end: Point):
 
   for (const element of elements) {
     if (element.isDeleted) continue;
-    const util = getShapeUtil(element.type);
-    if (!util) continue;
 
-    const hit = samples.some((sample) => util.hitTest(element, sample.x, sample.y));
+    const hit = samples.some((sample) => hitTestElementAtWorldPoint(element, sample));
     if (hit && !seenIds.has(element.id)) {
       hitIds.push(element.id);
       seenIds.add(element.id);

@@ -1,4 +1,5 @@
-import type { Camera, Element, ElementProps, ElementType } from './index';
+import { MAX_ZOOM, MIN_ZOOM, type Camera } from './camera';
+import type { Element, ElementProps, ElementType } from './index';
 
 export const NATIVE_FILE_KIND = 'vdt.whiteboard.native';
 export const NATIVE_FILE_SCHEMA_VERSION = 1;
@@ -154,7 +155,13 @@ function isNativeFileRoomMetadata(value: unknown): value is NativeFileRoomMetada
 
 function isCamera(value: unknown): value is Camera {
   if (!isRecord(value)) return false;
-  return isFiniteNumber(value.x) && isFiniteNumber(value.y) && isFiniteNumber(value.zoom);
+  return (
+    isFiniteNumber(value.x) &&
+    isFiniteNumber(value.y) &&
+    isFiniteNumber(value.zoom) &&
+    (value.zoom as number) >= MIN_ZOOM &&
+    (value.zoom as number) <= MAX_ZOOM
+  );
 }
 
 function isElement(value: unknown): value is Element {

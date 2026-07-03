@@ -1,9 +1,8 @@
-import type { Camera } from '../types/shared';
-import type { Element } from '../types/shared';
+import type { Camera, Element } from '../types/shared';
+import { MAX_ZOOM, MIN_ZOOM } from '../types/shared';
 import type { Point } from '../types/geometry';
 
-export const MIN_ZOOM = 0.1;
-export const MAX_ZOOM = 8;
+export { MIN_ZOOM, MAX_ZOOM };
 // AC-8: zoom factor per raw wheel delta unit must be ≤ 0.01
 export const ZOOM_SENSITIVITY = 0.005;
 // ~7.5% padding each side when fitting content to viewport

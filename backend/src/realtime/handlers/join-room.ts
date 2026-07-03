@@ -15,7 +15,7 @@ export async function handleJoinRoom(
   deps: ResolvedWhiteboardServerDeps,
   payload: JoinRoomPayload,
 ): Promise<void> {
-  const { roomId, sessionId, name, color, lastServerClock, roomEpoch, pendingRequestIds } = payload;
+  const { roomId, sessionId, name, color, lastServerClock, roomEpoch, pendingRequests } = payload;
   const { roomPresence: presence, roomElements: elements, roomClocks: clocks, db } = deps;
 
   try {
@@ -107,7 +107,7 @@ export async function handleJoinRoom(
       const inMemory = elements.has(roomId) ? [...elements.get(roomId)!.values()] : [];
       const diffResult = await getRoomDiff(db, roomId, lastServerClock, inMemory, {
         roomEpoch,
-        pendingRequestIds: pendingRequestIds ?? [],
+        pendingRequests: pendingRequests ?? [],
         actorId: socket.data?.auth?.user?.id ?? null,
       });
       // Emit the clock the diff/snapshot was materialized at (P5-07). The mirror

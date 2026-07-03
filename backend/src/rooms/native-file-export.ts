@@ -26,7 +26,7 @@ interface NativeFileExportResponse {
 
 interface NativeFileExportHttpError {
   error: {
-    code: 'native-file/unauthenticated' | 'native-file/forbidden';
+    code: 'native-file/unauthenticated' | 'native-file/forbidden' | 'native-file/internal-error';
     message: string;
   };
 }
@@ -143,7 +143,10 @@ function readRoomId(request: Request): string {
   return typeof value === 'string' ? value : '';
 }
 
-function sendKnownExportError(response: Response<NativeFileExportHttpError>, error: unknown): void {
+export function sendKnownExportError(
+  response: Response<NativeFileExportHttpError>,
+  error: unknown,
+): void {
   if (error instanceof NativeFileExportError) {
     response.status(error.code === 'native-file/unauthenticated' ? 401 : 403).json({
       error: {
@@ -164,5 +167,11 @@ function sendKnownExportError(response: Response<NativeFileExportHttpError>, err
     return;
   }
 
-  throw error;
+  console.error('[native-file-export] Unexpected error:', error);
+  response.status(500).json({
+    error: {
+      code: 'native-file/internal-error',
+      message: 'Failed to export the document.',
+    },
+  });
 }

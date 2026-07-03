@@ -22,6 +22,7 @@ import {
   loadRoomElements,
   getRoomClock,
   getRoomDiff,
+  getPendingRequestStatuses,
 } from './room-repository.js';
 import { makeElement, makeDeletedElement } from '../test/element-fixtures.js';
 import type { PrismaClient } from '@prisma/client';
@@ -1039,5 +1040,59 @@ describe('getRoomDiff — P3A-03', () => {
         });
       }
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getPendingRequestStatuses — H4 audit fix: expired vs. unknown classification
+// ---------------------------------------------------------------------------
+
+describe('getPendingRequestStatuses — H4 audit fix', () => {
+  const ROOM_ID = 'room-pending-test';
+
+  function buildPendingMockDb(processedRequests: Array<{ requestId: string; serverClock: bigint }>) {
+    const findMany = vi.fn().mockResolvedValue(
+      processedRequests.map((request) => ({ ...request, reason: null })),
+    );
+    return { processedRequest: { findMany } } as unknown as Parameters<
+      typeof getPendingRequestStatuses
+    >[0];
+  }
+
+  it('reports unknown (not expired) when clientClock is at or after the GC cutoff', async () => {
+    // A request created after the room's last GC cutoff cannot have been processed and
+    // then GC'd — if it had been processed, its serverClock would exceed historyStart.
+    const db = buildPendingMockDb([]);
+
+    const statuses = await getPendingRequestStatuses(db, ROOM_ID, {
+      pendingRequests: [{ requestId: 'req-1', clientClock: 20 }],
+      processedRequestHistoryStartsAtClock: 20,
+    });
+
+    expect(statuses).toEqual([{ requestId: 'req-1', status: 'unknown' }]);
+  });
+
+  it('reports expired only when clientClock predates the GC cutoff', async () => {
+    const db = buildPendingMockDb([]);
+
+    const statuses = await getPendingRequestStatuses(db, ROOM_ID, {
+      pendingRequests: [{ requestId: 'req-1', clientClock: 5 }],
+      processedRequestHistoryStartsAtClock: 20,
+    });
+
+    expect(statuses).toEqual([
+      { requestId: 'req-1', status: 'expired', reason: 'idempotency_history_gc' },
+    ]);
+  });
+
+  it('reports processed when the request is still recorded, regardless of clientClock', async () => {
+    const db = buildPendingMockDb([{ requestId: 'req-1', serverClock: 21n }]);
+
+    const statuses = await getPendingRequestStatuses(db, ROOM_ID, {
+      pendingRequests: [{ requestId: 'req-1', clientClock: 5 }],
+      processedRequestHistoryStartsAtClock: 20,
+    });
+
+    expect(statuses).toEqual([{ requestId: 'req-1', status: 'processed', serverClock: 21 }]);
   });
 });

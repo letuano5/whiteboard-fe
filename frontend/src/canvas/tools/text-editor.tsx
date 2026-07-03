@@ -4,8 +4,7 @@ import type { Point } from '../../types/geometry';
 import { useElementsStore } from '../../store/elements.store';
 import { useInteractionStore } from '../../store/interaction.store';
 import { patchElement } from '../../store/mutation-pipeline';
-import { getShapeUtil } from '../shapes';
-import { unrotatePoint } from '../../utils/geometry';
+import { hitTestElementAtWorldPoint } from '../shapes/hit-test';
 
 export function onCanvasDoubleClick(worldPt: Point): void {
   const elements = useElementsStore.getState().elements;
@@ -14,10 +13,7 @@ export function onCanvasDoubleClick(worldPt: Point): void {
 
   for (const el of visible) {
     if (el.type !== 'text') continue;
-    const util = getShapeUtil(el.type);
-    const center = { x: el.x + el.width / 2, y: el.y + el.height / 2 };
-    const localPt = el.angle !== 0 ? unrotatePoint(worldPt, center, el.angle) : worldPt;
-    if (util && util.hitTest(el, localPt.x, localPt.y)) {
+    if (hitTestElementAtWorldPoint(el, worldPt)) {
       setEditingId(el.id);
       setSelectedIds([el.id]);
       return;

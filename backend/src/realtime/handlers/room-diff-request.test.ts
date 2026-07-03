@@ -38,13 +38,13 @@ describe('handleRoomDiffRequest', () => {
       roomId: 'room-1',
       lastServerClock: 3,
       roomEpoch: 0,
-      pendingRequestIds: ['req-1'],
+      pendingRequests: [{ requestId: 'req-1', clientClock: 3 }],
     });
 
     // @covers AC-2, AC-3, AC-4
     expect(getRoomDiff).toHaveBeenCalledWith(deps.db, 'room-1', 3, [], {
       actorId: null,
-      pendingRequestIds: ['req-1'],
+      pendingRequests: [{ requestId: 'req-1', clientClock: 3 }],
       roomEpoch: 0,
     });
     expect(emit).toHaveBeenCalledWith(

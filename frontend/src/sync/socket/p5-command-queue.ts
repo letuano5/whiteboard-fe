@@ -87,7 +87,7 @@ export function flushPendingSyncCommands(force = false): void {
     state.inFlightSyncCommands = [...state.inFlightSyncCommands, next];
     state.pendingSyncRequests = [
       ...state.pendingSyncRequests,
-      { requestId: next.command.requestId, actorId: null },
+      { requestId: next.command.requestId, actorId: null, clientClock: next.command.clientClock },
     ];
     state.socket.emit(WS_EVENTS.SYNC_COMMAND, next.command);
   }

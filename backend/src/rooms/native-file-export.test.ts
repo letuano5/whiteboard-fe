@@ -1,11 +1,12 @@
 import type { PrismaClient } from '@prisma/client';
+import type { Response } from 'express';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { RoomAccessPayload } from '@vdt/shared';
 import type { AppUser } from '../auth/index.js';
 import { makeElement } from '../test/element-fixtures.js';
 import { getOrCreateSyncRoom, type SyncRoom } from '../sync/index.js';
 import { resolveRoomAccess } from './room-roles.js';
-import { exportNativeFileFromRoom } from './native-file-export.js';
+import { exportNativeFileFromRoom, sendKnownExportError } from './native-file-export.js';
 
 vi.mock('../sync/index.js', () => ({
   getOrCreateSyncRoom: vi.fn(),
@@ -69,6 +70,22 @@ describe('native file export', () => {
     expect(result.documentClock).toBe('21');
     expect(db.room.update).not.toHaveBeenCalled();
     expect(db.room.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('responds with a 500 instead of throwing on an unrecognized error', () => {
+    // @covers H2 audit fix — unhandled errors must not escape the route handler
+    const status = vi.fn().mockReturnThis();
+    const json = vi.fn().mockReturnThis();
+    const response = { status, json } as unknown as Response;
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    expect(() => sendKnownExportError(response, new Error('db connection lost'))).not.toThrow();
+
+    expect(status).toHaveBeenCalledWith(500);
+    expect(json).toHaveBeenCalledWith({
+      error: { code: 'native-file/internal-error', message: 'Failed to export the document.' },
+    });
+    consoleError.mockRestore();
   });
 });
 

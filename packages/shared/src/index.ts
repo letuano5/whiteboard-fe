@@ -63,11 +63,7 @@ export interface Element {
 
 // ─── Camera (§2.2) ───────────────────────────────────────────────────────────
 
-export interface Camera {
-  x: number;
-  y: number;
-  zoom: number; // clamped [0.1, 8]
-}
+export * from './camera';
 
 // ─── Presence (§2.4) — ephemeral, from P2 ────────────────────────────────────
 

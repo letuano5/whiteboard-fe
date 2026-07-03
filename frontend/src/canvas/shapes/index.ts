@@ -3,6 +3,8 @@ import type { ShapeUtil } from './types';
 import { rectangleShapeUtil } from './rectangle';
 import { ellipseShapeUtil } from './ellipse';
 import { diamondShapeUtil } from './diamond';
+import { triangleShapeUtil } from './triangle';
+import { polygonShapeUtil } from './polygon';
 import { lineShapeUtil } from './line';
 import { textShapeUtil } from './text';
 import { arrowShapeUtil } from './arrow';
@@ -21,6 +23,8 @@ export function getShapeUtil(type: ElementType): ShapeUtil | undefined {
 registerShapeUtil(rectangleShapeUtil);
 registerShapeUtil(ellipseShapeUtil);
 registerShapeUtil(diamondShapeUtil);
+registerShapeUtil(triangleShapeUtil);
+registerShapeUtil(polygonShapeUtil);
 registerShapeUtil(lineShapeUtil);
 registerShapeUtil(textShapeUtil);
 registerShapeUtil(arrowShapeUtil);

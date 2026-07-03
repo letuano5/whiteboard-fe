@@ -1,5 +1,12 @@
 import type { PrismaClient } from '@prisma/client';
-import type { EffectiveRoomRole, Element, Presence, ReconnectRequest, RoomRole } from '@vdt/shared';
+import type {
+  EffectiveRoomRole,
+  Element,
+  PendingRequestRef,
+  Presence,
+  ReconnectRequest,
+  RoomRole,
+} from '@vdt/shared';
 import type { AppUser, AppUserRepository, AuthVerifier, VerifiedIdentity } from '../auth/index.js';
 import type { AutosaveManager } from '../persistence/autosave.js';
 import type { SyncRoom } from '../sync/index.js';
@@ -35,7 +42,7 @@ export interface JoinRoomPayload {
   color: string;
   lastServerClock?: number;
   roomEpoch?: number;
-  pendingRequestIds?: string[];
+  pendingRequests?: PendingRequestRef[];
 }
 
 export interface ElementUpdatePayload {

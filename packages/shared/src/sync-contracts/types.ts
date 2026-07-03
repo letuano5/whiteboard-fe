@@ -187,6 +187,18 @@ export interface PendingRequestStatus {
   reason?: string;
 }
 
+/**
+ * A pending command the client hasn't received an ack for, identified alongside the
+ * `clientClock` the client observed when it created the command. The server uses this to
+ * tell a genuinely GC'd request apart from one that was simply never received: a command
+ * created when `clientClock >= processedRequestHistoryStartsAtClock` cannot have been
+ * processed-and-then-GC'd, since its resulting `serverClock` would exceed that cutoff.
+ */
+export interface PendingRequestRef {
+  requestId: string;
+  clientClock: SyncClock;
+}
+
 export interface RoomSnapshot {
   protocolVersion: typeof SYNC_PROTOCOL_VERSION;
   schemaVersion: typeof SYNC_SCHEMA_VERSION;
@@ -230,7 +242,7 @@ export interface ReconnectRequest {
   roomId: string;
   lastServerClock: SyncClock;
   roomEpoch: SyncClock;
-  pendingRequestIds: string[];
+  pendingRequests: PendingRequestRef[];
 }
 
 export type ReconnectResponse =

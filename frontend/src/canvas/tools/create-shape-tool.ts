@@ -6,7 +6,16 @@ import { createElement, type ElementDraft } from '../../store/mutation-pipeline'
 import { useElementsStore } from '../../store/elements.store';
 import { findNearestSnap, pointKeyToAnchorRatio } from '../shapes/arrow-binding';
 
-export const SHAPE_TOOLS = ['rectangle', 'ellipse', 'line', 'arrow', 'text'] as const;
+export const SHAPE_TOOLS = [
+  'rectangle',
+  'ellipse',
+  'diamond',
+  'triangle',
+  'polygon',
+  'line',
+  'arrow',
+  'text',
+] as const;
 export type ShapeToolType = (typeof SHAPE_TOOLS)[number];
 
 export function isShapeTool(tool: ToolId): tool is ShapeToolType {

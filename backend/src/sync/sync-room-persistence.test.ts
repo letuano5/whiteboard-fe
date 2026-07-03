@@ -235,6 +235,115 @@ describe('P5-06 SyncRoom transactional persistence and idempotency', () => {
     );
   });
 
+  it('lazily creates the Room row for a brand-new room instead of failing forever (H3)', async () => {
+    // @covers H3 audit fix — a room created client-side has no DB row until its first commit
+    const tx = createFakePrismaTx();
+    tx.room.updateMany
+      .mockResolvedValueOnce({ count: 0 }) // no row yet
+      .mockResolvedValueOnce({ count: 1 }); // succeeds once the row exists
+    const persistence = createPrismaSyncRoomPersistence({
+      processedRequest: tx.processedRequest,
+      $transaction: async (task) => task(tx),
+    });
+    const element = makeElement({ id: 'shape' });
+    const command = createCommand('create-1', element);
+    const result: SyncRoomExecutionResult = {
+      command,
+      actorId: 'actor-1',
+      changeSet: {
+        protocolVersion: SYNC_PROTOCOL_VERSION,
+        schemaVersion: SYNC_SCHEMA_VERSION,
+        roomId: 'room-1',
+        requestId: 'create-1',
+        serverClock: 1,
+        roomEpoch: 0,
+        originActorId: 'actor-1',
+        originRequestIds: ['create-1'],
+        reason: 'create' as const,
+        slotPatches: [],
+        puts: [],
+        deletes: [],
+        created: [element],
+        patched: [],
+        deleted: [],
+        slotClocks: [],
+        normalizedOrder: [],
+      },
+    };
+
+    await expect(
+      persistence.commitChangeSet({
+        command,
+        actorId: 'actor-1',
+        payloadHash: 'hash',
+        expectedDocumentClock: 0,
+        result,
+        policy: { durability: 'durable', resendable: true, storeProcessedRequest: true },
+        slotClocks: new Map(),
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(tx.room.upsert).toHaveBeenCalledWith({
+      where: { id: 'room-1' },
+      create: { id: 'room-1', documentClock: 0n, roomEpoch: 0n },
+      update: {},
+    });
+    expect(tx.room.updateMany).toHaveBeenCalledTimes(2);
+    expect(tx.room.updateMany).toHaveBeenNthCalledWith(2, {
+      where: { id: 'room-1', documentClock: 0n },
+      data: { documentClock: 1n, roomEpoch: 0n },
+    });
+  });
+
+  it('still rejects a genuine conditional clock conflict without creating a row (H3)', async () => {
+    // @covers H3 audit fix — only expectedDocumentClock === 0 triggers lazy creation
+    const tx = createFakePrismaTx();
+    tx.room.updateMany.mockResolvedValue({ count: 0 });
+    const persistence = createPrismaSyncRoomPersistence({
+      processedRequest: tx.processedRequest,
+      $transaction: async (task) => task(tx),
+    });
+    const element = makeElement({ id: 'shape' });
+    const command = createCommand('create-2', element);
+    const result: SyncRoomExecutionResult = {
+      command,
+      actorId: 'actor-1',
+      changeSet: {
+        protocolVersion: SYNC_PROTOCOL_VERSION,
+        schemaVersion: SYNC_SCHEMA_VERSION,
+        roomId: 'room-1',
+        requestId: 'create-2',
+        serverClock: 6,
+        roomEpoch: 0,
+        originActorId: 'actor-1',
+        originRequestIds: ['create-2'],
+        reason: 'create' as const,
+        slotPatches: [],
+        puts: [],
+        deletes: [],
+        created: [element],
+        patched: [],
+        deleted: [],
+        slotClocks: [],
+        normalizedOrder: [],
+      },
+    };
+
+    await expect(
+      persistence.commitChangeSet({
+        command,
+        actorId: 'actor-1',
+        payloadHash: 'hash',
+        expectedDocumentClock: 5,
+        result,
+        policy: { durability: 'durable', resendable: true, storeProcessedRequest: true },
+        slotClocks: new Map(),
+      }),
+    ).rejects.toMatchObject({ code: 'CONDITIONAL_CLOCK_CONFLICT' });
+
+    expect(tx.room.upsert).not.toHaveBeenCalled();
+  });
+
   it('does not mutate memory or run afterApply when DB commit fails', async () => {
     // @covers AC-6
     const afterApply = vi.fn();
@@ -505,6 +614,7 @@ function createFakePrismaTx() {
     $executeRawUnsafe: vi.fn().mockResolvedValue({}),
     room: {
       updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+      upsert: vi.fn().mockResolvedValue({}),
       findUnique: vi.fn().mockResolvedValue(null),
     },
     record: {

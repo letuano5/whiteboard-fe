@@ -1,11 +1,16 @@
 import type { PrismaClient } from '@prisma/client';
+import type { Response } from 'express';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { NativeFileDocument, RoomAccessPayload } from '@vdt/shared';
 import type { AppUser } from '../auth/index.js';
 import { makeElement } from '../test/element-fixtures.js';
 import { executeSyncCommand } from '../sync/index.js';
 import { resolveRoomAccess } from './room-roles.js';
-import { importNativeFileIntoRoom, readNativeFileImportPayload } from './native-file-import.js';
+import {
+  importNativeFileIntoRoom,
+  readNativeFileImportPayload,
+  sendKnownImportError,
+} from './native-file-import.js';
 
 vi.mock('../sync/index.js', () => ({
   executeSyncCommand: vi.fn().mockResolvedValue({
@@ -138,6 +143,22 @@ describe('native file import', () => {
     expect(readNativeFileImportPayload({ document, mode: 'overwrite' })).toBeNull();
   });
 
+  it('rejects a camera zoom outside the documented [0.1, 8] range (H6 audit fix)', () => {
+    // @covers H6 audit fix — native file import must not bypass the zoom clamp
+    expect(
+      readNativeFileImportPayload({
+        document: { ...document, camera: { x: 0, y: 0, zoom: 500 } },
+        mode: 'replace',
+      }),
+    ).toBeNull();
+    expect(
+      readNativeFileImportPayload({
+        document: { ...document, camera: { x: 0, y: 0, zoom: 0 } },
+        mode: 'replace',
+      }),
+    ).toBeNull();
+  });
+
   it('skips unsupported element objects with a report before replace execution', () => {
     // @covers AC-4
     const payload = readNativeFileImportPayload({
@@ -161,6 +182,22 @@ describe('native file import', () => {
       skippedCount: 1,
       skipped: [{ index: 1, reason: 'Element type "unsupported-shape" is unsupported.' }],
     });
+  });
+
+  it('responds with a 500 instead of throwing on an unrecognized error', () => {
+    // @covers H2 audit fix — unhandled errors must not escape the route handler
+    const status = vi.fn().mockReturnThis();
+    const json = vi.fn().mockReturnThis();
+    const response = { status, json } as unknown as Response;
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    expect(() => sendKnownImportError(response, new Error('db connection lost'))).not.toThrow();
+
+    expect(status).toHaveBeenCalledWith(500);
+    expect(json).toHaveBeenCalledWith({
+      error: { code: 'native-file/internal-error', message: 'Failed to import the document.' },
+    });
+    consoleError.mockRestore();
   });
 });
 

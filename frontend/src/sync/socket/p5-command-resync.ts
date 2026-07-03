@@ -1,7 +1,7 @@
 import type { SyncCommand } from '../../types/shared';
 import { WS_EVENTS } from '../../types/shared';
 import { useElementsStore } from '../../store/elements.store';
-import { getKnownSlotClock, getSocketState } from './state';
+import { getKnownSlotClock, getPendingRequestRefs, getSocketState } from './state';
 
 export function requestBackpressureResync(): void {
   const state = getSocketState();
@@ -10,7 +10,7 @@ export function requestBackpressureResync(): void {
     roomId: state.roomId,
     lastServerClock: state.lastServerClock,
     roomEpoch: state.roomEpoch,
-    pendingRequestIds: state.pendingSyncRequests.map((request) => request.requestId),
+    pendingRequests: getPendingRequestRefs(),
     fromClock: state.lastServerClock,
   });
 }

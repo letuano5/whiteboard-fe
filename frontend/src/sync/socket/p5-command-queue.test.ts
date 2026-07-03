@@ -403,7 +403,7 @@ describe('P5 command queue drag flushing and backpressure', () => {
       roomId: 'room-1',
       lastServerClock: 0,
       roomEpoch: 0,
-      pendingRequestIds: [],
+      pendingRequests: [],
       fromClock: 0,
     });
   });
@@ -457,7 +457,7 @@ describe('P5 command queue drag flushing and backpressure', () => {
     setLastServerClock(4);
     useElementsStore.setState({ elements: [makeElement({ id: 'shape-1', x: 50 })] });
     getSocketState().serverElements = [makeElement({ id: 'shape-1', x: 40 })];
-    queuePendingSyncRequest({ requestId: 'late-ack', actorId: 'actor-1' });
+    queuePendingSyncRequest({ requestId: 'late-ack', actorId: 'actor-1', clientClock: 0 });
 
     const result = processSyncAck({
       status: 'commit',
@@ -494,7 +494,7 @@ describe('P5 command queue drag flushing and backpressure', () => {
 
     enqueueMutationSyncCommands(createEvent('created-1'), 'room-1', { now: 0 });
     const requestId = getSocketState().inFlightSyncCommands[0]!.command.requestId;
-    queuePendingSyncRequest({ requestId, actorId: null });
+    queuePendingSyncRequest({ requestId, actorId: null, clientClock: 0 });
 
     processSyncAck({
       status: 'reject',

@@ -20,6 +20,7 @@ interface HistoryActions {
   push: (entry: HistoryEntry) => void;
   undo: () => void;
   redo: () => void;
+  clear: () => void;
 }
 
 // TODO: Consider the complexity of redo/undo operations.
@@ -66,5 +67,9 @@ export const useHistoryStore = create<HistoryState & HistoryActions>()((set, get
     applySnapshot(entry.after, { sync: { readPreconditions: entry.readPreconditions } });
 
     set({ isApplying: false });
+  },
+
+  clear() {
+    set({ undoStack: [], redoStack: [] });
   },
 }));

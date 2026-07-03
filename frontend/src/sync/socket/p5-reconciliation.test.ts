@@ -32,9 +32,9 @@ beforeEach(() => {
 describe('P5 reconciliation pending and change-set handling', () => {
   it('clears matching pending requests for commit and rebase ACKs', () => {
     // @covers AC-1
-    queuePendingSyncRequest({ requestId: 'commit-1', actorId: 'actor-1' });
-    queuePendingSyncRequest({ requestId: 'rebase-1', actorId: 'actor-1' });
-    queuePendingSyncRequest({ requestId: 'later-1', actorId: 'actor-1' });
+    queuePendingSyncRequest({ requestId: 'commit-1', actorId: 'actor-1', clientClock: 0 });
+    queuePendingSyncRequest({ requestId: 'rebase-1', actorId: 'actor-1', clientClock: 0 });
+    queuePendingSyncRequest({ requestId: 'later-1', actorId: 'actor-1', clientClock: 0 });
 
     processSyncAck({
       status: 'commit',
@@ -48,13 +48,13 @@ describe('P5 reconciliation pending and change-set handling', () => {
     });
 
     expect(getSocketState().pendingSyncRequests).toEqual([
-      { requestId: 'later-1', actorId: 'actor-1' },
+      { requestId: 'later-1', actorId: 'actor-1', clientClock: 0 },
     ]);
   });
 
   it('clears local pending from a same-origin broadcast when ACK is missed', () => {
     // @covers AC-2
-    queuePendingSyncRequest({ requestId: 'missed-ack', actorId: 'actor-1' });
+    queuePendingSyncRequest({ requestId: 'missed-ack', actorId: 'actor-1', clientClock: 0 });
 
     processSyncBroadcast(
       broadcast(
@@ -73,8 +73,8 @@ describe('P5 reconciliation pending and change-set handling', () => {
 
   it('clears rejected pending without dropping newer pending changes', () => {
     // @covers AC-3
-    queuePendingSyncRequest({ requestId: 'rejected', actorId: 'actor-1' });
-    queuePendingSyncRequest({ requestId: 'newer-slot-change', actorId: 'actor-1' });
+    queuePendingSyncRequest({ requestId: 'rejected', actorId: 'actor-1', clientClock: 0 });
+    queuePendingSyncRequest({ requestId: 'newer-slot-change', actorId: 'actor-1', clientClock: 0 });
     useElementsStore.setState({ elements: [makeElement({ id: 'shape-1' })] });
 
     processSyncAck({
@@ -84,7 +84,7 @@ describe('P5 reconciliation pending and change-set handling', () => {
     });
 
     expect(getSocketState().pendingSyncRequests).toEqual([
-      { requestId: 'newer-slot-change', actorId: 'actor-1' },
+      { requestId: 'newer-slot-change', actorId: 'actor-1', clientClock: 0 },
     ]);
     expect(useElementsStore.getState().elements).toHaveLength(1);
   });
@@ -95,7 +95,7 @@ describe('P5 reconciliation pending and change-set handling', () => {
     const state = getSocketState();
     state.socket = { emit } as never;
     useElementsStore.setState({ elements: [makeElement({ id: 'shape-1' })] });
-    queuePendingSyncRequest({ requestId: 'rebase-1', actorId: 'actor-1' });
+    queuePendingSyncRequest({ requestId: 'rebase-1', actorId: 'actor-1', clientClock: 0 });
 
     processSyncAck({
       status: 'rebase',
@@ -194,7 +194,7 @@ describe('P5 reconciliation pending and change-set handling', () => {
       roomId: 'room-1',
       lastServerClock: 3,
       roomEpoch: 0,
-      pendingRequestIds: [],
+      pendingRequests: [],
       fromClock: 3,
       toClock: 5,
     });
@@ -225,7 +225,7 @@ describe('P5 reconciliation pending and change-set handling', () => {
   it('applies ROOM_REPLACED as server truth and ignores old ACKs for cleared pending', () => {
     // @covers AC-6
     const serverElement = makeElement({ id: 'server-shape' });
-    queuePendingSyncRequest({ requestId: 'old-pending', actorId: 'actor-1' });
+    queuePendingSyncRequest({ requestId: 'old-pending', actorId: 'actor-1', clientClock: 0 });
     useElementsStore.setState({ elements: [makeElement({ id: 'local-draft' })] });
     getSocketState().bufferedSyncEvents = [
       broadcast(changeSet({ requestId: 'buffered', serverClock: 12 })),
@@ -376,7 +376,7 @@ describe('P5 reconciliation pending and change-set handling', () => {
     setLastServerClock(4);
     useElementsStore.setState({ elements: [makeElement({ id: 'shape-1', x: 50 })] });
     getSocketState().serverElements = [makeElement({ id: 'shape-1', x: 40 })];
-    queuePendingSyncRequest({ requestId: 'late-ack', actorId: 'actor-1' });
+    queuePendingSyncRequest({ requestId: 'late-ack', actorId: 'actor-1', clientClock: 0 });
 
     const result = processSyncAck({
       status: 'commit',

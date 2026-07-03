@@ -922,78 +922,92 @@ cross-instance coordination, nhưng PostgreSQL vẫn là durable source of truth
 **Schema bổ sung vào Prisma (P4-07):**
 
 ```prisma
+// Add to Room:
+// snapshots Snapshot[]
+
 model Snapshot {
-  id            String   @id @default(uuid()) @db.Uuid
-  roomId        String   @db.Uuid
+  id            String   @id @default(uuid())
+  roomId        String
   documentClock BigInt
+  roomEpoch     BigInt   @default(0)
   createdBy     String?
   createdAt     DateTime @default(now())
-  reason        String   // 'interval' | 'manual' | 'restore' | 'import'
+  reason        String   // 'interval' | 'manual' | 'restore_safety' | 'import_safety'
   records       Json     // Element[] — toàn bộ elements sống tại thời điểm snapshot
-  tombstones    Json     // { recordId: string; deletedClock: string }[]
+  tombstones    Json     // audit/future replay: { recordId: string; deletedClock: string }[]
   room          Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
   @@index([roomId, createdAt])
+  @@index([roomId, documentClock])
 }
 ```
 
 **Trigger snapshot (server-side):**
 
-- Sau mỗi commit batch tăng `documentClock`: nếu `now - lastSnapshotAt >= 30_000ms` và `documentClock > lastSnapshotClock` → enqueue snapshot với `reason: 'interval'`.
+- Sau mỗi committed change set tăng `documentClock`: nếu `now - lastSnapshotAt >= 30_000ms` và `documentClock > lastSnapshotClock` → enqueue snapshot với `reason: 'interval'`. Hook này đọc materialized server truth từ `SyncRoom`/repository, không đọc state client.
 - Manual (user bấm nút lưu phiên bản): immediate snapshot với `reason: 'manual'`.
-- Trước khi import/restore: snapshot trạng thái hiện tại với `reason: 'import'` hoặc `reason: 'restore'` (safety net).
+- Trước khi import/restore: snapshot trạng thái hiện tại với `reason: 'import_safety'` hoặc `reason: 'restore_safety'` (safety net).
 - Retention: giữ mỗi 30s trong 1h gần nhất, mỗi 5m trong 24h, mỗi 1h trong 30 ngày.
 
-**Protocol (`@vdt/shared` — thêm events):**
+**Protocol/API:**
+
+- Dùng HTTP cho UI history:
+  - `GET /api/rooms/:roomId/snapshots` → list metadata `{ id, documentClock, roomEpoch, createdAt, createdBy, reason }[]`.
+  - `POST /api/rooms/:roomId/snapshots` → tạo manual snapshot.
+  - `POST /api/rooms/:roomId/snapshots/:snapshotId/restore` → owner restore snapshot.
+- Không thêm `ROOM_RESTORED`. Restore phải đi qua existing `ReplaceDocumentCommand` với `reason: 'restore'`, rồi broadcast existing `ROOM_REPLACED`.
+- `ROOM_REPLACED` payload hiện có là server truth duy nhất sau import/restore/replace:
 
 ```ts
-// Events mới
-SNAPSHOT_LIST: 'snapshot-list'; // client request → server HTTP GET hoặc socket
-SNAPSHOT_RESTORE: 'snapshot-restore'; // client → server: { roomId, snapshotId }
-ROOM_RESTORED: 'room-restored'; // server → broadcast toàn phòng
-```
-
-```ts
-// ROOM_RESTORED payload
-interface RoomRestoredPayload {
+interface RoomReplacedPayload {
+  protocolVersion: number;
+  schemaVersion: number;
   roomId: string;
-  snapshotId: string;
   serverClock: number;
-  mode: 'wipe_all';
-  elements: Element[]; // toàn bộ elements từ snapshot
+  roomEpoch: number;
+  elements: Element[];
+  slotClocks: SlotClockUpdate[];
 }
 ```
 
-**Server restore transaction (P4 path; P5 thay bằng `REPLACE_DOCUMENT` command):**
+**Server restore flow (P4-07 chạy theo P5 replace path):**
 
-1. Check user là owner/admin của room.
+1. Check user là owner/admin của room. Với role model hiện tại, tối thiểu chỉ owner được restore.
 2. Load snapshot theo `snapshotId`.
-3. Insert snapshot hiện tại với `reason: 'restore'` (safety net).
-4. P4 có thể xóa toàn bộ `Record` của room, insert lại từ `snapshot.records`.
-5. P4 có thể xóa toàn bộ `Tombstone`, insert lại từ `snapshot.tombstones`.
-6. `Room.documentClock = max(current + 1, snapshot.documentClock + 1)`.
-7. Broadcast `ROOM_RESTORED` với `mode: 'wipe_all'` và toàn bộ elements.
-8. Từ P5, restore không được thao tác DB trực tiếp; phải tạo safety snapshot rồi execute `REPLACE_DOCUMENT` qua `SyncRoom`, tăng `roomEpoch`, clear pending cũ và broadcast `CommittedChangeSet`.
+3. Insert safety snapshot trạng thái hiện tại với `reason: 'restore_safety'`.
+4. Execute `ReplaceDocumentCommand`/`executeReplaceDocument` với `elements = snapshot.records` và `reason: 'restore'`.
+5. Restore không được xóa/insert `Record` hoặc `Tombstone` trực tiếp. `SyncRoom`/persistence transaction chịu trách nhiệm tăng `documentClock`, tăng `roomEpoch`, rebuild slot clocks, tombstone các active ids hiện tại không có trong snapshot, và ghi `ProcessedRequest` cho command resendable.
+6. Broadcast `ROOM_REPLACED` cho toàn phòng. `SYNC_ACK`/`SYNC_BROADCAST` có thể tồn tại theo sync path, nhưng client phải xem `ROOM_REPLACED` là wipe/hydrate boundary.
+7. `snapshot.tombstones` trong P4-07 là audit/future replay data. MVP restore không khôi phục tombstone history cũ vào DB vì `ReplaceDocumentCommand` hiện thay document bằng active elements và dùng `roomEpoch` để chặn diff/pending xuyên qua replace boundary.
 
-**Client xử lý `ROOM_RESTORED`:**
+**Client xử lý restore/import replace:**
 
 ```ts
-// Xóa pending queue — state cũ không còn valid
-pendingPushRequests = [];
+// Existing ROOM_REPLACED handler:
+markPendingRequestsStale();
+clearPendingQueue();
+clearPendingSyncCommands();
+bufferedSyncEvents = [];
+setElements(data.elements);
+hydrateKnownSlotClocks(data.slotClocks);
+roomEpoch = data.roomEpoch;
 lastServerClock = data.serverClock;
-// Wipe và load snapshot
-useElementsStore.getState().setElements(data.elements);
+
+// P4-07 addition:
+clearUndoRedoHistory();
 ```
 
 **Acceptance criteria:**
 
 - [ ] UI có panel liệt kê snapshots (timestamp, reason, createdBy); có nút Restore cho owner/admin.
 - [ ] Restore hiển thị confirm dialog vì sẽ thay toàn bộ document state.
-- [ ] Sau restore, tất cả client trong phòng nhận `ROOM_RESTORED` và hiển thị đúng state snapshot.
-- [ ] `pendingPushRequests` bị clear khi nhận `ROOM_RESTORED` để tránh ghost push.
+- [ ] Sau restore, tất cả client trong phòng nhận `ROOM_REPLACED` và hiển thị đúng state snapshot.
+- [ ] Pending legacy queue, pending sync commands, in-flight requests và buffered sync events bị clear/stale khi nhận `ROOM_REPLACED` để tránh ghost push.
+- [ ] Undo/redo local history bị clear khi document bị replace do import/restore/manual replace.
 - [BE] Snapshot được tạo tự động mỗi ≥30s khi có thay đổi.
-- [BE] Restore là atomic transaction — không có trạng thái partial.
+- [BE] Restore đi qua `ReplaceDocumentCommand`/`SyncRoom` và là atomic transaction — không có trạng thái partial.
 - [BE] Snapshot trước restore/import được lưu để có thể quay lại nếu cần.
 - [BE] Viewer/editor bị reject khi restore nếu không phải owner/admin.
+- [BE] Regression test chứng minh restore không gọi Prisma trực tiếp để mutate `Record`/`Tombstone` ngoài sync persistence path.
 
 ### Phase 4 Definition of Done
 
@@ -1273,7 +1287,9 @@ Delete => delete-wins.
 - [ ] `RoomDiff` chứa `protocolVersion`, `schemaVersion`, `roomId`, `fromClock`, `toClock`,
   `serverClock`, `roomEpoch`, `changed`, `deleted`, `slotClocks`, `hasMore` và optional
   `nextFromClock`.
-- [ ] `ReconnectRequest` gửi `lastServerClock`, `roomEpoch` và `pendingRequestIds`. Response trả
+- [ ] `ReconnectRequest` gửi `lastServerClock`, `roomEpoch` và `pendingRequests` (mỗi phần tử
+  `{ requestId, clientClock }` — `clientClock` là clock client biết khi tạo command đó, dùng để
+  server phân biệt `expired` thật với `unknown` chưa từng tới nơi, xem [P5-13] mục H). Response trả
   `kind: 'snapshot' | 'diff'` kèm `PendingRequestStatus[]`.
 - [ ] `PendingRequestStatus.status` thuộc `'processed' | 'unknown' | 'conflict' | 'expired'`:
   `processed` clear pending và có thể replay ACK; `unknown` resend cùng `requestId` nếu còn relevant;
@@ -1480,6 +1496,23 @@ Delete => delete-wins.
 - **F. `readPreconditions` internal; dependent-slot qua domain command + `server_recompute`.** Thực thi:
   contract [P5-02], ràng buộc [P5-04]/[P5-08]. *Lý do:* để client tự khai read-set là fragile; server
   tự recompute geometry phụ thuộc binding/order/grouping an toàn hơn. **[done]**
+- **G. Lazy Room row creation khi `expectedDocumentClock === 0`.** Thực thi: [P5-06]
+  (`commitPrismaChangeSet`). *Lý do:* audit 2026-07-03 (H3) phát hiện phòng tạo qua nút "Create new
+  room" ở client (chỉ sinh UUID, không gọi DB) không còn có đường tạo `Room` row lười — P5 thay
+  `save-room.ts`'s `tx.room.upsert` bằng conditional `updateMany` thuần, nên phòng chưa có row nào
+  fail `CONDITIONAL_CLOCK_CONFLICT` mãi mãi, không ACK, client treo command in-flight vĩnh viễn.
+  Fix: chỉ khi `expectedDocumentClock === 0`, race-safe tạo row baseline (`documentClock: 0`) rồi
+  retry đúng conditional update ban đầu; nếu row đã tồn tại với clock khác 0 (concurrent writer thật),
+  vẫn rơi về `ROOM_UNHEALTHY`/reload như cũ — không nới lỏng invariant conditional-update cho trường
+  hợp thật có xung đột. **[done]**
+- **H. `expired` pending-request status theo `clientClock` từng request, không theo cờ GC toàn phòng.**
+  Thực thi: [P5-06]/[P5-07] (`getPendingRequestStatuses`). *Lý do:* audit 2026-07-03 (H4) phát hiện
+  `historyStart > 0` (phòng từng GC một lần) khiến MỌI request không tìm thấy bị gắn `expired`, kể cả
+  request chưa từng tới server (mất gói tin, chưa gửi kịp) — client drop pending này thay vì resend,
+  mất edit thật. Fix: mỗi pending request đi kèm `clientClock` (clock client biết khi tạo command);
+  chỉ `expired` khi `clientClock < historyStart` (nếu đã processed, `serverClock` của nó chắc chắn
+  `> clientClock`, nên `>= historyStart` nghĩa là không thể đã bị GC); còn lại `unknown` để client tự
+  resend theo rule [P5-07]. **[done]**
 
 **Acceptance:**
 

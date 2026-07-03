@@ -1,5 +1,6 @@
 import type {
   Element,
+  PendingRequestRef,
   SlotClockUpdate,
   SyncAck,
   SyncBroadcast,
@@ -39,6 +40,7 @@ interface SocketClientState {
 export interface PendingSyncRequest {
   requestId: string;
   actorId: string | null;
+  clientClock: SyncClock;
 }
 
 export interface QueuedSyncCommand {
@@ -117,6 +119,18 @@ export function applyKnownSlotClocks(slotClocks: SlotClockUpdate[]): void {
 
 export function removeKnownSlotClocks(elementIds: string[]): void {
   for (const elementId of elementIds) state.knownSlotClocks.delete(elementId);
+}
+
+/**
+ * Builds the `{ requestId, clientClock }` refs sent to the server for reconnect/resync
+ * requests. The server uses `clientClock` to tell a genuinely GC'd request apart from one
+ * that was simply never received (see `getPendingRequestStatuses` on the backend).
+ */
+export function getPendingRequestRefs(): PendingRequestRef[] {
+  return state.pendingSyncRequests.map((request) => ({
+    requestId: request.requestId,
+    clientClock: request.clientClock,
+  }));
 }
 
 export function markPendingRequestsStale(): string[] {

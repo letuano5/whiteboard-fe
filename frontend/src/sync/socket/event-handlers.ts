@@ -24,7 +24,12 @@ import {
   rematerializeOptimisticStore,
   replayBufferedSyncEvents,
 } from './p5-reconciliation';
-import { getSocketState, markPendingRequestsStale, setLastServerClock } from './state';
+import {
+  getPendingRequestRefs,
+  getSocketState,
+  markPendingRequestsStale,
+  setLastServerClock,
+} from './state';
 import type {
   CursorMovePayload,
   ElementUpdatePayload,
@@ -53,7 +58,7 @@ export function registerSocketEventHandlers(): void {
       color: LOCAL_PRESENCE.color,
       lastServerClock: current.hasJoined ? current.lastServerClock : 0,
       roomEpoch: current.roomEpoch,
-      pendingRequestIds: current.pendingSyncRequests.map((request) => request.requestId),
+      pendingRequests: getPendingRequestRefs(),
     });
 
     current.hasJoined = true;

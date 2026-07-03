@@ -54,6 +54,16 @@ describe('buildDraftFromPoints — ellipse', () => {
   });
 });
 
+describe('buildDraftFromPoints — diamond / triangle / polygon (H5 audit fix)', () => {
+  it.each(['diamond', 'triangle', 'polygon'] as const)(
+    '%s: builds a bbox draft like rectangle',
+    (type) => {
+      const result = buildDraftFromPoints(type, pt(60, 80), pt(10, 20));
+      expect(result).toMatchObject({ type, x: 10, y: 20, width: 50, height: 60 });
+    },
+  );
+});
+
 describe('buildDraftFromPoints — line', () => {
   it('stores props.points with absolute world coords', () => {
     const result = buildDraftFromPoints('line', pt(10, 20), pt(90, 60));

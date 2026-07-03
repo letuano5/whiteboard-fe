@@ -8,7 +8,7 @@ export async function handleRoomDiffRequest(
   deps: ResolvedWhiteboardServerDeps,
   payload: RoomDiffRequestPayload,
 ): Promise<void> {
-  const { roomId, fromClock, lastServerClock, roomEpoch, pendingRequestIds = [] } = payload;
+  const { roomId, fromClock, lastServerClock, roomEpoch, pendingRequests = [] } = payload;
   const baseClock = lastServerClock ?? fromClock ?? 0;
   const inMemory = deps.roomElements.has(roomId)
     ? [...deps.roomElements.get(roomId)!.values()]
@@ -17,7 +17,7 @@ export async function handleRoomDiffRequest(
   try {
     const diffResult = await getRoomDiff(deps.db, roomId, baseClock, inMemory, {
       roomEpoch,
-      pendingRequestIds,
+      pendingRequests,
       actorId: socket.data?.auth?.user?.id ?? null,
     });
     // Emit the clock the diff was actually materialized at (P5-07): using the

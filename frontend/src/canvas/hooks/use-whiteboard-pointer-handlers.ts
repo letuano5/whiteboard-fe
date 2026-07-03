@@ -32,7 +32,7 @@ import {
   onSelectPointerUp,
 } from '../tools/select-tool';
 import { onCanvasDoubleClick } from '../tools/text-editor';
-import { getShapeUtil } from '../shapes';
+import { hitTestElementAtWorldPoint } from '../shapes/hit-test';
 import { svgElementWorldPoint, svgWorldPoint } from '../pointer-coordinates';
 
 interface ContextMenuState {
@@ -230,9 +230,7 @@ export function useWhiteboardPointerHandlers({
       .sort((a, b) => b.zIndex - a.zIndex);
 
     for (const element of visible) {
-      const util = getShapeUtil(element.type);
-      if (!util) continue;
-      if (util.hitTest(element, worldPoint.x, worldPoint.y)) {
+      if (hitTestElementAtWorldPoint(element, worldPoint)) {
         setContextMenu({ x: event.clientX, y: event.clientY, id: element.id });
         return;
       }

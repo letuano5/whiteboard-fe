@@ -52,7 +52,11 @@ interface NativeFileImportResponse {
 
 interface NativeFileImportHttpError {
   error: {
-    code: 'native-file/unauthenticated' | 'native-file/forbidden' | 'native-file/invalid-payload';
+    code:
+      | 'native-file/unauthenticated'
+      | 'native-file/forbidden'
+      | 'native-file/invalid-payload'
+      | 'native-file/internal-error';
     message: string;
   };
 }
@@ -230,7 +234,10 @@ function readRoomId(request: Request): string {
   return typeof value === 'string' ? value : '';
 }
 
-function sendKnownImportError(response: Response<NativeFileImportHttpError>, error: unknown): void {
+export function sendKnownImportError(
+  response: Response<NativeFileImportHttpError>,
+  error: unknown,
+): void {
   if (error instanceof NativeFileImportError) {
     sendNativeFileError(
       response,
@@ -246,7 +253,8 @@ function sendKnownImportError(response: Response<NativeFileImportHttpError>, err
     return;
   }
 
-  throw error;
+  console.error('[native-file-import] Unexpected error:', error);
+  sendNativeFileError(response, 500, 'native-file/internal-error', 'Failed to import the document.');
 }
 
 function sendNativeFileError(

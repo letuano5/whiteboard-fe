@@ -1,6 +1,7 @@
 import type { Prisma, PrismaClient } from '@prisma/client';
 import type {
   Element,
+  PendingRequestRef,
   PendingRequestStatus,
   SlotClockUpdate,
   SyncClock,
@@ -11,7 +12,7 @@ import { toProcessedRequestActorId } from '../../sync/sync-room-persistence.js';
 
 interface RoomDiffOptions {
   roomEpoch?: SyncClock;
-  pendingRequestIds?: string[];
+  pendingRequests?: PendingRequestRef[];
   actorId?: string | null;
 }
 
@@ -88,7 +89,7 @@ async function computeRoomDiff(
     : 0;
   const pendingRequests = await getPendingRequestStatuses(db, roomId, {
     actorId: options.actorId,
-    pendingRequestIds: options.pendingRequestIds ?? [],
+    pendingRequests: options.pendingRequests ?? [],
     processedRequestHistoryStartsAtClock,
   });
 
@@ -157,22 +158,22 @@ export async function getPendingRequestStatuses(
   roomId: string,
   options: {
     actorId?: string | null;
-    pendingRequestIds: string[];
+    pendingRequests: PendingRequestRef[];
     processedRequestHistoryStartsAtClock?: number;
   },
 ): Promise<PendingRequestStatus[]> {
-  const uniqueIds = [...new Set(options.pendingRequestIds)].filter((id) => id.length > 0);
-  if (uniqueIds.length === 0) return [];
+  const uniqueRefs = dedupePendingRequestRefs(options.pendingRequests);
+  if (uniqueRefs.length === 0) return [];
 
   const actorId = toProcessedRequestActorId(options.actorId ?? null);
   const processedRequests = await db.processedRequest.findMany({
-    where: { roomId, actorId, requestId: { in: uniqueIds } },
+    where: { roomId, actorId, requestId: { in: uniqueRefs.map((ref) => ref.requestId) } },
     select: { requestId: true, serverClock: true, reason: true },
   });
   const processedById = new Map(processedRequests.map((request) => [request.requestId, request]));
   const historyStart = options.processedRequestHistoryStartsAtClock ?? 0;
 
-  return uniqueIds.map((requestId) => {
+  return uniqueRefs.map(({ requestId, clientClock }) => {
     const processed = processedById.get(requestId);
     if (processed) {
       return {
@@ -182,9 +183,24 @@ export async function getPendingRequestStatuses(
         reason: processed.reason ?? undefined,
       };
     }
-    if (historyStart > 0) return { requestId, status: 'expired', reason: 'idempotency_history_gc' };
+    // Only classify as expired when this command's clientClock predates the GC cutoff — if
+    // it had been processed, its serverClock would exceed clientClock, and thus exceed
+    // historyStart too, meaning it would still exist in ProcessedRequest (not GC'd). A
+    // command with clientClock >= historyStart genuinely was never received by the server.
+    if (clientClock < historyStart) {
+      return { requestId, status: 'expired', reason: 'idempotency_history_gc' };
+    }
     return { requestId, status: 'unknown' };
   });
+}
+
+function dedupePendingRequestRefs(refs: PendingRequestRef[]): PendingRequestRef[] {
+  const byRequestId = new Map<string, PendingRequestRef>();
+  for (const ref of refs) {
+    if (ref.requestId.length === 0) continue;
+    byRequestId.set(ref.requestId, ref);
+  }
+  return [...byRequestId.values()];
 }
 
 /**
