@@ -91,6 +91,12 @@ export const ROOM_CAPACITY_LIMITS = {
   MAX_EDITORS: 10,
 } as const;
 
+// ─── Dashboard document preview ─────────────────────────────────────────────
+
+// Shared by the backend preview query (`take`) and the frontend thumbnail
+// renderer (`slice`) so the two never drift out of sync.
+export const DASHBOARD_PREVIEW_ELEMENT_LIMIT = 24;
+
 export interface RoomMemberSummary {
   userId: string;
   email: string | null;

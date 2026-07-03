@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Whiteboard from '../Whiteboard';
 import { useElementsStore } from '../../store/elements.store';
@@ -83,7 +83,7 @@ describe('Whiteboard role permissions', () => {
     expect(screen.getByRole('button', { name: /login/i })).toBeInTheDocument();
   });
 
-  it('shows dashboard navigation on saved boards', () => {
+  it('shows dashboard navigation on saved boards', async () => {
     const pushStateSpy = vi.spyOn(window.history, 'pushState').mockImplementation(() => {});
     const reload = vi.fn();
     Object.defineProperty(window, 'location', {
@@ -94,7 +94,8 @@ describe('Whiteboard role permissions', () => {
     render(<Whiteboard mode="saved" />);
     fireEvent.click(screen.getByRole('button', { name: /open dashboard/i }));
 
+    // Navigation now waits for any pending sync commands to settle first.
+    await waitFor(() => expect(reload).toHaveBeenCalledOnce());
     expect(pushStateSpy).toHaveBeenCalledWith({}, '', '/dashboard');
-    expect(reload).toHaveBeenCalledOnce();
   });
 });

@@ -1,4 +1,5 @@
 import type { PrismaClient } from '@prisma/client';
+import { DASHBOARD_PREVIEW_ELEMENT_LIMIT } from '@vdt/shared';
 import type {
   DashboardDocument,
   DashboardListFilters,
@@ -11,8 +12,6 @@ import {
   encodeDashboardCursor,
 } from './document-pagination.js';
 import { isPreviewElement } from './document-preview.js';
-
-const PREVIEW_RECORD_LIMIT = 36;
 
 export class DocumentPermissionError extends Error {
   constructor(
@@ -49,7 +48,8 @@ export async function listDashboardDocuments(
       records: {
         where: { typeName: { not: '' } },
         select: { state: true },
-        take: PREVIEW_RECORD_LIMIT,
+        orderBy: { recordClock: 'desc' },
+        take: DASHBOARD_PREVIEW_ELEMENT_LIMIT,
       },
     },
     orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
@@ -153,7 +153,8 @@ export async function updateDashboardDocument(
       records: {
         where: { typeName: { not: '' } },
         select: { state: true },
-        take: PREVIEW_RECORD_LIMIT,
+        orderBy: { recordClock: 'desc' },
+        take: DASHBOARD_PREVIEW_ELEMENT_LIMIT,
       },
     },
   })) as RoomForDashboard;

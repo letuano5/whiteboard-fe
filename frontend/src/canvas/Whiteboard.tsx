@@ -19,9 +19,20 @@ import { useSpacePanMode } from './hooks/use-space-pan-mode';
 import { useWheelPanZoom } from './hooks/use-wheel-pan-zoom';
 import { useWhiteboardPointerHandlers } from './hooks/use-whiteboard-pointer-handlers';
 import { useWhiteboardShortcuts } from './hooks/use-whiteboard-shortcuts';
+import { waitForSyncIdle } from '../sync/socket-client';
 
 interface WhiteboardProps {
   mode?: 'local' | 'saved';
+}
+
+async function openDashboard(isLocalBoard: boolean): Promise<void> {
+  // Wait for any pending delete/patch to reach the server first, so the
+  // dashboard's fresh fetch doesn't race ahead of a just-issued mutation.
+  if (!isLocalBoard) {
+    await waitForSyncIdle();
+  }
+  window.history.pushState({}, '', '/dashboard');
+  window.location.reload();
 }
 
 export default function Whiteboard({ mode = 'saved' }: WhiteboardProps) {
@@ -70,8 +81,7 @@ export default function Whiteboard({ mode = 'saved' }: WhiteboardProps) {
       <button
         type="button"
         onClick={() => {
-          window.history.pushState({}, '', '/dashboard');
-          window.location.reload();
+          void openDashboard(isLocalBoard);
         }}
         className="absolute left-3 top-3 z-50 flex h-10 w-10 items-center justify-center rounded-lg border border-[#cbd9cb] bg-white text-[#173f35] shadow-[0_8px_24px_rgba(23,63,53,0.12)] hover:bg-[#edf5ef] focus:outline-none focus:ring-2 focus:ring-[#2457c5] focus:ring-offset-2"
         aria-label="Open dashboard"

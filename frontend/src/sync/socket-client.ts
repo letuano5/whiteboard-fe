@@ -5,3 +5,4 @@ export {
   stopSocketClient,
   updateRoomMemberRole,
 } from './socket/client';
+export { waitForSyncIdle } from './socket/p5-command-queue';

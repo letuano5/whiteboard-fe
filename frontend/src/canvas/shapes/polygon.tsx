@@ -4,7 +4,7 @@ import { strokeDashArray } from './utils';
 
 const SIDES = 6;
 
-function regularPolygonPoints(cx: number, cy: number, rx: number, ry: number): string {
+export function regularPolygonPoints(cx: number, cy: number, rx: number, ry: number): string {
   return Array.from({ length: SIDES }, (_, index) => {
     const angle = (index / SIDES) * 2 * Math.PI - Math.PI / 2;
     return `${cx + rx * Math.cos(angle)},${cy + ry * Math.sin(angle)}`;

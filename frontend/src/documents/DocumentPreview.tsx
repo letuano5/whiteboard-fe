@@ -1,10 +1,14 @@
+import { DASHBOARD_PREVIEW_ELEMENT_LIMIT } from '../types/shared';
 import type { Element } from '../types/shared';
+import { buildFreehandPath } from '../canvas/freehand-points';
+import { regularPolygonPoints } from '../canvas/shapes/polygon';
+import { trianglePoints } from '../canvas/shapes/triangle';
 
 export function DocumentPreview({ elements, title }: { elements: Element[]; title: string }) {
   const visibleElements = elements
     .filter((element) => !element.isDeleted)
     .sort((a, b) => a.zIndex - b.zIndex)
-    .slice(0, 24);
+    .slice(0, DASHBOARD_PREVIEW_ELEMENT_LIMIT);
   const bounds = getBounds(visibleElements);
 
   return (
@@ -99,6 +103,49 @@ function PreviewElement({ element }: { element: Element }) {
       >
         {(element.props.text ?? 'Text').slice(0, 42)}
       </text>
+    );
+  }
+
+  if (element.type === 'triangle') {
+    return (
+      <polygon
+        points={trianglePoints(element.x, element.y, element.width, element.height)}
+        fill={fill}
+        opacity={opacity}
+        stroke={stroke}
+        strokeWidth={strokeWidth}
+        transform={transform}
+      />
+    );
+  }
+
+  if (element.type === 'polygon') {
+    const cx = element.x + element.width / 2;
+    const cy = element.y + element.height / 2;
+    return (
+      <polygon
+        points={regularPolygonPoints(cx, cy, element.width / 2, element.height / 2)}
+        fill={fill}
+        opacity={opacity}
+        stroke={stroke}
+        strokeWidth={strokeWidth}
+        transform={transform}
+      />
+    );
+  }
+
+  if (element.type === 'freehand' || element.type === 'highlighter') {
+    return (
+      <path
+        d={buildFreehandPath(element.props.points)}
+        fill="none"
+        opacity={opacity}
+        stroke={stroke}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={strokeWidth}
+        transform={transform}
+      />
     );
   }
 

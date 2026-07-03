@@ -35,8 +35,6 @@ export type {
 } from './sync-room.js';
 export type { SyncRoomErrorCode } from './sync-room-errors.js';
 export type {
-  LegacyElementUpdateCommand,
-  LegacyElementUpdateResult,
   NativeFileImportCommand,
   NativeFileImportResult,
   ReplaceDocumentResult,

@@ -65,6 +65,27 @@ describe('SyncRoom replace-document', () => {
     expect(room.getStateSnapshot().roomEpoch).toBe(2);
   });
 
+  it('drops incoming elements marked isDeleted instead of resurrecting them', async () => {
+    // @covers AC-6
+    const kept = makeElement({ id: 'kept' });
+    const softDeleted = { ...makeElement({ id: 'soft-deleted' }), isDeleted: true };
+    const room = new SyncRoom({
+      roomId: 'room-1',
+      elements: [makeElement({ id: 'old' })],
+      roomEpoch: 1,
+    });
+
+    const result = await room.execute(
+      createReplaceCommand('replace-drops-deleted', [kept, softDeleted], 1),
+      { actorId: 'user-1' },
+    );
+    const snapshot = room.getStateSnapshot();
+
+    expect(snapshot.elements.has('soft-deleted')).toBe(false);
+    expect(snapshot.elements.get('kept')).toEqual(expect.objectContaining({ id: 'kept' }));
+    expect(result.changeSet.puts.map((element) => element.id)).toEqual(['kept']);
+  });
+
   it('rebuilds slot clocks from scratch when the same id is replaced with a different type', async () => {
     // @covers AC-5
     const original = makeElement({ id: 'same-id', type: 'rectangle' });

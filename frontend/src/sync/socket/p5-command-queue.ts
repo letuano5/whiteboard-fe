@@ -95,6 +95,35 @@ export function flushPendingSyncCommands(force = false): void {
   scheduleNextFlush();
 }
 
+export function hasPendingSyncWork(): boolean {
+  const state = getSocketState();
+  return state.queuedSyncCommands.length > 0 || state.inFlightSyncCommands.length > 0;
+}
+
+/**
+ * Forces a flush and waits for queued/in-flight sync commands to settle, so
+ * navigation away from the canvas (e.g. back to the dashboard) doesn't race
+ * ahead of a just-issued delete/patch that hasn't reached the server yet.
+ * Falls back to `timeoutMs` so a stuck connection can't block navigation forever.
+ */
+export function waitForSyncIdle(timeoutMs = 2000): Promise<void> {
+  flushPendingSyncCommands(true);
+  if (!hasPendingSyncWork()) return Promise.resolve();
+
+  return new Promise((resolve) => {
+    const deadline = Date.now() + timeoutMs;
+    const poll = (): void => {
+      flushPendingSyncCommands(true);
+      if (!hasPendingSyncWork() || Date.now() >= deadline) {
+        resolve();
+        return;
+      }
+      setTimeout(poll, 50);
+    };
+    poll();
+  });
+}
+
 export function clearPendingSyncCommands(): void {
   const state = getSocketState();
   state.queuedSyncCommands = [];

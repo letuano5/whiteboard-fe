@@ -87,7 +87,9 @@ export function defaultSyncRoomPlanner(context: SyncRoomPlannerContext): SyncRoo
     case 'update-arrow-binding':
       return planUpdateArrowBinding(context, context.command);
     case 'replace-document': {
-      const created = context.command.elements.map((element) => ({ ...element, isDeleted: false }));
+      const created = context.command.elements
+        .filter((element) => !element.isDeleted)
+        .map((element) => ({ ...element, isDeleted: false }));
       const replacementIds = new Set(created.map((element) => element.id));
       return {
         reason: 'replace_document',

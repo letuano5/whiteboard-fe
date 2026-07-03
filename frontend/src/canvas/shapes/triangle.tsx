@@ -2,6 +2,11 @@ import type { Element } from '../../types/shared';
 import type { ShapeUtil } from './types';
 import { strokeDashArray } from './utils';
 
+export function trianglePoints(x: number, y: number, width: number, height: number): string {
+  const cx = x + width / 2;
+  return [`${cx},${y}`, `${x + width},${y + height}`, `${x},${y + height}`].join(' ');
+}
+
 export const triangleShapeUtil: ShapeUtil = {
   type: 'triangle',
 
@@ -9,7 +14,7 @@ export const triangleShapeUtil: ShapeUtil = {
     const { x, y, width, height, angle, props } = element;
     const cx = x + width / 2;
     const cy = y + height / 2;
-    const points = [`${cx},${y}`, `${x + width},${y + height}`, `${x},${y + height}`].join(' ');
+    const points = trianglePoints(x, y, width, height);
     return (
       <polygon
         points={points}

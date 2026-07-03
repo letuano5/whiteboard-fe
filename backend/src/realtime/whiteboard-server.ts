@@ -5,7 +5,6 @@ import { prisma } from '../persistence/prisma.js';
 import { handleCursorMove } from './handlers/cursor-move.js';
 import { handleDisconnect } from './handlers/disconnect.js';
 import { handleElementDraft } from './handlers/element-draft.js';
-import { handleElementUpdate } from './handlers/element-update.js';
 import { handleJoinRoom } from './handlers/join-room.js';
 import { handleRoomDiffRequest } from './handlers/room-diff-request.js';
 import { handleRoomRoleUpdate } from './handlers/room-role-update.js';
@@ -13,7 +12,6 @@ import { handleSyncCommand } from './handlers/sync-command.js';
 import type {
   CursorMovePayload,
   ElementDraftPayload,
-  ElementUpdatePayload,
   JoinRoomPayload,
   RoomDiffRequestPayload,
   RoomRoleUpdatePayload,
@@ -49,10 +47,6 @@ export function createWhiteboardServer(ioServer: Server, deps: WhiteboardServerD
 
     socket.on(WS_EVENTS.JOIN_ROOM, (payload: JoinRoomPayload) =>
       handleJoinRoom(ioServer, socket, resolvedDeps, payload),
-    );
-
-    socket.on(WS_EVENTS.ELEMENT_UPDATE, (payload: ElementUpdatePayload) =>
-      handleElementUpdate(socket, resolvedDeps, payload),
     );
 
     socket.on(WS_EVENTS.SYNC_COMMAND, (payload: SyncCommand) =>
