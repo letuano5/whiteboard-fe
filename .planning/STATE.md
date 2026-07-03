@@ -2,10 +2,10 @@
 gsd_state_version: '1.0'
 status: complete
 progress:
-  total_phases: 22
-  completed_phases: 22
-  total_plans: 25
-  completed_plans: 25
+  total_phases: 23
+  completed_phases: 23
+  total_plans: 26
+  completed_plans: 26
   percent: 100
 ---
 
@@ -16,14 +16,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-30)
 
 **Core value:** Users can create tactical whiteboards without losing work, then collaborate or persist documents when the workflow calls for it.
-**Current focus:** Phase 2.51: P2.5-01 Image / background map (completed)
+**Current focus:** Phase 3.33: P3C-03 Highlighter (completed)
 
 ## Current Position
 
-Phase: 2.51 of active GSD bootstrap (P2.5-01 Image / background map)
+Phase: 3.33 of active GSD bootstrap (P3C-03 Highlighter)
 Plan: 1 of 1 in current phase
 Status: Complete
-Last activity: 2026-07-03 - Completed P2.5-01 SVG image/background map support.
+Last activity: 2026-07-03 - Completed P3C-03 SVG highlighter drawing support.
 
 Progress: [##########] 100%
 
@@ -78,6 +78,9 @@ Progress: [##########] 100%
 - [Phase 3.32]: Freehand uses SVG-only point geometry with local Douglas-Peucker simplification,
   `MAX_POINTS_PER_FREEHAND_STROKE = 600`, and automatic stroke splitting while staying on the
   existing frontend mutation pipeline.
+- [Phase 3.33]: Highlighter uses the same SVG-only freehand point pipeline with fixed
+  semi-transparent, wider stroke defaults; no blend mode, filter, Canvas overlay, backend schema,
+  or P5 sync contract changes are required.
 - [Phase 3.34]: Eraser remains SVG/pointer-pipeline only, reuses registered shape hit-test
   utilities by sampling each drag segment, and deletes whole elements through `deleteElements`.
 
@@ -105,6 +108,7 @@ Progress: [##########] 100%
 - P3C-00 re-render isolation implemented and verified against 3 acceptance criteria.
 - P3C-01 SVG ink layer implemented and verified against 2 acceptance criteria.
 - P3C-02 freehand drawing implemented and verified against 3 acceptance criteria.
+- P3C-03 highlighter drawing implemented and verified against 4 acceptance criteria.
 - P3C-04 eraser implemented and verified against 5 acceptance criteria.
 
 ### Blockers/Concerns

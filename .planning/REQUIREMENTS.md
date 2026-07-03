@@ -11,6 +11,15 @@
 - [x] **P3C-00-AC-2**: Updating one point on a draft element does not re-render unchanged
       committed shapes already on the canvas.
 - [x] **P3C-00-AC-3**: Existing move/resize draft hiding and selection overlay behavior remains intact.
+- [x] **P3C-03-AC-1**: A highlighter drawing tool creates committed `highlighter` elements through
+      the existing mutation pipeline, stores stroke points in `props.points`, and uses the existing
+      SVG ink layer.
+- [x] **P3C-03-AC-2**: Highlighter strokes use fixed semi-transparent opacity and a wider stroke
+      width than freehand.
+- [x] **P3C-03-AC-3**: Highlighter strokes reuse the freehand point pipeline for simplification,
+      bounds derivation, and point-cap splitting.
+- [x] **P3C-03-AC-4**: The toolbar exposes highlighter as an editing tool and clears in-progress
+      highlighter drafts when another tool is selected.
 - [x] **P3C-04-AC-1**: The eraser tool soft-deletes visible shapes by setting `isDeleted = true`
       when the user drags through them.
 - [x] **P3C-04-AC-2**: Eraser deletes go through the existing element mutation pipeline so deletion
@@ -126,6 +135,10 @@
 | P3C-00-AC-1 | Phase 3.30 | Complete |
 | P3C-00-AC-2 | Phase 3.30 | Complete |
 | P3C-00-AC-3 | Phase 3.30 | Complete |
+| P3C-03-AC-1 | Phase 3.33 | Complete |
+| P3C-03-AC-2 | Phase 3.33 | Complete |
+| P3C-03-AC-3 | Phase 3.33 | Complete |
+| P3C-03-AC-4 | Phase 3.33 | Complete |
 | P3C-04-AC-1 | Phase 3.34 | Complete |
 | P3C-04-AC-2 | Phase 3.34 | Complete |
 | P3C-04-AC-3 | Phase 3.34 | Complete |

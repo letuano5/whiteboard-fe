@@ -8,6 +8,11 @@ import { useElementsStore } from '../../store/elements.store';
 import { useCameraStore } from '../../store/camera.store';
 import { createElement } from '../../store/mutation-pipeline';
 import type { Element } from '../../types/shared';
+import {
+  onHighlighterPointerDown,
+  onHighlighterPointerMove,
+  onHighlighterPointerUp,
+} from '../../canvas/tools/freehand-tool';
 
 // Vitest's jsdom shim only exposes setItem/getItem; stub with a full implementation.
 function makeLocalStorageMock() {
@@ -121,10 +126,7 @@ describe('initLocalStoragePersistence — camera restore', () => {
   // @covers AC-2 (006-localstorage-zorder)
   it('restores camera x, y, and zoom to stored values after reload', () => {
     const storedCamera = { x: 100, y: 200, zoom: 1.5 };
-    localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({ elements: [], camera: storedCamera }),
-    );
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ elements: [], camera: storedCamera }));
 
     initLocalStoragePersistence();
 
@@ -197,10 +199,7 @@ describe('initLocalStoragePersistence — full field round-trip', () => {
       createdBy: 'owner-xyz',
     };
 
-    localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({ elements: [full], camera: DEFAULT_CAMERA }),
-    );
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ elements: [full], camera: DEFAULT_CAMERA }));
 
     initLocalStoragePersistence();
 
@@ -317,6 +316,53 @@ describe('startLocalStoragePersistence — debounce write', () => {
 
     vi.advanceTimersByTime(299);
     expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
+
+    cleanup();
+  });
+
+  it('persists a drawn highlighter stroke and restores it after reload', () => {
+    vi.useFakeTimers();
+    const cleanup = startLocalStoragePersistence();
+
+    onHighlighterPointerDown({ x: 0, y: 0 });
+    onHighlighterPointerMove({ x: 10, y: 20 });
+    onHighlighterPointerUp({ x: 20, y: 0 });
+
+    vi.advanceTimersByTime(300);
+
+    const raw = localStorage.getItem(STORAGE_KEY);
+    expect(raw).not.toBeNull();
+    const saved = JSON.parse(raw!);
+    expect(saved.elements).toHaveLength(1);
+    expect(saved.elements[0]).toMatchObject({
+      type: 'highlighter',
+      props: {
+        opacity: 0.35,
+        strokeWidth: 14,
+        points: [
+          [0, 0],
+          [10, 20],
+          [20, 0],
+        ],
+      },
+    });
+
+    useElementsStore.setState({ elements: [] });
+    initLocalStoragePersistence();
+
+    const restored = useElementsStore.getState().elements[0];
+    expect(restored).toMatchObject({
+      type: 'highlighter',
+      x: 0,
+      y: 0,
+      width: 20,
+      height: 20,
+    });
+    expect(restored.props.points).toEqual([
+      [0, 0],
+      [10, 20],
+      [20, 0],
+    ]);
 
     cleanup();
   });

@@ -106,6 +106,21 @@ function PreviewElement({ element }: { element: Element }) {
     );
   }
 
+  if (element.type === 'image') {
+    return (
+      <image
+        href={element.props.src ?? ''}
+        x={element.x}
+        y={element.y}
+        width={element.width}
+        height={element.height}
+        opacity={opacity}
+        preserveAspectRatio="xMidYMid meet"
+        transform={transform}
+      />
+    );
+  }
+
   if (element.type === 'triangle') {
     return (
       <polygon

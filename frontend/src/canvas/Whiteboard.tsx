@@ -69,7 +69,10 @@ export default function Whiteboard({ mode = 'saved' }: WhiteboardProps) {
     ? 'grabbing'
     : activeTool === 'hand' || spaceDown
       ? 'grab'
-      : activeTool === 'laser' || activeTool === 'freehand' || activeTool === 'eraser'
+      : activeTool === 'laser' ||
+          activeTool === 'freehand' ||
+          activeTool === 'highlighter' ||
+          activeTool === 'eraser'
         ? 'crosshair'
         : undefined;
 

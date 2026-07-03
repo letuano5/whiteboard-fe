@@ -30,6 +30,7 @@ project roadmap, phase order, and product scope remain canonical in `docs/SPECS.
 - Repo roadmap ID `P3C-00` maps to GSD Phase `3.30`.
 - Repo roadmap ID `P3C-01` maps to GSD Phase `3.31`.
 - Repo roadmap ID `P3C-02` maps to GSD Phase `3.32`.
+- Repo roadmap ID `P3C-03` maps to GSD Phase `3.33`.
 - Repo roadmap ID `P3C-04` maps to GSD Phase `3.34`.
 - The source of truth is `docs/SPECS.md` feature sections.
 
@@ -37,6 +38,7 @@ project roadmap, phase order, and product scope remain canonical in `docs/SPECS.
 - [x] **Phase 3.30: P3C-00 Re-render isolation** - Draft point updates are isolated from the main whiteboard and committed shape rendering before SVG ink tools are added.
 - [x] **Phase 3.31: P3C-01 SVG ink layer** - Freehand and highlighter elements render through the existing shared-camera SVG layer without introducing a Canvas render path.
 - [x] **Phase 3.32: P3C-02 Freehand** - Users can draw SVG freehand strokes that simplify points, commit through the shared mutation pipeline, and split automatically at the per-shape point cap.
+- [x] **Phase 3.33: P3C-03 Highlighter** - Users can draw SVG highlighter strokes with fixed semi-transparent, wider styling through the shared freehand ink pipeline.
 - [x] **Phase 3.34: P3C-04 Eraser** - Users can drag an eraser through existing shapes, reusing shape hit-testing to soft-delete whole elements through the shared mutation pipeline.
 - [x] **Phase 4.0: P4-00 Anonymous local board + Login to save** - Anonymous local-only board can be converted into a private saved document after login.
 - [x] **Phase 4.1: P4-01 Workspace + document dashboard** - Authenticated users can list, search, create, open, rename, archive, and delete accessible saved documents.
@@ -138,6 +140,29 @@ mutation pipeline, simplifies raw samples, and keeps each committed stroke under
 Plans:
 
 - [x] 03.32-01: Implement freehand drawing, point simplification, point-cap stroke splitting, and AC tests.
+
+### Phase 3.33: P3C-03 Highlighter
+
+**Goal**: Add a highlighter drawing tool that stores point-based SVG ink elements through the
+existing mutation pipeline, with fixed semi-transparent wider styling and the same point
+simplification/cap pipeline used by freehand.
+**Depends on**: Phase 3.32
+**Source**: `docs/SPECS.md` `[P3C-03]`
+**Canonical refs**: `docs/SPECS.md`, `specs/047-p3c-03-highlighter/acceptance.md`
+**Requirements**: [P3C-03-AC-1, P3C-03-AC-2, P3C-03-AC-3, P3C-03-AC-4]
+**Success Criteria** (what must be TRUE):
+
+1. Highlighter pointer input creates committed `highlighter` elements with `props.points` through
+   the existing mutation pipeline and SVG ink layer.
+2. Highlighter elements use fixed semi-transparent opacity and a wider stroke width than freehand.
+3. Raw pointer samples are simplified and capped using the same helper pipeline as freehand.
+4. The toolbar exposes highlighter as an editing tool and tool switches clear highlighter drafts.
+   **Plans**: 1 plan
+
+Plans:
+
+- [x] 03.33-01: Implement highlighter tool routing, styling defaults, shared ink point pipeline,
+      toolbar access, and AC tests.
 
 ### Phase 3.34: P3C-04 Eraser
 

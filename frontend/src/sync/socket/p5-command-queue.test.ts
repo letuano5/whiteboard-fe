@@ -227,6 +227,62 @@ describe('P5 command queue drag flushing and backpressure', () => {
     expect(command.patches.map((patch) => patch.slot)).toContain('geometry.points');
   });
 
+  it('syncs highlighter movement through geometry points, not transform patches', () => {
+    const emit = vi.fn();
+    getSocketState().socket = { emit, connected: true } as never;
+    getSocketState().roomId = 'room-1';
+    const before = makeElement({
+      id: 'highlighter-1',
+      type: 'highlighter',
+      x: 0,
+      y: 0,
+      width: 20,
+      height: 20,
+      props: {
+        ...makeElement().props,
+        opacity: 0.35,
+        strokeWidth: 14,
+        points: [
+          [0, 0],
+          [10, 20],
+          [20, 0],
+        ],
+      },
+    });
+    const after = makeElement({
+      id: 'highlighter-1',
+      type: 'highlighter',
+      x: 5,
+      y: 5,
+      width: 20,
+      height: 20,
+      props: {
+        ...before.props,
+        points: [
+          [5, 5],
+          [15, 25],
+          [25, 5],
+        ],
+      },
+    });
+
+    enqueueMutationSyncCommands({ type: 'patch', before: [before], elements: [after] }, 'room-1', {
+      final: true,
+      now: 0,
+    });
+
+    const command = emittedCommand(emit, 0) as PatchSlotsCommand;
+    expect(command.patches.some((patch) => patch.slot.startsWith('transform.'))).toBe(false);
+    expect(command.patches).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          slot: 'geometry.points',
+          changes: { points: after.props.points },
+        }),
+      ]),
+    );
+  });
+
   it('creates safe single-slot undo only when the slot clock still matches', () => {
     // @covers AC-6
     applyKnownSlotClocks([{ elementId: 'shape-1', slot: 'transform.position', clock: 4 }]);

@@ -5,6 +5,10 @@ import { insertImageFromSource } from '../image-insert';
 import { useInteractionStore } from '../../../store/interaction.store';
 import { useElementsStore } from '../../../store/elements.store';
 import * as laserTool from '../../../canvas/tools/laser-tool';
+import {
+  onHighlighterPointerDown,
+  onHighlighterPointerMove,
+} from '../../../canvas/tools/freehand-tool';
 
 beforeEach(() => {
   useInteractionStore.getState().reset();
@@ -43,7 +47,7 @@ describe('Toolbar tool selection', () => {
 // @covers AC-8 (005-detail-panel-toolbar)
 // @covers AC-1
 describe('AC-8 (005): toolbar shows tool buttons including laser', () => {
-  it('renders Select, Hand, Rectangle, Ellipse, Line, Text, Freehand, Eraser, Laser buttons', () => {
+  it('renders Select, Hand, Rectangle, Ellipse, Line, Text, Freehand, Highlighter, Eraser, Laser buttons', () => {
     render(<Toolbar />);
     const expectedTitles = [
       'Select',
@@ -54,6 +58,7 @@ describe('AC-8 (005): toolbar shows tool buttons including laser', () => {
       'Text',
       'Image',
       'Freehand',
+      'Highlighter',
       'Eraser',
       'Laser',
     ];
@@ -121,6 +126,28 @@ describe('freehand tool button', () => {
     render(<Toolbar />);
     fireEvent.click(screen.getByTitle('Freehand'));
     expect(useInteractionStore.getState().tool).toBe('freehand');
+  });
+});
+
+// @covers AC-4
+describe('highlighter tool button', () => {
+  it('clicking Highlighter sets tool to highlighter', () => {
+    render(<Toolbar />);
+    fireEvent.click(screen.getByTitle('Highlighter'));
+    expect(useInteractionStore.getState().tool).toBe('highlighter');
+  });
+
+  it('switching away from Highlighter clears the in-progress draft', () => {
+    onHighlighterPointerDown({ x: 0, y: 0 });
+    onHighlighterPointerMove({ x: 10, y: 10 });
+    expect(useInteractionStore.getState().draftElement?.type).toBe('highlighter');
+
+    render(<Toolbar />);
+    fireEvent.click(screen.getByTitle('Select'));
+
+    expect(useInteractionStore.getState().tool).toBe('select');
+    expect(useInteractionStore.getState().draftElement).toBeNull();
+    expect(useInteractionStore.getState().dragStart).toBeNull();
   });
 });
 

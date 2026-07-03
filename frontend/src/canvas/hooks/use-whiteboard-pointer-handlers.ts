@@ -13,9 +13,13 @@ import {
 } from '../tools/create-shape-tool';
 import {
   cancelFreehandDraw,
+  cancelHighlighterDraw,
   onFreehandPointerDown,
   onFreehandPointerMove,
   onFreehandPointerUp,
+  onHighlighterPointerDown,
+  onHighlighterPointerMove,
+  onHighlighterPointerUp,
 } from '../tools/freehand-tool';
 import {
   cancelEraserDrag,
@@ -103,6 +107,12 @@ export function useWhiteboardPointerHandlers({
       return;
     }
 
+    if (tool === 'highlighter') {
+      event.currentTarget.setPointerCapture(event.pointerId);
+      onHighlighterPointerDown(svgWorldPoint(event, camera));
+      return;
+    }
+
     if (tool === 'eraser') {
       event.currentTarget.setPointerCapture(event.pointerId);
       onEraserPointerDown(svgWorldPoint(event, camera));
@@ -150,6 +160,11 @@ export function useWhiteboardPointerHandlers({
       return;
     }
 
+    if (tool === 'highlighter') {
+      onHighlighterPointerMove(svgWorldPoint(event, camera));
+      return;
+    }
+
     if (tool === 'eraser') {
       onEraserPointerMove(svgWorldPoint(event, camera));
       return;
@@ -180,6 +195,11 @@ export function useWhiteboardPointerHandlers({
       return;
     }
 
+    if (tool === 'highlighter') {
+      onHighlighterPointerUp(svgWorldPoint(event, camera));
+      return;
+    }
+
     if (tool === 'eraser') {
       onEraserPointerUp(svgWorldPoint(event, camera));
       return;
@@ -205,6 +225,11 @@ export function useWhiteboardPointerHandlers({
 
     if (tool === 'freehand') {
       cancelFreehandDraw();
+      return;
+    }
+
+    if (tool === 'highlighter') {
+      cancelHighlighterDraw();
       return;
     }
 

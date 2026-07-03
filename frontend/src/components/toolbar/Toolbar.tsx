@@ -11,10 +11,12 @@ import {
   Type,
   Zap,
   Pencil,
+  Highlighter,
   Eraser,
 } from 'lucide-react';
 import { useInteractionStore } from '../../store/interaction.store';
 import { clearLaserTrail } from '../../canvas/tools/laser-tool';
+import { cancelFreehandDraw, cancelHighlighterDraw } from '../../canvas/tools/freehand-tool';
 import type { ToolId } from '../../types/interaction';
 import ImageInsertControl from './ImageInsertControl';
 
@@ -36,6 +38,7 @@ const TOOLS: ToolButton[] = [
   { id: 'arrow', label: 'Arrow', Icon: ArrowRight },
   { id: 'text', label: 'Text', Icon: Type },
   { id: 'freehand', label: 'Freehand', Icon: Pencil },
+  { id: 'highlighter', label: 'Highlighter', Icon: Highlighter },
   { id: 'eraser', label: 'Eraser', Icon: Eraser },
   { id: 'laser', label: 'Laser', Icon: Zap },
 ];
@@ -52,6 +55,8 @@ export default function Toolbar() {
 
   function resetInteraction() {
     clearLaserTrail();
+    cancelFreehandDraw();
+    cancelHighlighterDraw();
     setSelectedIds([]);
     setDraggingId(null);
     setDragStart(null);

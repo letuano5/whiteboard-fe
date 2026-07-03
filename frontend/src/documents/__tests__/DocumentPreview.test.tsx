@@ -90,6 +90,31 @@ describe('DocumentPreview', () => {
     expect(container.querySelector('rect[rx="4"]')).toBeNull();
   });
 
+  it('renders image elements as SVG images, not placeholder rects', () => {
+    const element = makeElement({
+      type: 'image',
+      width: 320,
+      height: 180,
+      props: {
+        strokeColor: 'transparent',
+        fillColor: 'transparent',
+        strokeWidth: 0,
+        strokeStyle: 'solid',
+        opacity: 0.8,
+        src: 'data:image/png;base64,AAAA',
+      },
+    });
+
+    const { container } = render(<DocumentPreview elements={[element]} title="Board" />);
+
+    const image = container.querySelector('image');
+    expect(image).not.toBeNull();
+    expect(image).toHaveAttribute('href', 'data:image/png;base64,AAAA');
+    expect(image).toHaveAttribute('width', '320');
+    expect(image).toHaveAttribute('height', '180');
+    expect(container.querySelector('rect[rx="4"]')).toBeNull();
+  });
+
   it('excludes soft-deleted elements from the preview', () => {
     const active = makeElement({ id: 'active' });
     const deleted = makeElement({ id: 'deleted', isDeleted: true });
