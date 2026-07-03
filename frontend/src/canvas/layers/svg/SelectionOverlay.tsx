@@ -5,6 +5,7 @@ import type { MultiSelectBounds } from './types';
 import { buildFreehandPath } from '../../freehand-points';
 
 const ROTATE_HANDLE_OFFSET = 24;
+const CORNER_RESIZE_HANDLES = new Set<ResizeHandleId>(['nw', 'ne', 'sw', 'se']);
 
 interface SelectionOverlayProps {
   element: Element;
@@ -44,7 +45,7 @@ export function SelectionOverlay({ element, onHandlePointerDown }: SelectionOver
   const { x, y, width, height, angle } = element;
   const cx = x + width / 2;
   const cy = y + height / 2;
-  const handles: [ResizeHandleId, number, number][] = [
+  const allHandles: [ResizeHandleId, number, number][] = [
     ['nw', x, y],
     ['ne', x + width, y],
     ['sw', x, y + height],
@@ -54,6 +55,9 @@ export function SelectionOverlay({ element, onHandlePointerDown }: SelectionOver
     ['e', x + width, y + height / 2],
     ['w', x, y + height / 2],
   ];
+  const handles = allHandles.filter(
+    ([id]) => element.type !== 'image' || CORNER_RESIZE_HANDLES.has(id),
+  );
   const rotateTransform =
     angle !== 0 ? `rotate(${(angle * 180) / Math.PI} ${cx} ${cy})` : undefined;
   const inkSelectionPath =

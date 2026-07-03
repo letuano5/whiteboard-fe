@@ -2,10 +2,10 @@
 gsd_state_version: '1.0'
 status: complete
 progress:
-  total_phases: 21
-  completed_phases: 21
-  total_plans: 24
-  completed_plans: 24
+  total_phases: 22
+  completed_phases: 22
+  total_plans: 25
+  completed_plans: 25
   percent: 100
 ---
 
@@ -16,14 +16,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-30)
 
 **Core value:** Users can create tactical whiteboards without losing work, then collaborate or persist documents when the workflow calls for it.
-**Current focus:** Phase 4.7: P4-07 Version history (completed)
+**Current focus:** Phase 2.51: P2.5-01 Image / background map (completed)
 
 ## Current Position
 
-Phase: 4.7 of active GSD bootstrap (P4-07 Version history)
+Phase: 2.51 of active GSD bootstrap (P2.5-01 Image / background map)
 Plan: 1 of 1 in current phase
 Status: Complete
-Last activity: 2026-07-03 - Completed P4-07 automatic/safety snapshots and owner restore.
+Last activity: 2026-07-03 - Completed P2.5-01 SVG image/background map support.
 
 Progress: [##########] 100%
 
@@ -31,6 +31,10 @@ Progress: [##########] 100%
 
 ### Decisions
 
+- [Phase 2.51]: Image elements use existing `Element` records with `type: 'image'` and
+  `props.src`; rendering stays SVG-only and insertion supports URL plus data URL upload.
+- [Phase 2.51]: Background image insertion means assigning a lower `zIndex` than every currently
+  visible element while move/resize remains the existing select-tool path.
 - [Phase 4.0]: Root path without `room` is the local-only board surface.
 - [Phase 4.0]: Saved documents continue to use `/?room=<uuid>`.
 - [Phase 4.1]: Dashboard uses `/dashboard` with native pathname checks; saved documents still open through `/?room=<uuid>`.
@@ -79,6 +83,7 @@ Progress: [##########] 100%
 
 ### Pending Todos
 
+- P2.5-01 image/background map implementation and verification are complete.
 - Root route now represents local-only board mode.
 - Authenticated save converts local elements into a persisted owner room.
 - P4-01 dashboard API/UI and document metadata fields implemented and verified.

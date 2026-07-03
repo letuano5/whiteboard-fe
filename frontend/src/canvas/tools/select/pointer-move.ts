@@ -7,6 +7,7 @@ import { normalizeRect } from './geometry';
 import { translatePointGeometry } from './point-geometry';
 import {
   computeResizeProps,
+  fitBoundsToAspectRatio,
   fitTextBoundsToFontScale,
   resizeBoundsFromAnchorAndPointer,
 } from './resize';
@@ -98,9 +99,12 @@ export function onSelectPointerMove(worldPt: Point): void {
         y: yl,
         width,
         height,
-      } = el.type === 'text'
-        ? fitTextBoundsToFontScale(resizeSession, rawBounds, activeHandle)
-        : rawBounds;
+      } =
+        el.type === 'image'
+          ? fitBoundsToAspectRatio(resizeSession, rawBounds, activeHandle)
+          : el.type === 'text'
+            ? fitTextBoundsToFontScale(resizeSession, rawBounds, activeHandle)
+            : rawBounds;
 
       // 4. The session.anchor may be at any corner/edge of the new box.
       //    Compute its fraction within the new box (0=min edge, 1=max edge).
@@ -131,9 +135,11 @@ export function onSelectPointerMove(worldPt: Point): void {
         worldPt,
       );
       const bounds =
-        el.type === 'text'
-          ? fitTextBoundsToFontScale(resizeSession, rawBounds, activeHandle)
-          : rawBounds;
+        el.type === 'image'
+          ? fitBoundsToAspectRatio(resizeSession, rawBounds, activeHandle)
+          : el.type === 'text'
+            ? fitTextBoundsToFontScale(resizeSession, rawBounds, activeHandle)
+            : rawBounds;
       const draftEl = {
         ...el,
         ...bounds,

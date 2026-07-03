@@ -6,7 +6,7 @@ import type { Element } from '../../../types/shared';
 import { hitTestElementAtWorldPoint } from '../../shapes/hit-test';
 import { isFullyBoundArrow } from './bound-arrows';
 import { normalizeRect } from './geometry';
-import { getResizeAnchor, resizeBoundsFromAnchorAndPointer } from './resize';
+import { getResizeAnchor, isCornerResizeHandle, resizeBoundsFromAnchorAndPointer } from './resize';
 
 export function onSelectPointerDown(worldPt: Point, shiftKey = false): void {
   const elements = useElementsStore.getState().elements;
@@ -85,6 +85,8 @@ export function onSelectHandlePointerDown(handle: HandleId, worldPt: Point): voi
   // At this point handle is ResizeHandleId | 'rotate'; 'rotate' is handled by
   // Whiteboard.tsx before calling this function, so it is always a ResizeHandleId here.
   const resizeHandle = handle as ResizeHandleId;
+  if (selected.type === 'image' && !isCornerResizeHandle(resizeHandle)) return;
+
   setDraggingId(selected.id);
   setDragStart(worldPt);
   setResizeHandle(resizeHandle);

@@ -16,6 +16,7 @@ import {
 import { useInteractionStore } from '../../store/interaction.store';
 import { clearLaserTrail } from '../../canvas/tools/laser-tool';
 import type { ToolId } from '../../types/interaction';
+import ImageInsertControl from './ImageInsertControl';
 
 interface ToolButton {
   id: ToolId;
@@ -49,15 +50,19 @@ export default function Toolbar() {
   const setResizeHandle = useInteractionStore((s) => s.setResizeHandle);
   const setResizeSession = useInteractionStore((s) => s.setResizeSession);
 
-  function chooseTool(id: ToolId) {
+  function resetInteraction() {
     clearLaserTrail();
-    setTool(id);
     setSelectedIds([]);
     setDraggingId(null);
     setDragStart(null);
     setDraftElement(null);
     setResizeHandle(null);
     setResizeSession(null);
+  }
+
+  function chooseTool(id: ToolId) {
+    resetInteraction();
+    setTool(id);
   }
 
   return (
@@ -106,6 +111,7 @@ export default function Toolbar() {
           <Icon size={18} />
         </button>
       ))}
+      <ImageInsertControl resetInteraction={resetInteraction} />
     </div>
   );
 }

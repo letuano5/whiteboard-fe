@@ -4,6 +4,7 @@ import type { Element } from '../../../types/shared';
 import { resizePointGeometry } from './point-geometry';
 
 const MIN_RESIZE_SIZE = 1;
+const CORNER_HANDLES = new Set<ResizeHandleId>(['nw', 'ne', 'sw', 'se']);
 
 const HORIZONTAL_FLIP: Record<ResizeHandleId, ResizeHandleId> = {
   nw: 'ne',
@@ -57,6 +58,10 @@ export function getFlippedHandle(
 ): ResizeHandleId {
   const horizontallyFlipped = flippedX ? HORIZONTAL_FLIP[originalHandle] : originalHandle;
   return flippedY ? VERTICAL_FLIP[horizontallyFlipped] : horizontallyFlipped;
+}
+
+export function isCornerResizeHandle(handle: ResizeHandleId): boolean {
+  return CORNER_HANDLES.has(handle);
 }
 
 export function resizeBoundsFromAnchorAndPointer(
@@ -164,6 +169,25 @@ export function fitTextBoundsToFontScale(
     activeHandle,
     Math.max(MIN_RESIZE_SIZE, session.originalBounds.width * scale),
     Math.max(MIN_RESIZE_SIZE, session.originalBounds.height * scale),
+  );
+}
+
+export function fitBoundsToAspectRatio(
+  session: ResizeSession,
+  bounds: Rect,
+  activeHandle: ResizeHandleId,
+): Rect {
+  const originalWidth = Math.max(MIN_RESIZE_SIZE, session.originalBounds.width);
+  const originalHeight = Math.max(MIN_RESIZE_SIZE, session.originalBounds.height);
+  const widthRatio = Math.max(MIN_RESIZE_SIZE, bounds.width) / originalWidth;
+  const heightRatio = Math.max(MIN_RESIZE_SIZE, bounds.height) / originalHeight;
+  const scale = Math.max(widthRatio, heightRatio);
+
+  return boundsFromAnchorAndSize(
+    session.anchor,
+    activeHandle,
+    Math.max(MIN_RESIZE_SIZE, originalWidth * scale),
+    Math.max(MIN_RESIZE_SIZE, originalHeight * scale),
   );
 }
 

@@ -61,6 +61,20 @@ describe('SvgLayer — SelectionOverlay', () => {
     expect(circles.length).toBe(0);
   });
 
+  it('renders only four corner resize handles plus rotate for selected images', () => {
+    const el = makeElement({ id: 'image-1', type: 'image' });
+    useInteractionStore.getState().setSelectedIds([el.id]);
+
+    const { container } = render(<SvgLayer elements={[el]} camera={camera} />);
+
+    const handles = Array.from(container.querySelectorAll('circle')).map((circle) =>
+      circle.getAttribute('data-handle'),
+    );
+    expect(handles).toEqual(['nw', 'ne', 'sw', 'se', 'rotate']);
+    expect(handles).not.toContain('n');
+    expect(handles).not.toContain('e');
+  });
+
   it('renders no handles when selected element does not exist in elements list', () => {
     useInteractionStore.getState().setSelectedIds(['nonexistent']);
 

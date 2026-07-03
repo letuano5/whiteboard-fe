@@ -38,10 +38,11 @@ describe('shape registry', () => {
 
     expect(getShapeUtil('highlighter')).toBeDefined();
     expect(getShapeUtil('highlighter')?.type).toBe('highlighter');
-  });
 
-  it('returns undefined for unregistered types', () => {
-    expect(getShapeUtil('image')).toBeUndefined();
+    // @covers AC-1 (046-image-background)
+    // @covers AC-2 (046-image-background)
+    expect(getShapeUtil('image')).toBeDefined();
+    expect(getShapeUtil('image')?.type).toBe('image');
   });
 
   it('overwrites an existing util when re-registered', () => {

@@ -1,11 +1,14 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import Toolbar from '../Toolbar';
+import { insertImageFromSource } from '../image-insert';
 import { useInteractionStore } from '../../../store/interaction.store';
+import { useElementsStore } from '../../../store/elements.store';
 import * as laserTool from '../../../canvas/tools/laser-tool';
 
 beforeEach(() => {
   useInteractionStore.getState().reset();
+  useElementsStore.getState().setElements([]);
 });
 
 // @covers AC-8 (001-select-shape)
@@ -49,6 +52,7 @@ describe('AC-8 (005): toolbar shows tool buttons including laser', () => {
       'Ellipse',
       'Line',
       'Text',
+      'Image',
       'Freehand',
       'Eraser',
       'Laser',
@@ -56,6 +60,58 @@ describe('AC-8 (005): toolbar shows tool buttons including laser', () => {
     expectedTitles.forEach((title) => {
       expect(screen.getByTitle(title)).toBeInTheDocument();
     });
+  });
+});
+
+describe('image insertion control', () => {
+  // @covers AC-1 (046-image-background)
+  // @covers AC-4 (046-image-background)
+  it('inserts a URL image element below existing visible elements', () => {
+    useElementsStore.getState().setElements([
+      {
+        id: 'shape-1',
+        type: 'rectangle',
+        x: 0,
+        y: 0,
+        width: 100,
+        height: 100,
+        angle: 0,
+        zIndex: 5,
+        props: {
+          strokeColor: '#000',
+          fillColor: '#fff',
+          strokeWidth: 1,
+          strokeStyle: 'solid',
+          opacity: 1,
+        },
+        version: 1,
+        versionNonce: 1,
+        updatedAt: 1,
+        isDeleted: false,
+        groupId: null,
+        frameId: null,
+        locked: false,
+        createdBy: 'test',
+      },
+    ]);
+
+    insertImageFromSource('https://example.com/map.png');
+
+    const image = useElementsStore.getState().elements.find((element) => element.type === 'image');
+    expect(image).toMatchObject({
+      type: 'image',
+      zIndex: 4,
+      props: expect.objectContaining({ src: 'https://example.com/map.png' }),
+    });
+    expect(useInteractionStore.getState().selectedIds).toEqual([image?.id]);
+  });
+
+  // @covers AC-2 (046-image-background)
+  it('inserts an uploaded data URL image element', () => {
+    insertImageFromSource('data:image/png;base64,AAAA');
+
+    const image = useElementsStore.getState().elements.find((element) => element.type === 'image');
+    expect(image?.props.src).toBe('data:image/png;base64,AAAA');
   });
 });
 

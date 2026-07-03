@@ -9,6 +9,7 @@ import { lineShapeUtil } from './line';
 import { textShapeUtil } from './text';
 import { arrowShapeUtil } from './arrow';
 import { freehandShapeUtil, highlighterShapeUtil } from './ink';
+import { imageShapeUtil } from './image';
 
 const registry = new Map<ElementType, ShapeUtil>();
 
@@ -30,3 +31,4 @@ registerShapeUtil(textShapeUtil);
 registerShapeUtil(arrowShapeUtil);
 registerShapeUtil(freehandShapeUtil);
 registerShapeUtil(highlighterShapeUtil);
+registerShapeUtil(imageShapeUtil);

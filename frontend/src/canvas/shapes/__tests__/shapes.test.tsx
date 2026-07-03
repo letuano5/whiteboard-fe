@@ -4,6 +4,7 @@ import { ellipseShapeUtil } from '../ellipse';
 import { diamondShapeUtil } from '../diamond';
 import { lineShapeUtil } from '../line';
 import { textShapeUtil } from '../text';
+import { imageShapeUtil } from '../image';
 import { buildFreehandPath } from '../../freehand-points';
 import { freehandShapeUtil, highlighterShapeUtil } from '../ink';
 import type { Element } from '../../../types/shared';
@@ -146,6 +147,56 @@ describe('lineShapeUtil', () => {
   it('getBounds returns element bounds', () => {
     const el = makeElement({ type: 'line', x: 5, y: 5, width: 90, height: 45 });
     expect(lineShapeUtil.getBounds(el)).toEqual({ x: 5, y: 5, width: 90, height: 45 });
+  });
+});
+
+describe('imageShapeUtil', () => {
+  // @covers AC-1 (046-image-background)
+  // @covers AC-2 (046-image-background)
+  it('renders an SVG image node from props.src', () => {
+    const el = makeElement({
+      type: 'image',
+      x: 15,
+      y: 25,
+      width: 320,
+      height: 180,
+      props: {
+        strokeColor: 'transparent',
+        fillColor: 'transparent',
+        strokeWidth: 0,
+        strokeStyle: 'solid',
+        opacity: 0.8,
+        src: 'data:image/png;base64,AAAA',
+      },
+    });
+
+    const jsx = imageShapeUtil.render(el);
+    const p = jsx.props as AnyProps;
+
+    expect(jsx.type).toBe('image');
+    expect(p['href']).toBe('data:image/png;base64,AAAA');
+    expect(p['x']).toBe(15);
+    expect(p['y']).toBe(25);
+    expect(p['width']).toBe(320);
+    expect(p['height']).toBe(180);
+    expect(p['opacity']).toBe(0.8);
+  });
+
+  // @covers AC-3 (046-image-background)
+  it('uses rectangular bounds and hit testing for selection and resizing', () => {
+    const el = makeElement({ type: 'image', x: 10, y: 20, width: 100, height: 50 });
+
+    expect(imageShapeUtil.getBounds(el)).toEqual({ x: 10, y: 20, width: 100, height: 50 });
+    expect(imageShapeUtil.hitTest(el, 60, 45)).toBe(true);
+    expect(imageShapeUtil.hitTest(el, 200, 45)).toBe(false);
+  });
+
+  it('adds rotate transform when angle is non-zero', () => {
+    const el = makeElement({ type: 'image', angle: Math.PI / 2 });
+    const jsx = imageShapeUtil.render(el);
+    const p = jsx.props as AnyProps;
+
+    expect(p['transform']).toBe('rotate(90 60 45)');
   });
 });
 

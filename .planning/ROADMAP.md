@@ -26,12 +26,14 @@ project roadmap, phase order, and product scope remain canonical in `docs/SPECS.
 - Repo roadmap ID `P5-09` maps to GSD Phase `5.9`.
 - Repo roadmap ID `P5-10` maps to GSD Phase `5.10`.
 - Repo roadmap ID `P5-11` maps to GSD Phase `5.11`.
+- Repo roadmap ID `P2.5-01` maps to GSD Phase `2.51`.
 - Repo roadmap ID `P3C-00` maps to GSD Phase `3.30`.
 - Repo roadmap ID `P3C-01` maps to GSD Phase `3.31`.
 - Repo roadmap ID `P3C-02` maps to GSD Phase `3.32`.
 - Repo roadmap ID `P3C-04` maps to GSD Phase `3.34`.
 - The source of truth is `docs/SPECS.md` feature sections.
 
+- [x] **Phase 2.51: P2.5-01 Image / background map** - Users can insert images from URL or upload, render them in the SVG layer, move/resize them, and place them as background maps.
 - [x] **Phase 3.30: P3C-00 Re-render isolation** - Draft point updates are isolated from the main whiteboard and committed shape rendering before SVG ink tools are added.
 - [x] **Phase 3.31: P3C-01 SVG ink layer** - Freehand and highlighter elements render through the existing shared-camera SVG layer without introducing a Canvas render path.
 - [x] **Phase 3.32: P3C-02 Freehand** - Users can draw SVG freehand strokes that simplify points, commit through the shared mutation pipeline, and split automatically at the per-shape point cap.
@@ -55,6 +57,26 @@ project roadmap, phase order, and product scope remain canonical in `docs/SPECS.
 - [x] **Phase 5.11: P5-11 Frontend reconciliation** - Saved-room frontend mutations use bounded P5 command queues, slot-aware reconciliation, reconnect-safe pending replay, and ephemeral presence/draft preview.
 
 ## Phase Details
+
+### Phase 2.51: P2.5-01 Image / background map
+
+**Goal**: Users can insert tactical map images from URL or local upload, render them through the
+existing SVG element layer, and place them below other shapes as a background.
+**Depends on**: Phase 2
+**Source**: `docs/SPECS.md` `[P2.5-01]`
+**Canonical refs**: `docs/SPECS.md`, `specs/046-image-background/acceptance.md`
+**Requirements**: [AC-1, AC-2, AC-3, AC-4]
+**Success Criteria** (what must be TRUE):
+
+1. URL insertion creates a committed `image` element with `props.src` set to the URL.
+2. File upload insertion creates a committed `image` element with a base64 data URL.
+3. Image elements render as SVG `<image>` nodes through the shared-camera element layer.
+4. Inserted images can be selected, moved, resized, and sent behind existing visible elements.
+   **Plans**: 1 plan
+
+Plans:
+
+- [x] 02.51-01: Add SVG image shape rendering, toolbar insertion, background z-order, and AC tests.
 
 ### Phase 3.30: P3C-00 Re-render isolation
 
