@@ -1,7 +1,12 @@
 import type { SyncCommand } from '../../types/shared';
 import { WS_EVENTS } from '../../types/shared';
 import { useElementsStore } from '../../store/elements.store';
-import { getKnownSlotClock, getPendingRequestRefs, getSocketState } from './state';
+import {
+  getKnownSlotClock,
+  getPendingRequestRefs,
+  getSocketState,
+  isKnownTombstone,
+} from './state';
 
 export function requestBackpressureResync(): void {
   const state = getSocketState();
@@ -34,6 +39,10 @@ export function isCommandRelevantForResend(command: SyncCommand): boolean {
       );
     case 'delete-elements':
       return command.elementIds.every((elementId) => serverById.has(elementId));
+    case 'restore-elements':
+      return command.elements.every(
+        (element) => !serverById.has(element.id) && isKnownTombstone(element.id),
+      );
     case 'reorder-elements':
       return command.moves.every(
         (move) =>

@@ -70,6 +70,18 @@ export function createDeleteCommand(
   };
 }
 
+export function createRestoreCommand(
+  roomId: string,
+  elements: Element[],
+  now: number,
+): SyncCommand {
+  return {
+    ...baseCommand(roomId, now, true),
+    kind: 'restore-elements',
+    elements,
+  };
+}
+
 export function createPatchCommand(
   roomId: string,
   patches: SlotPatch[],
@@ -160,6 +172,8 @@ export function commandElementIds(command: SyncCommand): string[] {
       return [...new Set(command.patches.map((patch) => patch.elementId))];
     case 'delete-elements':
       return command.elementIds;
+    case 'restore-elements':
+      return command.elements.map((element) => element.id);
     case 'update-arrow-binding':
       return [command.arrowId];
     case 'replace-document':
@@ -183,6 +197,12 @@ export function applyOptimisticCommand(elements: Element[], command: SyncCommand
     case 'delete-elements': {
       const deleted = new Set(command.elementIds);
       return elements.filter((element) => !deleted.has(element.id));
+    }
+    case 'restore-elements': {
+      const restored = new Map(command.elements.map((element) => [element.id, element]));
+      const next = elements.map((element) => restored.get(element.id) ?? element);
+      const existingIds = new Set(elements.map((element) => element.id));
+      return [...next, ...command.elements.filter((element) => !existingIds.has(element.id))];
     }
     case 'replace-document':
       return command.elements;

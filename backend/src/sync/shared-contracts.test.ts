@@ -180,6 +180,11 @@ describe('P5-02 shared sync contracts', () => {
       { ...envelope, kind: 'delete-elements', elementIds: ['el-1'] },
       {
         ...envelope,
+        kind: 'restore-elements',
+        elements: [makeElement({ id: 'restored-el' })],
+      },
+      {
+        ...envelope,
         kind: 'replace-document',
         elements: [makeElement({ id: 'replacement' })],
         reason: 'import',
@@ -220,6 +225,24 @@ describe('P5-02 shared sync contracts', () => {
       isDeleted: false,
     });
     expect(materialized.normalizedOrder).toEqual({ elementId: 'created-el', zIndex: 9 });
+  });
+
+  it('validates restore preconditions against active records and tombstones', () => {
+    const command: SyncCommand = {
+      ...envelope,
+      kind: 'restore-elements',
+      elements: [makeElement({ id: 'restored-el', isDeleted: true })],
+    };
+
+    expect(validateSyncCommand(command, { tombstoneElementIds: new Set(['restored-el']) })).toEqual(
+      { ok: true },
+    );
+    expect(
+      validateSyncCommand(command, { activeElementIds: new Set(['restored-el']) }),
+    ).toMatchObject({ ok: false });
+    expect(validateSyncCommand(command, { tombstoneElementIds: new Set() })).toMatchObject({
+      ok: false,
+    });
   });
 
   it('@covers AC-5 rejects direct order patches but accepts reorder commands', () => {

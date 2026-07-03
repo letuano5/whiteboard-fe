@@ -51,6 +51,9 @@ export function validateSyncCommand(
     case 'delete-elements':
       validateDeleteElementsCommand(value, errors);
       break;
+    case 'restore-elements':
+      validateRestoreElementsCommand(value, context, errors);
+      break;
     case 'replace-document':
       validateReplaceDocumentCommand(value, errors);
       break;
@@ -216,6 +219,30 @@ function validateDeleteElementsCommand(value: Record<string, unknown>, errors: s
     !value.elementIds.every((id) => typeof id === 'string')
   ) {
     errors.push('DeleteElementsCommand.elementIds must be a non-empty string array.');
+  }
+}
+
+function validateRestoreElementsCommand(
+  value: Record<string, unknown>,
+  context: SyncValidationContext,
+  errors: string[],
+): void {
+  if (
+    !Array.isArray(value.elements) ||
+    value.elements.length === 0 ||
+    !value.elements.every((element) => isElementLike(element))
+  ) {
+    errors.push('RestoreElementsCommand.elements must contain full Elements.');
+    return;
+  }
+
+  for (const element of value.elements) {
+    if (context.activeElementIds?.has(element.id)) {
+      errors.push('RestoreElementsCommand element id already exists.');
+    }
+    if (context.tombstoneElementIds !== undefined && !context.tombstoneElementIds.has(element.id)) {
+      errors.push('RestoreElementsCommand element id is not tombstoned.');
+    }
   }
 }
 

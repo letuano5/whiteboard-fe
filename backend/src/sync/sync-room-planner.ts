@@ -65,6 +65,23 @@ export function defaultSyncRoomPlanner(context: SyncRoomPlannerContext): SyncRoo
       return planPatchSlots(context, context.command);
     case 'delete-elements':
       return planDeleteElements(context, context.command);
+    case 'restore-elements': {
+      const restored = context.command.elements.map((element) => ({
+        ...element,
+        isDeleted: false,
+      }));
+      return {
+        reason: 'restore',
+        created: restored,
+        slotClocks: restored.flatMap((element) =>
+          createInitialSlotClocks(element.id, context.serverClock),
+        ),
+        normalizedOrder: restored.map((element) => ({
+          elementId: element.id,
+          zIndex: element.zIndex,
+        })),
+      };
+    }
     case 'reorder-elements':
       return planReorderElements(context, context.command);
     case 'update-arrow-binding':
@@ -124,6 +141,7 @@ function mapValidationErrors(errors: readonly string[]): SyncRoomErrorCode {
   if (errors.includes('STALE_CLIENT_STATE')) return 'STALE_CLIENT_STATE';
   if (errors.some((error) => error.includes('already exists'))) return 'DUPLICATE_ELEMENT_ID';
   if (errors.some((error) => error.includes('tombstone retention'))) return 'DUPLICATE_ELEMENT_ID';
+  if (errors.some((error) => error.includes('is not tombstoned'))) return 'ELEMENT_NOT_FOUND';
   if (errors.some((error) => error.includes('duplicate element slot'))) return 'INVALID_SLOT';
   if (errors.some((error) => error.includes('SlotPatch.slot is invalid'))) return 'INVALID_SLOT';
   if (errors.some((error) => error.includes('cannot patch order'))) return 'INVALID_SLOT';

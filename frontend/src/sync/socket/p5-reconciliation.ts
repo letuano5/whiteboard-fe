@@ -23,6 +23,7 @@ import {
 } from './p5-command-queue';
 import {
   applyKnownSlotClocks,
+  addKnownTombstones,
   consumeStaleAckRequest,
   getKnownSlotClock,
   getPendingRequestRefs,
@@ -31,6 +32,7 @@ import {
   hydrateKnownSlotClocks,
   markPendingRequestsStale,
   removeKnownSlotClocks,
+  removeKnownTombstones,
   setLastServerClock,
   setRoomEpoch,
   type PendingSyncRequest,
@@ -115,6 +117,7 @@ export function applyRoomSnapshot(snapshot: RoomSnapshot): void {
   state.pausedForResync = false;
   useElementsStore.getState().setElements(materializeOptimisticElements(snapshot.elements));
   hydrateKnownSlotClocks(snapshot.slotClocks);
+  removeKnownTombstones(snapshot.elements.map((element) => element.id));
   setRoomEpoch(snapshot.roomEpoch);
   setLastServerClock(snapshot.serverClock);
   if (snapshot.pendingRequests) {
@@ -131,6 +134,7 @@ export function applyRoomReplaced(payload: RoomReplacedPayload): void {
   state.bufferedSyncEvents = [];
   state.serverElements = payload.elements;
   state.hasServerState = true;
+  state.tombstoneElementIds = new Set();
   useElementsStore.getState().setElements(payload.elements);
   hydrateKnownSlotClocks(payload.slotClocks);
   setRoomEpoch(payload.roomEpoch);
@@ -180,6 +184,8 @@ export function applyRoomDiff(diff: RoomDiff): void {
   state.pausedForResync = false;
   useElementsStore.getState().setElements(materializeOptimisticElements(nextServerElements));
   removeKnownSlotClocks(deletedIds);
+  addKnownTombstones(deletedIds);
+  removeKnownTombstones(diff.changed.map((element) => element.id));
   applyKnownSlotClocks(diff.slotClocks);
   setRoomEpoch(diff.roomEpoch);
   setLastServerClock(diff.serverClock);
@@ -254,6 +260,15 @@ function applyChangeSetToStore(changeSet: CommittedChangeSet): void {
   state.serverElements = nextServerElements;
   state.hasServerState = true;
   useElementsStore.getState().setElements(materializeOptimisticElements(nextServerElements));
+  if (changeSet.reason === 'replace_document') {
+    state.tombstoneElementIds = new Set();
+  } else {
+    addKnownTombstones(changeSet.deletes);
+  }
+  removeKnownTombstones([
+    ...changeSet.created.map((element) => element.id),
+    ...changeSet.puts.map((element) => element.id),
+  ]);
   applyKnownSlotClocks(changeSet.slotClocks);
   setRoomEpoch(changeSet.roomEpoch);
 }

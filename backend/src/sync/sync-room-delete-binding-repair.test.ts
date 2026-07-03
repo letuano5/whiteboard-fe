@@ -4,6 +4,7 @@ import type {
   Element,
   PatchSlotsCommand,
   ReplaceDocumentCommand,
+  RestoreElementsCommand,
   SlotClockUpdate,
   SyncSlot,
   UpdateArrowBindingCommand,
@@ -79,6 +80,22 @@ describe('P5-08 SyncRoom delete, tombstone, and binding repair', () => {
     expect(room.getStateSnapshot().elements.has('dead-shape')).toBe(true);
     expect(room.getStateSnapshot().tombstoneElementIds.has('dead-shape')).toBe(false);
     expect(room.getStateSnapshot().documentClock).toBe(1);
+  });
+
+  it('restores tombstoned elements through the explicit restore command', async () => {
+    // @covers undo/redo tombstone restore
+    const restored = makeElement({ id: 'dead-shape', type: 'freehand', isDeleted: true });
+    const room = new SyncRoom({ roomId: 'room-1', tombstoneElementIds: ['dead-shape'] });
+
+    const result = await room.execute(restoreCommand('restore-dead', [restored]), editor);
+
+    expect(result.changeSet.reason).toBe('restore');
+    expect(result.changeSet.puts[0]).toMatchObject({ id: 'dead-shape', isDeleted: false });
+    expect(room.getStateSnapshot().elements.get('dead-shape')).toMatchObject({
+      id: 'dead-shape',
+      isDeleted: false,
+    });
+    expect(room.getStateSnapshot().tombstoneElementIds.has('dead-shape')).toBe(false);
   });
 
   it('rejects delete and repair limit violations without partial commit', async () => {
@@ -290,6 +307,10 @@ function deleteCommand(requestId: string, elementIds: string[]): DeleteElementsC
 
 function createCommand(requestId: string, element: Element): CreateElementCommand {
   return { ...envelope(requestId), kind: 'create-element', element };
+}
+
+function restoreCommand(requestId: string, elements: Element[]): RestoreElementsCommand {
+  return { ...envelope(requestId), kind: 'restore-elements', elements };
 }
 
 function replaceCommand(requestId: string, elements: Element[]): ReplaceDocumentCommand {

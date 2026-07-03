@@ -4,6 +4,7 @@ const SYNC_COMMAND_KINDS = new Set([
   'reorder-elements',
   'update-arrow-binding',
   'delete-elements',
+  'restore-elements',
   'replace-document',
 ]);
 

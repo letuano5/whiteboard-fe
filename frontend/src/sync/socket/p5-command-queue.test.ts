@@ -482,6 +482,49 @@ describe('P5 command queue drag flushing and backpressure', () => {
     expect(useElementsStore.getState().elements[0]?.x).toBe(50);
   });
 
+  it('uses restore-elements for redo of a tombstoned freehand create', () => {
+    // @covers undo/redo restore protocol
+    const emit = vi.fn();
+    const freehand = makeElement({
+      id: 'ink-1',
+      type: 'freehand',
+      props: {
+        ...makeElement().props,
+        fillColor: 'transparent',
+        points: [
+          [0, 0],
+          [10, 10],
+        ],
+      },
+    });
+    getSocketState().socket = { emit, connected: true } as never;
+    getSocketState().roomId = 'room-1';
+    getSocketState().tombstoneElementIds.add('ink-1');
+
+    enqueueMutationSyncCommands(restoreEvent(freehand), 'room-1', { now: 0 });
+
+    const command = emittedCommand(emit, 0);
+    expect(command.kind).toBe('restore-elements');
+    if (command.kind !== 'restore-elements') return;
+    expect(command.elements[0]).toMatchObject({ id: 'ink-1', type: 'freehand' });
+  });
+
+  it('undo of an unsent create cancels the queued create without sending a delete', () => {
+    // @covers undo/redo queued create cancellation
+    getSocketState().socket = { emit: vi.fn(), connected: false } as never;
+    getSocketState().roomId = 'room-1';
+    const created = makeElement({ id: 'offline-create' });
+
+    enqueueMutationSyncCommands({ type: 'create', elements: [created], before: [] }, 'room-1', {
+      now: 0,
+    });
+    enqueueMutationSyncCommands({ type: 'delete', elements: [], before: [created] }, 'room-1', {
+      now: 1,
+    });
+
+    expect(getSocketState().queuedSyncCommands).toEqual([]);
+  });
+
   it('rematerializes server state after a reject without serverChangeSet', () => {
     // @covers M1
     const emit = vi.fn();
@@ -545,6 +588,10 @@ function emittedCommand(emit: ReturnType<typeof vi.fn>, index: number): SyncComm
 
 function createEvent(id: string): MutationEvent {
   return { type: 'create', elements: [makeElement({ id })], before: [] };
+}
+
+function restoreEvent(element: Element): MutationEvent {
+  return { type: 'restore', elements: [element], before: [] };
 }
 
 function patchEvent(fromX: number, toX: number, id = 'shape-1'): MutationEvent {

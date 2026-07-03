@@ -5,9 +5,10 @@ import {
   createElementCommand,
   createPatchCommand,
   createReorderCommand,
+  createRestoreCommand,
   diffElementSlots,
 } from './p5-command-materializer';
-import { getSocketState } from './state';
+import { getSocketState, isKnownTombstone } from './state';
 
 export function commandsFromMutation(
   event: MutationEvent,
@@ -21,10 +22,19 @@ export function commandsFromMutation(
 
   if (event.type === 'delete') {
     const elementIds = event.before.map((element) => element.id);
-    cancelUnsentCreates(elementIds);
-    const remainingIds = elementIds.filter((elementId) => !hasQueuedCreate(elementId));
+    const canceledCreateIds = cancelUnsentCreates(elementIds);
+    const remainingIds = elementIds.filter((elementId) => !canceledCreateIds.has(elementId));
     if (remainingIds.length === 0) return [];
     return [createDeleteCommand(roomId, remainingIds, now)];
+  }
+
+  if (event.type === 'restore') {
+    const restoreElements = event.elements.filter((element) => shouldUseRestoreCommand(element.id));
+    const createElements = event.elements.filter((element) => !shouldUseRestoreCommand(element.id));
+    return [
+      ...createElements.map((element) => createElementCommand(roomId, element, now, final)),
+      ...(restoreElements.length > 0 ? [createRestoreCommand(roomId, restoreElements, now)] : []),
+    ];
   }
 
   const patches = event.elements.flatMap((after, index) => {
@@ -51,17 +61,36 @@ export function commandsFromMutation(
   return commands;
 }
 
-function cancelUnsentCreates(elementIds: string[]): void {
+function cancelUnsentCreates(elementIds: string[]): Set<string> {
   const state = getSocketState();
   const ids = new Set(elementIds);
+  const canceled = new Set(
+    state.queuedSyncCommands.flatMap((queued) =>
+      queued.command.kind === 'create-element' && ids.has(queued.command.element.id)
+        ? [queued.command.element.id]
+        : [],
+    ),
+  );
   state.queuedSyncCommands = state.queuedSyncCommands.filter(
     (queued) => queued.command.kind !== 'create-element' || !ids.has(queued.command.element.id),
   );
+  return canceled;
 }
 
 function hasQueuedCreate(elementId: string): boolean {
   return getSocketState().queuedSyncCommands.some(
     (queued) => queued.command.kind === 'create-element' && queued.command.element.id === elementId,
+  );
+}
+
+function shouldUseRestoreCommand(elementId: string): boolean {
+  return isKnownTombstone(elementId) || hasPendingDelete(elementId);
+}
+
+function hasPendingDelete(elementId: string): boolean {
+  return [...getSocketState().queuedSyncCommands, ...getSocketState().inFlightSyncCommands].some(
+    (queued) =>
+      queued.command.kind === 'delete-elements' && queued.command.elementIds.includes(elementId),
   );
 }
 

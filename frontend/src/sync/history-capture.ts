@@ -11,6 +11,7 @@ export function initHistoryCapture(): () => void {
     useHistoryStore.getState().push({
       before: event.before,
       after: event.elements,
+      mutationType: event.type,
       readPreconditions: event.before.flatMap((before, index) => {
         const after =
           event.elements[index] ?? event.elements.find((element) => element.id === before.id);

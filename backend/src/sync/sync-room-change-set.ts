@@ -45,7 +45,8 @@ export function createChangeSet(
     originRequestIds: [command.requestId],
     reason,
     slotPatches,
-    puts: reason === 'create' || reason === 'replace_document' ? created : [],
+    puts:
+      reason === 'create' || reason === 'restore' || reason === 'replace_document' ? created : [],
     deletes: deleted,
     created,
     patched,
@@ -84,6 +85,8 @@ function inferChangeSetReason(command: SharedSyncCommand): ChangeSetReason {
       return 'patch_clean';
     case 'delete-elements':
       return 'delete';
+    case 'restore-elements':
+      return 'restore';
     case 'replace-document':
       return 'replace_document';
     case 'update-arrow-binding':

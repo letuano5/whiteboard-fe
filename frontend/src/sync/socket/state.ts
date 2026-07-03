@@ -33,6 +33,7 @@ interface SocketClientState {
   pausedForResync: boolean;
   serverElements: Element[];
   hasServerState: boolean;
+  tombstoneElementIds: Set<string>;
   staleAckRequestIds: Set<string>;
   bufferedSyncEvents: Array<SyncAck | SyncBroadcast>;
 }
@@ -73,6 +74,7 @@ const state: SocketClientState = {
   pausedForResync: false,
   serverElements: [],
   hasServerState: false,
+  tombstoneElementIds: new Set(),
   staleAckRequestIds: new Set(),
   bufferedSyncEvents: [],
 };
@@ -121,6 +123,18 @@ export function removeKnownSlotClocks(elementIds: string[]): void {
   for (const elementId of elementIds) state.knownSlotClocks.delete(elementId);
 }
 
+export function addKnownTombstones(elementIds: string[]): void {
+  for (const elementId of elementIds) state.tombstoneElementIds.add(elementId);
+}
+
+export function removeKnownTombstones(elementIds: string[]): void {
+  for (const elementId of elementIds) state.tombstoneElementIds.delete(elementId);
+}
+
+export function isKnownTombstone(elementId: string): boolean {
+  return state.tombstoneElementIds.has(elementId);
+}
+
 /**
  * Builds the `{ requestId, clientClock }` refs sent to the server for reconnect/resync
  * requests. The server uses `clientClock` to tell a genuinely GC'd request apart from one
@@ -161,6 +175,7 @@ export function resetReconnectState(): void {
   state.pausedForResync = false;
   state.serverElements = [];
   state.hasServerState = false;
+  state.tombstoneElementIds = new Set();
   state.staleAckRequestIds = new Set();
   state.bufferedSyncEvents = [];
   state.knownSlotClocks = new Map();

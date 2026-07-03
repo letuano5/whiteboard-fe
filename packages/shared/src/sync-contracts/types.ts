@@ -153,6 +153,11 @@ export interface DeleteElementsCommand extends SyncCommandEnvelope {
   elementIds: string[];
 }
 
+export interface RestoreElementsCommand extends SyncCommandEnvelope {
+  kind: 'restore-elements';
+  elements: Element[];
+}
+
 export interface ReplaceDocumentCommand extends SyncCommandEnvelope {
   kind: 'replace-document';
   elements: Element[];
@@ -165,6 +170,7 @@ export type SyncCommand =
   | ReorderElementsCommand
   | UpdateArrowBindingCommand
   | DeleteElementsCommand
+  | RestoreElementsCommand
   | ReplaceDocumentCommand;
 
 export interface SyncOrderEntry {
@@ -256,6 +262,7 @@ export type ChangeSetReason =
   | 'binding_update'
   | 'reorder'
   | 'delete'
+  | 'restore'
   | 'replace_document'
   | 'repair';
 

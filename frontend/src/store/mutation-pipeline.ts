@@ -4,7 +4,7 @@ import { useElementsStore } from './elements.store';
 import { normalizeLinearBounds } from '../utils/geometry';
 
 export interface MutationEvent {
-  type: 'create' | 'patch' | 'delete' | 'update';
+  type: 'create' | 'patch' | 'delete' | 'restore' | 'update';
   elements: Element[];
   before: Element[];
   sync?: MutationSyncOptions;
@@ -210,11 +210,10 @@ export function applySnapshot(elements: Element[], options: MutationOptions = {}
 }
 
 /**
- * Re-adds elements that were previously created then undone. Handles the case
- * where connected-mode reconciliation removed them from the store entirely.
- * Fires 'create' so the sync layer can attempt a create-element command.
+ * Re-adds elements that were previously deleted or created then undone.
+ * Fires 'restore' so saved rooms can use the explicit tombstone-aware command.
  */
-export function reApplyCreate(elements: Element[]): void {
+export function restoreElements(elements: Element[]): void {
   if (elements.length === 0) return;
   const now = Date.now();
   const storeElements = useElementsStore.getState().elements;
@@ -234,5 +233,5 @@ export function reApplyCreate(elements: Element[]): void {
   const toUpdate = bumped.filter((el) => currentById.has(el.id));
   if (toAdd.length > 0) useElementsStore.getState().addElements(toAdd);
   if (toUpdate.length > 0) useElementsStore.getState().updateElements(toUpdate);
-  fireHooks({ type: 'create', elements: bumped, before: [] });
+  fireHooks({ type: 'restore', elements: bumped, before: [] });
 }
