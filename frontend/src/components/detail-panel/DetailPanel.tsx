@@ -2,476 +2,95 @@ import { useElementsStore } from '../../store/elements.store';
 import { useInteractionStore } from '../../store/interaction.store';
 import { patchElement, updateElements } from '../../store/mutation-pipeline';
 import type { ElementProps } from '../../types/shared';
+import { PanelShell } from './PanelShell';
+import { SectionTitle } from './SectionTitle';
+import { StyleControls } from './StyleControls';
+import { TextControls } from './TextControls';
+import { TransformControls } from './TransformControls';
+import {
+  buildAnglePatchFromDegrees,
+  buildMultiPropsPatches,
+  buildPropsPatch,
+  buildTextFontFamilyPatch,
+  buildTextFontSizePatch,
+} from './selection-patches';
 
 export default function DetailPanel() {
-  const selectedIds = useInteractionStore((s) => s.selectedIds);
-  const elements = useElementsStore((s) => s.elements);
+  const selectedIds = useInteractionStore((state) => state.selectedIds);
+  const elements = useElementsStore((state) => state.elements);
 
   if (selectedIds.length === 0) return null;
 
-  // Multi-select: show shared style controls (no Transform or Text sections)
   if (selectedIds.length > 1) {
-    const selectedEls = elements.filter((e) => selectedIds.includes(e.id) && !e.isDeleted);
-    if (selectedEls.length === 0) return null;
-    const firstProps = selectedEls[0].props;
-    const hasNonLine = selectedEls.some((e) => e.type !== 'line' && e.type !== 'arrow');
+    const selectedElements = elements.filter(
+      (element) => selectedIds.includes(element.id) && !element.isDeleted,
+    );
 
-    function patchAll(partial: Partial<ElementProps>) {
-      updateElements(
-        selectedEls.map((el) => ({
-          id: el.id,
-          patch: { props: { ...el.props, ...partial } },
-        })),
-      );
+    if (selectedElements.length === 0) return null;
+
+    const firstProps = selectedElements[0].props;
+    const hasFillableElement = selectedElements.some(
+      (element) => element.type !== 'line' && element.type !== 'arrow',
+    );
+
+    function patchAll(partialProps: Partial<ElementProps>) {
+      updateElements(buildMultiPropsPatches(selectedElements, partialProps));
     }
 
     return (
-      <div
-        onPointerDown={(e) => e.stopPropagation()}
-        style={{
-          position: 'fixed',
-          right: 16,
-          top: '50%',
-          transform: 'translateY(-50%)',
-          zIndex: 100,
-          background: '#1e1e1e',
-          border: '1px solid #3a3a3a',
-          borderRadius: 8,
-          padding: '12px 16px',
-          minWidth: 200,
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 10,
-          boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
-          color: '#e0e0e0',
-          fontSize: 13,
-        }}
-      >
-        <div
-          style={{
-            fontWeight: 600,
-            fontSize: 12,
-            color: '#aaa',
-            textTransform: 'uppercase',
-            letterSpacing: 1,
-          }}
-        >
-          {selectedEls.length} shapes selected
-        </div>
-
-        <div
-          style={{
-            fontWeight: 600,
-            fontSize: 12,
-            color: '#aaa',
-            textTransform: 'uppercase',
-            letterSpacing: 1,
-            marginTop: 4,
-          }}
-        >
-          Style
-        </div>
-
-        <label
-          style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}
-        >
-          <span>Stroke color</span>
-          <input
-            type="color"
-            value={firstProps.strokeColor}
-            onChange={(e) => patchAll({ strokeColor: e.target.value })}
-            style={{
-              width: 36,
-              height: 24,
-              padding: 2,
-              border: 'none',
-              background: 'none',
-              cursor: 'pointer',
-            }}
-          />
-        </label>
-
-        {hasNonLine && (
-          <label
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              gap: 8,
-            }}
-          >
-            <span>Fill color</span>
-            <input
-              type="color"
-              value={
-                firstProps.fillColor === 'none' || firstProps.fillColor === 'transparent'
-                  ? '#ffffff'
-                  : firstProps.fillColor
-              }
-              onChange={(e) => patchAll({ fillColor: e.target.value })}
-              style={{
-                width: 36,
-                height: 24,
-                padding: 2,
-                border: 'none',
-                background: 'none',
-                cursor: 'pointer',
-              }}
-            />
-          </label>
-        )}
-
-        <label
-          style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}
-        >
-          <span>Stroke width</span>
-          <input
-            type="number"
-            min={1}
-            value={firstProps.strokeWidth}
-            onChange={(e) => patchAll({ strokeWidth: Number(e.target.value) })}
-            style={{
-              width: 56,
-              background: '#2a2a2a',
-              border: '1px solid #444',
-              borderRadius: 4,
-              padding: '2px 6px',
-              color: 'inherit',
-              fontSize: 13,
-            }}
-          />
-        </label>
-
-        <label
-          style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}
-        >
-          <span>Stroke style</span>
-          <select
-            value={firstProps.strokeStyle}
-            onChange={(e) =>
-              patchAll({ strokeStyle: e.target.value as ElementProps['strokeStyle'] })
-            }
-            style={{
-              background: '#2a2a2a',
-              border: '1px solid #444',
-              borderRadius: 4,
-              padding: '2px 4px',
-              color: 'inherit',
-              fontSize: 13,
-            }}
-          >
-            <option value="solid">Solid</option>
-            <option value="dashed">Dashed</option>
-            <option value="dotted">Dotted</option>
-          </select>
-        </label>
-
-        <label
-          style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}
-        >
-          <span>Opacity</span>
-          <input
-            type="range"
-            min={0}
-            max={100}
-            value={Math.round(firstProps.opacity * 100)}
-            onChange={(e) => patchAll({ opacity: Number(e.target.value) / 100 })}
-            style={{ width: 80 }}
-          />
-        </label>
-      </div>
+      <PanelShell>
+        <SectionTitle>{selectedElements.length} shapes selected</SectionTitle>
+        <StyleControls
+          canFill={hasFillableElement}
+          props={firstProps}
+          titleSpacing
+          onPatchProps={patchAll}
+        />
+      </PanelShell>
     );
   }
 
-  const element = elements.find((e) => e.id === selectedIds[0] && !e.isDeleted);
+  const element = elements.find(
+    (candidate) => candidate.id === selectedIds[0] && !candidate.isDeleted,
+  );
   if (!element) return null;
 
-  const { props } = element;
-  const isText = element.type === 'text';
+  const selectedElement = element;
+  const isText = selectedElement.type === 'text';
 
-  function patch(partial: Partial<ElementProps>) {
-    patchElement(element!.id, { props: { ...props, ...partial } });
+  function patchProps(partialProps: Partial<ElementProps>) {
+    patchElement(selectedElement.id, buildPropsPatch(selectedElement, partialProps));
   }
 
   return (
-    <div
-      onPointerDown={(e) => e.stopPropagation()}
-      style={{
-        position: 'fixed',
-        right: 16,
-        top: '50%',
-        transform: 'translateY(-50%)',
-        zIndex: 100,
-        background: '#1e1e1e',
-        border: '1px solid #3a3a3a',
-        borderRadius: 8,
-        padding: '12px 16px',
-        minWidth: 200,
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 10,
-        boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
-        color: '#e0e0e0',
-        fontSize: 13,
-      }}
-    >
-      <div
-        style={{
-          fontWeight: 600,
-          fontSize: 12,
-          color: '#aaa',
-          textTransform: 'uppercase',
-          letterSpacing: 1,
-        }}
-      >
-        Transform
-      </div>
+    <PanelShell>
+      <TransformControls
+        angleDegrees={Math.round((selectedElement.angle * 180) / Math.PI)}
+        onAngleChange={(degrees) =>
+          patchElement(selectedElement.id, buildAnglePatchFromDegrees(degrees))
+        }
+      />
 
-      <label
-        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}
-      >
-        <span>Angle (°)</span>
-        <input
-          type="number"
-          min={-180}
-          max={180}
-          step={1}
-          value={Math.round((element.angle * 180) / Math.PI)}
-          onChange={(e) =>
-            patchElement(element.id, { angle: (Number(e.target.value) * Math.PI) / 180 })
+      <StyleControls
+        canFill={selectedElement.type !== 'line'}
+        isText={isText}
+        props={selectedElement.props}
+        titleSpacing
+        onPatchProps={patchProps}
+      />
+
+      {isText && (
+        <TextControls
+          props={selectedElement.props}
+          onFontSizeChange={(fontSize) =>
+            patchElement(selectedElement.id, buildTextFontSizePatch(selectedElement, fontSize))
           }
-          style={{
-            width: 56,
-            background: '#2a2a2a',
-            border: '1px solid #444',
-            borderRadius: 4,
-            padding: '2px 6px',
-            color: 'inherit',
-            fontSize: 13,
-          }}
+          onFontFamilyChange={(fontFamily) =>
+            patchElement(selectedElement.id, buildTextFontFamilyPatch(selectedElement, fontFamily))
+          }
+          onPatchProps={patchProps}
         />
-      </label>
-
-      <div
-        style={{
-          fontWeight: 600,
-          fontSize: 12,
-          color: '#aaa',
-          textTransform: 'uppercase',
-          letterSpacing: 1,
-          marginTop: 4,
-        }}
-      >
-        Style
-      </div>
-
-      <label
-        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}
-      >
-        <span>{isText ? 'Font color' : 'Stroke color'}</span>
-        <input
-          type="color"
-          value={props.strokeColor}
-          onChange={(e) => patch({ strokeColor: e.target.value })}
-          style={{
-            width: 36,
-            height: 24,
-            padding: 2,
-            border: 'none',
-            background: 'none',
-            cursor: 'pointer',
-          }}
-        />
-      </label>
-
-      {element.type !== 'line' && (
-        <label
-          style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}
-        >
-          <span>{isText ? 'Border color' : 'Fill color'}</span>
-          <input
-            type="color"
-            value={
-              props.fillColor === 'none' || props.fillColor === 'transparent'
-                ? '#ffffff'
-                : props.fillColor
-            }
-            onChange={(e) => patch({ fillColor: e.target.value })}
-            style={{
-              width: 36,
-              height: 24,
-              padding: 2,
-              border: 'none',
-              background: 'none',
-              cursor: 'pointer',
-            }}
-          />
-        </label>
       )}
-
-      <label
-        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}
-      >
-        <span>{isText ? 'Border width' : 'Stroke width'}</span>
-        <input
-          type="number"
-          min={isText ? 0 : 1}
-          value={props.strokeWidth}
-          onChange={(e) => patch({ strokeWidth: Number(e.target.value) })}
-          style={{
-            width: 56,
-            background: '#2a2a2a',
-            border: '1px solid #444',
-            borderRadius: 4,
-            padding: '2px 6px',
-            color: 'inherit',
-            fontSize: 13,
-          }}
-        />
-      </label>
-
-      <label
-        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}
-      >
-        <span>Stroke style</span>
-        <select
-          value={props.strokeStyle}
-          onChange={(e) => patch({ strokeStyle: e.target.value as ElementProps['strokeStyle'] })}
-          style={{
-            background: '#2a2a2a',
-            border: '1px solid #444',
-            borderRadius: 4,
-            padding: '2px 4px',
-            color: 'inherit',
-            fontSize: 13,
-          }}
-        >
-          <option value="solid">Solid</option>
-          <option value="dashed">Dashed</option>
-          <option value="dotted">Dotted</option>
-        </select>
-      </label>
-
-      <label
-        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}
-      >
-        <span>Opacity</span>
-        <input
-          type="range"
-          min={0}
-          max={100}
-          value={Math.round(props.opacity * 100)}
-          onChange={(e) => patch({ opacity: Number(e.target.value) / 100 })}
-          style={{ width: 80 }}
-        />
-      </label>
-
-      {element.type === 'text' && (
-        <>
-          <div
-            style={{
-              fontWeight: 600,
-              fontSize: 12,
-              color: '#aaa',
-              textTransform: 'uppercase',
-              letterSpacing: 1,
-              marginTop: 4,
-            }}
-          >
-            Text
-          </div>
-
-          <label
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              gap: 8,
-            }}
-          >
-            <span>Font size</span>
-            <input
-              type="number"
-              min={1}
-              value={props.fontSize ?? 16}
-              onChange={(e) => {
-                const newFontSize = Math.max(1, Number(e.target.value));
-                const oldFontSize = props.fontSize ?? 16;
-                const scale = oldFontSize > 0 ? newFontSize / oldFontSize : 1;
-                patchElement(element.id, {
-                  props: { ...props, fontSize: newFontSize },
-                  width: Math.max(1, element.width * scale),
-                  height: Math.max(1, element.height * scale),
-                });
-              }}
-              style={{
-                width: 56,
-                background: '#2a2a2a',
-                border: '1px solid #444',
-                borderRadius: 4,
-                padding: '2px 6px',
-                color: 'inherit',
-                fontSize: 13,
-              }}
-            />
-          </label>
-
-          <label
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              gap: 8,
-            }}
-          >
-            <span>Font family</span>
-            <select
-              value={props.fontFamily ?? 'sans-serif'}
-              onChange={(e) => patch({ fontFamily: e.target.value })}
-              style={{
-                background: '#2a2a2a',
-                border: '1px solid #444',
-                borderRadius: 4,
-                padding: '2px 4px',
-                color: 'inherit',
-                fontSize: 13,
-              }}
-            >
-              <option value="sans-serif">Sans-serif</option>
-              <option value="serif">Serif</option>
-              <option value="monospace">Monospace</option>
-            </select>
-          </label>
-
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span>Align</span>
-            <div style={{ display: 'flex', gap: 4 }}>
-              {(['left', 'center', 'right'] as const).map((align) => (
-                <button
-                  key={align}
-                  aria-label={align}
-                  onClick={() => patch({ textAlign: align })}
-                  style={{
-                    width: 28,
-                    height: 24,
-                    background: props.textAlign === align ? '#3b82f6' : '#2a2a2a',
-                    border: '1px solid #444',
-                    borderRadius: 4,
-                    color: 'inherit',
-                    fontSize: 12,
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
-                >
-                  {align === 'left' ? 'L' : align === 'center' ? 'C' : 'R'}
-                </button>
-              ))}
-            </div>
-          </div>
-        </>
-      )}
-    </div>
+    </PanelShell>
   );
 }

@@ -90,11 +90,65 @@ Both frontend and backend import from `@vdt/shared` via workspace link.
 | Module-level constants  | `SCREAMING_SNAKE_CASE`     | `WS_EVENTS`, `MIN_ZOOM`           |
 | WebSocket event strings | `kebab-case`               | `"element-update"`, `"join-room"` |
 
+### File organization
+
+- Split files by concern, not mechanically by function count. Common concerns:
+  bootstrap/wiring, socket/event handlers, domain state logic, pure selectors/helpers,
+  React presentation components, and local types/contracts.
+- Keep bootstrap and wiring files thin. `index.ts`, `main.tsx`, and server entry files should
+  compose dependencies and start the app; target `< 80` lines.
+- Prefer source files under `200` lines. Files in the `200-300` line range need an explicit
+  reason to stay together. Files over `300` lines must be split unless they are generated files
+  or intentionally broad integration tests.
+- When a feature has three or more closely related files, create a feature folder instead of
+  spreading them across generic folders.
+- React component files use `PascalCase.tsx`. Non-component TypeScript files use `kebab-case.ts`
+  or clear domain names such as `types.ts`, `selectors.ts`, or `constants.ts`.
+- Keep local types near the module that uses them. Move types to `@vdt/shared` only when both
+  frontend and backend need them as part of the data contract.
+- Folder `index.ts` files are public API barrels for code outside that folder. Files inside the
+  same folder must import each other directly (for example `./room-state`), not through their own
+  folder barrel.
+- Reusable logic must have a single implementation. Before writing a new helper, selector, parser,
+  geometry function, socket utility, or persistence helper, search the codebase for an existing
+  equivalent and reuse or extend it.
+- Do not copy-paste shared behavior into multiple modules. If the same behavior is needed in two
+  places, extract it to the nearest sensible owner: feature-local first, package-level second,
+  `@vdt/shared` only for frontend/backend contracts.
+- Keep reusable functions pure when practical and cover extracted shared behavior with focused
+  tests near its owning module.
+- Avoid broad files named `helpers.ts`, `utils.ts`, or `misc.ts` unless every export is tightly
+  tied to one domain. Prefer names that state the responsibility, such as `join-room.ts`,
+  `room-state.ts`, `SelectionOverlay.tsx`, or `SnapIndicators.tsx`.
+
+#### Backend handlers
+
+- Socket handler modules receive their dependencies explicitly, including `ioServer`, `socket`,
+  state maps/repositories, and autosave services. Handlers should not import mutable singleton
+  room state directly.
+- Handler modules own expected domain error handling for their event. They should log with a
+  stable prefix and emit a typed socket error response when the client can act on the failure.
+- Wiring modules may wrap handlers for unexpected failures, but business fallback behavior belongs
+  in the handler that understands the event.
+- Handler tests follow the handler name: `join-room.ts` pairs with `__tests__/join-room.test.ts`.
+
+#### Tooling enforcement
+
+- ESLint should enforce file-size guardrails with `max-lines`, with stricter overrides for entry
+  files where practical.
+- Filename conventions should be enforced by tooling such as `unicorn/filename-case` or a local
+  custom rule.
+- Import cycles should be rejected by tooling such as `import/no-cycle`.
+- Do not rely on review alone for conventions that can be checked automatically.
+
 ## Workflow
 
 - Work **one phase at a time**, in the order in `docs/SPECS.md` (P0 → P1A → P1B → …).
 - **Plan before coding**: propose a task plan and wait for approval, then implement.
 - Commit after each logical group of tasks.
+- For structural refactors, choose the next target by practical pain (conflicts, bug density,
+  review friction, or mixed concerns), not by backend/frontend order alone.
+- Refactors that split files must preserve behavior and should be committed by logical group.
 
 ## Commands
 

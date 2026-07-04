@@ -11,25 +11,82 @@ datasource db {
 }
 
 model Room {
-  id                          String       @id @default(uuid())
-  name                        String       @default("Untitled")
-  ownerId                     String?
-  documentClock               BigInt       @default(0)
-  tombstoneHistoryStartsAtClock BigInt     @default(0)
-  createdAt                   DateTime     @default(now())
-  updatedAt                   DateTime     @updatedAt
-  members                     RoomMember[]
-  records                     Record[]
-  tombstones                  Tombstone[]
+  id                            String           @id @default(uuid())
+  name                          String           @default("Untitled")
+  workspaceId                   String?
+  ownerId                       String?
+  owner                         AppUser?         @relation("OwnedRooms", fields: [ownerId], references: [id], onDelete: SetNull)
+  visibility                    String           @default("private")
+  shareRevokedAt                DateTime?
+  locked                        Boolean          @default(false)
+  maxParticipants               Int?
+  maxEditors                    Int?
+  archivedAt                    DateTime?
+  lastOpenedAt                  DateTime?
+  createdBy                     String?
+  documentClock                 BigInt           @default(0)
+  roomEpoch                     BigInt           @default(0)
+  tombstoneHistoryStartsAtClock BigInt           @default(0)
+  processedRequestHistoryStartsAtClock BigInt    @default(0)
+  createdAt                     DateTime         @default(now())
+  updatedAt                     DateTime         @updatedAt
+  members                       RoomMember[]
+  invitations                   RoomInvitation[]
+  records                       Record[]
+  tombstones                    Tombstone[]
+  processedRequests             ProcessedRequest[]
+  snapshots                     Snapshot[]
+
+  @@index([ownerId, updatedAt, id])
+  @@index([updatedAt, id])
 }
 
 model RoomMember {
-  roomId String
-  userId String
-  role   String
-  room   Room   @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  roomId       String
+  userId       String
+  role         String
+  lastOpenedAt DateTime?
+  room         Room      @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user         AppUser   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([roomId, userId])
+  @@index([userId, lastOpenedAt])
+}
+
+model RoomInvitation {
+  id          String    @id @default(uuid())
+  roomId      String
+  email       String
+  role        String
+  invitedBy   String
+  claimedBy   String?
+  claimedAt   DateTime?
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  room        Room      @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  inviter     AppUser   @relation("SentRoomInvitations", fields: [invitedBy], references: [id], onDelete: Cascade)
+  claimedUser AppUser?  @relation("ClaimedRoomInvitations", fields: [claimedBy], references: [id], onDelete: SetNull)
+
+  @@unique([roomId, email])
+  @@index([email, revokedAt, claimedAt])
+}
+
+model AppUser {
+  id                     String           @id @default(uuid())
+  provider               String
+  providerSubject        String
+  email                  String?
+  name                   String?
+  avatarUrl              String?
+  createdAt              DateTime         @default(now())
+  updatedAt              DateTime         @updatedAt
+  ownedRooms             Room[]           @relation("OwnedRooms")
+  roomMemberships        RoomMember[]
+  sentRoomInvitations    RoomInvitation[] @relation("SentRoomInvitations")
+  claimedRoomInvitations RoomInvitation[] @relation("ClaimedRoomInvitations")
+
+  @@unique([provider, providerSubject])
 }
 
 model Record {
@@ -38,6 +95,7 @@ model Record {
   typeName    String
   state       Json
   recordClock BigInt
+  slotClocks  Json   @default("{}")
   room        Room   @relation(fields: [roomId], references: [id], onDelete: Cascade)
 
   @@id([roomId, recordId])
@@ -52,4 +110,37 @@ model Tombstone {
 
   @@id([roomId, recordId])
   @@index([roomId, deletedClock])
+}
+
+model ProcessedRequest {
+  roomId      String
+  actorId     String
+  requestId   String
+  payloadHash String
+  serverClock BigInt
+  action      String
+  reason      String?
+  ack         Json
+  createdAt   DateTime @default(now())
+  room        Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@id([roomId, actorId, requestId])
+  @@index([roomId, serverClock])
+  @@index([roomId, createdAt])
+}
+
+model Snapshot {
+  id            String   @id @default(uuid())
+  roomId        String
+  documentClock BigInt
+  roomEpoch     BigInt   @default(0)
+  createdBy     String?
+  createdAt     DateTime @default(now())
+  reason        String
+  records       Json
+  tombstones    Json
+  room          Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@index([roomId, createdAt])
+  @@index([roomId, documentClock])
 }

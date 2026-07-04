@@ -31,3 +31,5 @@ AC-17: While a form control in the detail panel has keyboard focus (e.g., stroke
 AC-18: Clicking any control in the detail panel (color picker, number input, range slider, select, buttons) does NOT deselect the currently selected element.
 AC-19: Clicking the canvas with the text tool without dragging creates a text element at the click position with a default bounding box of 200px wide × 40px tall.
 AC-20: Newly created text elements use visible default content `"Text"` so the text tool produces an immediately visible element before in-place text editing exists.
+AC-21: Changing font family on a selected text element recomputes the natural text dimensions and expands the element bbox if the new font would otherwise overflow.
+AC-22: Changing font family on a selected text element recomputes the natural text dimensions and shrinks the element bbox when the new font is narrower or shorter than the previous fitted bbox.

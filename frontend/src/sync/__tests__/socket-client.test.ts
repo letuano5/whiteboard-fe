@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { WS_EVENTS } from '../../types/shared';
+import { SYNC_PROTOCOL_VERSION, SYNC_SCHEMA_VERSION, WS_EVENTS } from '../../types/shared';
 import { useElementsStore } from '../../store/elements.store';
 import { useInteractionStore } from '../../store/interaction.store';
 import { useCameraStore } from '../../store/camera.store';
-import type { Presence } from '../../types/shared';
+import type { CommittedChangeSet, Presence } from '../../types/shared';
 
 vi.mock('../camera-persistence', () => ({
   saveCamera: vi.fn(),
@@ -82,6 +82,47 @@ describe('socket-client — 014/AC-1 (join-room payload)', () => {
   });
 });
 
+describe('socket-client — P3B-01d token attachment', () => {
+  it('passes auth.accessToken when the auth store has a session', async () => {
+    const { useAuthStore } = await import('../../auth/auth.store');
+    const { io } = await import('socket.io-client');
+    const ioMock = io as ReturnType<typeof vi.fn>;
+    ioMock.mockClear();
+    useAuthStore.setState({
+      session: {
+        accessToken: 'access-token-123',
+        expiresAt: 123456,
+        user: {
+          id: 'user-123',
+          email: 'player@example.com',
+          name: 'Tactical Player',
+          avatarUrl: null,
+        },
+      },
+      status: 'authenticated',
+      errorMessage: null,
+    });
+
+    const { initSocketClient } = await import('../socket-client');
+    initSocketClient('room-auth');
+
+    expect(ioMock).toHaveBeenCalledWith(undefined, {
+      auth: { accessToken: 'access-token-123' },
+    });
+  });
+
+  it('omits auth token data when there is no session', async () => {
+    const { io } = await import('socket.io-client');
+    const ioMock = io as ReturnType<typeof vi.fn>;
+    ioMock.mockClear();
+
+    const { initSocketClient } = await import('../socket-client');
+    initSocketClient('room-anon');
+
+    expect(ioMock).toHaveBeenCalledWith(undefined);
+  });
+});
+
 describe('socket-client — 014/AC-2 (element-update delivery)', () => {
   it('calls applyRemoteElements when element-update event arrives', async () => {
     const applyModule = await import('../apply-remote');
@@ -93,13 +134,27 @@ describe('socket-client — 014/AC-2 (element-update delivery)', () => {
     const fakeElement = {
       id: 'el-1',
       type: 'rectangle' as const,
-      x: 0, y: 0, width: 100, height: 100, angle: 0, zIndex: 1,
+      x: 0,
+      y: 0,
+      width: 100,
+      height: 100,
+      angle: 0,
+      zIndex: 1,
       props: {
-        strokeColor: '#000', fillColor: 'transparent',
-        strokeWidth: 1, strokeStyle: 'solid' as const, opacity: 1,
+        strokeColor: '#000',
+        fillColor: 'transparent',
+        strokeWidth: 1,
+        strokeStyle: 'solid' as const,
+        opacity: 1,
       },
-      version: 1, versionNonce: 42, updatedAt: Date.now(),
-      isDeleted: false, groupId: null, frameId: null, locked: false, createdBy: 'test',
+      version: 1,
+      versionNonce: 42,
+      updatedAt: Date.now(),
+      isDeleted: false,
+      groupId: null,
+      frameId: null,
+      locked: false,
+      createdBy: 'test',
     };
 
     const handler = _handlers[WS_EVENTS.ELEMENT_UPDATE];
@@ -112,7 +167,7 @@ describe('socket-client — 014/AC-2 (element-update delivery)', () => {
 });
 
 describe('socket-client — 014/AC-4 (room isolation via roomId in emit)', () => {
-  it('element-update mutations are emitted with the joined roomId', async () => {
+  it('saved-room mutations are emitted as sync commands with the joined roomId', async () => {
     const { initSocketClient } = await import('../socket-client');
     const { dispatchMutationEvent } = await import('../../store/mutation-pipeline');
 
@@ -121,22 +176,81 @@ describe('socket-client — 014/AC-4 (room isolation via roomId in emit)', () =>
     const fakeElement = {
       id: 'el-iso',
       type: 'rectangle' as const,
-      x: 0, y: 0, width: 50, height: 50, angle: 0, zIndex: 1,
+      x: 0,
+      y: 0,
+      width: 50,
+      height: 50,
+      angle: 0,
+      zIndex: 1,
       props: {
-        strokeColor: '#000', fillColor: 'transparent',
-        strokeWidth: 1, strokeStyle: 'solid' as const, opacity: 1,
+        strokeColor: '#000',
+        fillColor: 'transparent',
+        strokeWidth: 1,
+        strokeStyle: 'solid' as const,
+        opacity: 1,
       },
-      version: 1, versionNonce: 99, updatedAt: Date.now(),
-      isDeleted: false, groupId: null, frameId: null, locked: false, createdBy: 'test',
+      version: 1,
+      versionNonce: 99,
+      updatedAt: Date.now(),
+      isDeleted: false,
+      groupId: null,
+      frameId: null,
+      locked: false,
+      createdBy: 'test',
     };
 
     mockEmit.mockClear();
-    dispatchMutationEvent({ type: 'update', elements: [fakeElement], before: [] });
+    dispatchMutationEvent({ type: 'create', elements: [fakeElement], before: [] });
 
     expect(mockEmit).toHaveBeenCalledWith(
-      WS_EVENTS.ELEMENT_UPDATE,
-      { roomId: 'room-xyz', elements: [fakeElement] },
+      WS_EVENTS.SYNC_COMMAND,
+      expect.objectContaining({
+        roomId: 'room-xyz',
+        kind: 'create-element',
+        element: fakeElement,
+      }),
     );
+  });
+});
+
+describe('socket-client — P3B-02 room access events', () => {
+  it('ROOM_ACCESS updates the room access store', async () => {
+    const { initSocketClient } = await import('../socket-client');
+    const { useRoomAccessStore } = await import('../../rooms/room-access.store');
+    initSocketClient('room-access');
+
+    const accessHandler = _handlers[WS_EVENTS.ROOM_ACCESS];
+    expect(accessHandler).toBeDefined();
+    accessHandler({
+      roomId: 'room-access',
+      role: 'viewer',
+      members: [
+        {
+          userId: 'user-1',
+          email: 'user@example.com',
+          name: 'User',
+          avatarUrl: null,
+          role: 'viewer',
+        },
+      ],
+    });
+
+    expect(useRoomAccessStore.getState().role).toBe('viewer');
+    expect(useRoomAccessStore.getState().members).toHaveLength(1);
+  });
+
+  it('updateRoomMemberRole emits ROOM_ROLE_UPDATE for the joined room', async () => {
+    const { initSocketClient, updateRoomMemberRole } = await import('../socket-client');
+    initSocketClient('room-access');
+    mockEmit.mockClear();
+
+    updateRoomMemberRole('member-user', 'viewer');
+
+    expect(mockEmit).toHaveBeenCalledWith(WS_EVENTS.ROOM_ROLE_UPDATE, {
+      roomId: 'room-access',
+      userId: 'member-user',
+      role: 'viewer',
+    });
   });
 });
 
@@ -145,7 +259,14 @@ describe('socket-client — 014/AC-4 (room isolation via roomId in emit)', () =>
 // so both the test and socket-client.ts share the same fresh store instance.
 
 function makePeer(sessionId: string): Presence {
-  return { sessionId, name: 'Red Bear', color: '#ef4444', cursor: null, selectedIds: [], status: 'active' };
+  return {
+    sessionId,
+    name: 'Red Bear',
+    color: '#ef4444',
+    cursor: null,
+    selectedIds: [],
+    status: 'active',
+  };
 }
 
 describe('socket-client — AC-1 (remote cursor added on CURSOR_MOVE)', () => {
@@ -197,7 +318,14 @@ describe('socket-client — AC-3 (own cursor NOT added to remoteCursors)', () =>
     const joinHandler = _handlers[WS_EVENTS.USER_JOIN];
     joinHandler({
       presences: [
-        { sessionId: 'local-session-id', name: 'Blue Fox', color: '#3b82f6', cursor: null, selectedIds: [], status: 'active' },
+        {
+          sessionId: 'local-session-id',
+          name: 'Blue Fox',
+          color: '#3b82f6',
+          cursor: null,
+          selectedIds: [],
+          status: 'active',
+        },
         makePeer('peer-1'),
       ],
     });
@@ -221,7 +349,11 @@ describe('socket-client — AC-4 (cursor-move emit includes roomId for server sc
       roomId: 'room-abc',
       sessionId: 'local-session-id',
       cursor: { x: 50, y: 75 },
-      viewport: expect.objectContaining({ x: expect.any(Number), y: expect.any(Number), zoom: expect.any(Number) }),
+      viewport: expect.objectContaining({
+        x: expect.any(Number),
+        y: expect.any(Number),
+        zoom: expect.any(Number),
+      }),
     });
   });
 });
@@ -247,9 +379,7 @@ describe('socket-client — AC-5 (cursor removed when peer leaves)', () => {
 
 describe('socket-client — ROOM_SNAPSHOT replaces elements on join', () => {
   it('ROOM_SNAPSHOT event calls setElements with received elements (legacy check via store)', async () => {
-    const applyModule = await import('../apply-remote');
-    const spy = vi.spyOn(applyModule, 'applyRemoteElements');
-
+    const { useElementsStore: elStore } = await import('../../store/elements.store');
     const { initSocketClient } = await import('../socket-client');
     initSocketClient('room-abc');
 
@@ -257,16 +387,33 @@ describe('socket-client — ROOM_SNAPSHOT replaces elements on join', () => {
     expect(snapshotHandler).toBeDefined();
 
     const el = {
-      id: 'snap-1', type: 'rectangle' as const,
-      x: 0, y: 0, width: 50, height: 50, angle: 0, zIndex: 1,
-      props: { strokeColor: '#000', fillColor: 'transparent', strokeWidth: 1, strokeStyle: 'solid' as const, opacity: 1 },
-      version: 1, versionNonce: 1, updatedAt: Date.now(),
-      isDeleted: false, groupId: null, frameId: null, locked: false, createdBy: 'test',
+      id: 'snap-1',
+      type: 'rectangle' as const,
+      x: 0,
+      y: 0,
+      width: 50,
+      height: 50,
+      angle: 0,
+      zIndex: 1,
+      props: {
+        strokeColor: '#000',
+        fillColor: 'transparent',
+        strokeWidth: 1,
+        strokeStyle: 'solid' as const,
+        opacity: 1,
+      },
+      version: 1,
+      versionNonce: 1,
+      updatedAt: Date.now(),
+      isDeleted: false,
+      groupId: null,
+      frameId: null,
+      locked: false,
+      createdBy: 'test',
     };
 
     snapshotHandler({ elements: [el], documentClock: 0 });
-    expect(spy).toHaveBeenCalledWith([el]);
-    spy.mockRestore();
+    expect(elStore.getState().elements).toEqual([el]);
   });
 });
 
@@ -275,9 +422,7 @@ describe('socket-client — ROOM_SNAPSHOT replaces elements on join', () => {
 describe('socket-client — P3A-02/AC-4 (T013) ROOM_SNAPSHOT with non-empty elements', () => {
   // @covers AC-4
   it('calls applyRemoteElements with received elements and sets lastServerClock', async () => {
-    const applyModule = await import('../apply-remote');
-    const spy = vi.spyOn(applyModule, 'applyRemoteElements');
-
+    const { useElementsStore: elStore } = await import('../../store/elements.store');
     const { initSocketClient, getLastServerClock } = await import('../socket-client');
     initSocketClient('room-abc');
 
@@ -285,29 +430,42 @@ describe('socket-client — P3A-02/AC-4 (T013) ROOM_SNAPSHOT with non-empty elem
     expect(snapshotHandler).toBeDefined();
 
     const el = {
-      id: 'p3a02-el-1', type: 'rectangle' as const,
-      x: 10, y: 20, width: 100, height: 50, angle: 0, zIndex: 1,
-      props: { strokeColor: '#000', fillColor: '#fff', strokeWidth: 1, strokeStyle: 'solid' as const, opacity: 1 },
-      version: 2, versionNonce: 99, updatedAt: Date.now(),
-      isDeleted: false, groupId: null, frameId: null, locked: false, createdBy: 'test',
+      id: 'p3a02-el-1',
+      type: 'rectangle' as const,
+      x: 10,
+      y: 20,
+      width: 100,
+      height: 50,
+      angle: 0,
+      zIndex: 1,
+      props: {
+        strokeColor: '#000',
+        fillColor: '#fff',
+        strokeWidth: 1,
+        strokeStyle: 'solid' as const,
+        opacity: 1,
+      },
+      version: 2,
+      versionNonce: 99,
+      updatedAt: Date.now(),
+      isDeleted: false,
+      groupId: null,
+      frameId: null,
+      locked: false,
+      createdBy: 'test',
     };
 
     snapshotHandler({ elements: [el], documentClock: 5 });
 
-    expect(spy).toHaveBeenCalledWith([el]);
+    expect(elStore.getState().elements).toEqual([el]);
     expect(getLastServerClock()).toBe(5);
-    spy.mockRestore();
   });
 });
 
 describe('socket-client — P3A-02/AC-5 (T014) ROOM_SNAPSHOT with empty elements', () => {
   // @covers AC-5
   it('does not modify elements store and sets lastServerClock to 0 for empty snapshot', async () => {
-    const applyModule = await import('../apply-remote');
-    const spy = vi.spyOn(applyModule, 'applyRemoteElements');
-
     const { useElementsStore: elStore } = await import('../../store/elements.store');
-    // Seed the store with an existing element to verify it is NOT cleared
     elStore.setState({ elements: [] });
 
     const { initSocketClient, getLastServerClock } = await import('../socket-client');
@@ -318,13 +476,8 @@ describe('socket-client — P3A-02/AC-5 (T014) ROOM_SNAPSHOT with empty elements
 
     snapshotHandler({ elements: [], documentClock: 0 });
 
-    // applyRemoteElements called with empty array (it handles the no-op internally)
-    expect(spy).toHaveBeenCalledWith([]);
-    // lastServerClock set to 0
     expect(getLastServerClock()).toBe(0);
-    // Store should remain empty (applyRemoteElements no-ops on empty array)
     expect(elStore.getState().elements).toHaveLength(0);
-    spy.mockRestore();
   });
 });
 
@@ -375,7 +528,7 @@ describe('socket-client — P3A-04/AC-6 legacy ELEMENT_UPDATE keeps lastServerCl
 
 describe('socket-client — P3A-04/AC-8 outbound clock ownership', () => {
   // @covers AC-8
-  it('outbound ELEMENT_UPDATE payload does not include a client-authored documentClock', async () => {
+  it('outbound sync command does not include a client-authored documentClock', async () => {
     const { initSocketClient } = await import('../socket-client');
     const { dispatchMutationEvent } = await import('../../store/mutation-pipeline');
     initSocketClient('room-abc');
@@ -383,17 +536,14 @@ describe('socket-client — P3A-04/AC-8 outbound clock ownership', () => {
     mockEmit.mockClear();
     const el = makeFakeElement('outbound-no-clock');
     dispatchMutationEvent({
-      type: 'update',
+      type: 'create',
       elements: [el],
       before: [],
     });
 
-    const updateCall = mockEmit.mock.calls.find((call) => call[0] === WS_EVENTS.ELEMENT_UPDATE);
+    const updateCall = mockEmit.mock.calls.find((call) => call[0] === WS_EVENTS.SYNC_COMMAND);
     expect(updateCall).toBeDefined();
-    expect(updateCall?.[1]).toEqual({
-      roomId: 'room-abc',
-      elements: [el],
-    });
+    expect(updateCall?.[1]).toMatchObject({ roomId: 'room-abc', kind: 'create-element' });
     expect(updateCall?.[1]).not.toHaveProperty('documentClock');
     expect(updateCall?.[1]).not.toHaveProperty('sentVersion');
   });
@@ -421,7 +571,11 @@ describe('socket-client — same-user camera sync across tabs', () => {
     initSocketClient('room-abc');
 
     const moveHandler = _handlers[WS_EVENTS.CURSOR_MOVE];
-    moveHandler({ sessionId: 'local-session-id', cursor: { x: 10, y: 20 }, viewport: { x: 0, y: 0, zoom: 1 } });
+    moveHandler({
+      sessionId: 'local-session-id',
+      cursor: { x: 10, y: 20 },
+      viewport: { x: 0, y: 0, zoom: 1 },
+    });
 
     expect(store.getState().remoteCursors.has('local-session-id')).toBe(false);
   });
@@ -520,11 +674,29 @@ describe('socket-client — 018/AC-6 (T017) emit element-draft when draftElement
     mockEmit.mockClear();
 
     const draftEl = {
-      id: 'draft-1', type: 'rectangle' as const,
-      x: 5, y: 5, width: 80, height: 40, angle: 0, zIndex: 1,
-      props: { strokeColor: '#000', fillColor: '#fff', strokeWidth: 1, strokeStyle: 'solid' as const, opacity: 1 },
-      version: 1, versionNonce: 1, updatedAt: Date.now(),
-      isDeleted: false, groupId: null, frameId: null, locked: false, createdBy: 'test',
+      id: 'draft-1',
+      type: 'rectangle' as const,
+      x: 5,
+      y: 5,
+      width: 80,
+      height: 40,
+      angle: 0,
+      zIndex: 1,
+      props: {
+        strokeColor: '#000',
+        fillColor: '#fff',
+        strokeWidth: 1,
+        strokeStyle: 'solid' as const,
+        opacity: 1,
+      },
+      version: 1,
+      versionNonce: 1,
+      updatedAt: Date.now(),
+      isDeleted: false,
+      groupId: null,
+      frameId: null,
+      locked: false,
+      createdBy: 'test',
     };
 
     store.getState().setDraftElements([draftEl]);
@@ -545,11 +717,29 @@ describe('socket-client — 018/AC-9 (T018) emit element-draft with elements:[] 
     initSocketClient('room-abc');
 
     const draftEl = {
-      id: 'draft-2', type: 'rectangle' as const,
-      x: 0, y: 0, width: 50, height: 50, angle: 0, zIndex: 1,
-      props: { strokeColor: '#000', fillColor: '#fff', strokeWidth: 1, strokeStyle: 'solid' as const, opacity: 1 },
-      version: 1, versionNonce: 1, updatedAt: Date.now(),
-      isDeleted: false, groupId: null, frameId: null, locked: false, createdBy: 'test',
+      id: 'draft-2',
+      type: 'rectangle' as const,
+      x: 0,
+      y: 0,
+      width: 50,
+      height: 50,
+      angle: 0,
+      zIndex: 1,
+      props: {
+        strokeColor: '#000',
+        fillColor: '#fff',
+        strokeWidth: 1,
+        strokeStyle: 'solid' as const,
+        opacity: 1,
+      },
+      version: 1,
+      versionNonce: 1,
+      updatedAt: Date.now(),
+      isDeleted: false,
+      groupId: null,
+      frameId: null,
+      locked: false,
+      createdBy: 'test',
     };
 
     store.getState().setDraftElements([draftEl]);
@@ -574,11 +764,29 @@ describe('socket-client — 018/AC-6 (T019) incoming element-draft sets remoteDr
     initSocketClient('room-abc');
 
     const draftEl = {
-      id: 'peer-draft-1', type: 'rectangle' as const,
-      x: 20, y: 20, width: 60, height: 30, angle: 0, zIndex: 1,
-      props: { strokeColor: '#000', fillColor: '#fff', strokeWidth: 1, strokeStyle: 'solid' as const, opacity: 1 },
-      version: 1, versionNonce: 1, updatedAt: Date.now(),
-      isDeleted: false, groupId: null, frameId: null, locked: false, createdBy: 'peer-4',
+      id: 'peer-draft-1',
+      type: 'rectangle' as const,
+      x: 20,
+      y: 20,
+      width: 60,
+      height: 30,
+      angle: 0,
+      zIndex: 1,
+      props: {
+        strokeColor: '#000',
+        fillColor: '#fff',
+        strokeWidth: 1,
+        strokeStyle: 'solid' as const,
+        opacity: 1,
+      },
+      version: 1,
+      versionNonce: 1,
+      updatedAt: Date.now(),
+      isDeleted: false,
+      groupId: null,
+      frameId: null,
+      locked: false,
+      createdBy: 'peer-4',
     };
 
     const draftHandler = _handlers[WS_EVENTS.ELEMENT_DRAFT];
@@ -597,11 +805,29 @@ describe('socket-client — 018/AC-9 (T020) incoming element-draft with elements
     initSocketClient('room-abc');
 
     const draftEl = {
-      id: 'peer-draft-2', type: 'rectangle' as const,
-      x: 0, y: 0, width: 50, height: 50, angle: 0, zIndex: 1,
-      props: { strokeColor: '#000', fillColor: '#fff', strokeWidth: 1, strokeStyle: 'solid' as const, opacity: 1 },
-      version: 1, versionNonce: 1, updatedAt: Date.now(),
-      isDeleted: false, groupId: null, frameId: null, locked: false, createdBy: 'peer-5',
+      id: 'peer-draft-2',
+      type: 'rectangle' as const,
+      x: 0,
+      y: 0,
+      width: 50,
+      height: 50,
+      angle: 0,
+      zIndex: 1,
+      props: {
+        strokeColor: '#000',
+        fillColor: '#fff',
+        strokeWidth: 1,
+        strokeStyle: 'solid' as const,
+        opacity: 1,
+      },
+      version: 1,
+      versionNonce: 1,
+      updatedAt: Date.now(),
+      isDeleted: false,
+      groupId: null,
+      frameId: null,
+      locked: false,
+      createdBy: 'peer-5',
     };
 
     const draftHandler = _handlers[WS_EVENTS.ELEMENT_DRAFT];
@@ -621,11 +847,29 @@ describe('socket-client — 018/AC-10 (T021) incoming element-update with sessio
     initSocketClient('room-abc');
 
     const draftEl = {
-      id: 'peer-commit-1', type: 'rectangle' as const,
-      x: 0, y: 0, width: 50, height: 50, angle: 0, zIndex: 1,
-      props: { strokeColor: '#000', fillColor: '#fff', strokeWidth: 1, strokeStyle: 'solid' as const, opacity: 1 },
-      version: 1, versionNonce: 1, updatedAt: Date.now(),
-      isDeleted: false, groupId: null, frameId: null, locked: false, createdBy: 'peer-6',
+      id: 'peer-commit-1',
+      type: 'rectangle' as const,
+      x: 0,
+      y: 0,
+      width: 50,
+      height: 50,
+      angle: 0,
+      zIndex: 1,
+      props: {
+        strokeColor: '#000',
+        fillColor: '#fff',
+        strokeWidth: 1,
+        strokeStyle: 'solid' as const,
+        opacity: 1,
+      },
+      version: 1,
+      versionNonce: 1,
+      updatedAt: Date.now(),
+      isDeleted: false,
+      groupId: null,
+      frameId: null,
+      locked: false,
+      createdBy: 'peer-6',
     };
 
     const draftHandler = _handlers[WS_EVENTS.ELEMENT_DRAFT];
@@ -648,11 +892,29 @@ describe('socket-client — 018/AC-5 (T022) USER_LEAVE also clears remoteDrafts'
     initSocketClient('room-abc');
 
     const draftEl = {
-      id: 'peer-leave-draft', type: 'rectangle' as const,
-      x: 0, y: 0, width: 50, height: 50, angle: 0, zIndex: 1,
-      props: { strokeColor: '#000', fillColor: '#fff', strokeWidth: 1, strokeStyle: 'solid' as const, opacity: 1 },
-      version: 1, versionNonce: 1, updatedAt: Date.now(),
-      isDeleted: false, groupId: null, frameId: null, locked: false, createdBy: 'peer-7',
+      id: 'peer-leave-draft',
+      type: 'rectangle' as const,
+      x: 0,
+      y: 0,
+      width: 50,
+      height: 50,
+      angle: 0,
+      zIndex: 1,
+      props: {
+        strokeColor: '#000',
+        fillColor: '#fff',
+        strokeWidth: 1,
+        strokeStyle: 'solid' as const,
+        opacity: 1,
+      },
+      version: 1,
+      versionNonce: 1,
+      updatedAt: Date.now(),
+      isDeleted: false,
+      groupId: null,
+      frameId: null,
+      locked: false,
+      createdBy: 'peer-7',
     };
 
     const draftHandler = _handlers[WS_EVENTS.ELEMENT_DRAFT];
@@ -670,20 +932,59 @@ describe('socket-client — 018/AC-5 (T022) USER_LEAVE also clears remoteDrafts'
 
 function makeFakeElement(id: string, version = 1) {
   return {
-    id, type: 'rectangle' as const,
-    x: 0, y: 0, width: 100, height: 100, angle: 0, zIndex: 1,
-    props: { strokeColor: '#000', fillColor: '#fff', strokeWidth: 1, strokeStyle: 'solid' as const, opacity: 1 },
-    version, versionNonce: 42, updatedAt: Date.now(),
-    isDeleted: false, groupId: null, frameId: null, locked: false, createdBy: 'test',
+    id,
+    type: 'rectangle' as const,
+    x: 0,
+    y: 0,
+    width: 100,
+    height: 100,
+    angle: 0,
+    zIndex: 1,
+    props: {
+      strokeColor: '#000',
+      fillColor: '#fff',
+      strokeWidth: 1,
+      strokeStyle: 'solid' as const,
+      opacity: 1,
+    },
+    version,
+    versionNonce: 42,
+    updatedAt: Date.now(),
+    isDeleted: false,
+    groupId: null,
+    frameId: null,
+    locked: false,
+    createdBy: 'test',
+  };
+}
+
+function changeSet(
+  overrides: Partial<CommittedChangeSet> & Pick<CommittedChangeSet, 'requestId' | 'serverClock'>,
+): CommittedChangeSet {
+  return {
+    protocolVersion: SYNC_PROTOCOL_VERSION,
+    schemaVersion: SYNC_SCHEMA_VERSION,
+    roomId: 'room-abc',
+    roomEpoch: 0,
+    originActorId: 'peer-actor',
+    originRequestIds: [overrides.requestId],
+    reason: 'patch_clean',
+    slotPatches: [],
+    puts: [],
+    deletes: [],
+    created: [],
+    patched: [],
+    deleted: [],
+    slotClocks: [],
+    normalizedOrder: [],
+    ...overrides,
   };
 }
 
 describe('socket-client — P3A-03/AC-3 (T008) ROOM_DIFF calls applyRemoteElements with changed', () => {
   // @covers AC-3
-  it('ROOM_DIFF received → applyRemoteElements called with changed elements', async () => {
-    const applyModule = await import('../apply-remote');
-    const spy = vi.spyOn(applyModule, 'applyRemoteElements');
-
+  it('ROOM_DIFF received → changed elements are applied to the store', async () => {
+    const { useElementsStore: elStore } = await import('../../store/elements.store');
     const { initSocketClient } = await import('../socket-client');
     initSocketClient('room-abc');
 
@@ -692,8 +993,7 @@ describe('socket-client — P3A-03/AC-3 (T008) ROOM_DIFF calls applyRemoteElemen
     expect(diffHandler).toBeDefined();
     diffHandler({ changed: [changedEl], deleted: [], documentClock: 10 });
 
-    expect(spy).toHaveBeenCalledWith([changedEl]);
-    spy.mockRestore();
+    expect(elStore.getState().elements).toEqual([changedEl]);
   });
 });
 
@@ -740,6 +1040,42 @@ describe('socket-client — P3A-03/AC-12 (T008) ROOM_DIFF is a distinct handler 
   });
 });
 
+describe('socket-client — P5-05 sync broadcast handler', () => {
+  it('applies a slot-only sync broadcast through change-set reconciliation', async () => {
+    const { initSocketClient } = await import('../socket-client');
+    const { useElementsStore: elementStore } = await import('../../store/elements.store');
+    initSocketClient('room-abc');
+
+    elementStore.setState({
+      elements: [makeFakeElement('shape-1')],
+    });
+
+    const handler = _handlers[WS_EVENTS.SYNC_BROADCAST];
+    expect(handler).toBeDefined();
+    handler({
+      protocolVersion: SYNC_PROTOCOL_VERSION,
+      schemaVersion: SYNC_SCHEMA_VERSION,
+      roomId: 'room-abc',
+      serverClock: 1,
+      changeSet: changeSet({
+        requestId: 'peer-patch',
+        serverClock: 1,
+        slotPatches: [
+          {
+            elementId: 'shape-1',
+            slot: 'style.fillColor',
+            baseClock: 0,
+            clock: 1,
+            changes: { fillColor: '#00ff00' },
+          },
+        ],
+      }),
+    });
+
+    expect(elementStore.getState().elements[0]?.props.fillColor).toBe('#00ff00');
+  });
+});
+
 // ─── P3A-03: Pending queue (T014) ────────────────────────────────────────────
 
 describe('socket-client — P3A-03/AC-6 (T014) mutation while disconnected → queued, no ELEMENT_UPDATE', () => {
@@ -765,9 +1101,9 @@ describe('socket-client — P3A-03/AC-6 (T014) mutation while disconnected → q
   });
 });
 
-describe('socket-client — P3A-03/AC-5 (T014) ROOM_DIFF replays pending queue via ELEMENT_UPDATE', () => {
+describe('socket-client — P3A-03/AC-5 (T014) ROOM_DIFF replays pending queue via SYNC_COMMAND', () => {
   // @covers AC-5
-  it('after ROOM_DIFF is applied, pending offline mutations are re-emitted via ELEMENT_UPDATE', async () => {
+  it('after ROOM_DIFF is applied, pending offline mutations are re-emitted via SYNC_COMMAND', async () => {
     const { initSocketClient } = await import('../socket-client');
     const { dispatchMutationEvent } = await import('../../store/mutation-pipeline');
     initSocketClient('room-abc');
@@ -776,8 +1112,16 @@ describe('socket-client — P3A-03/AC-5 (T014) ROOM_DIFF replays pending queue v
     mockSocket.connected = false;
     const el1 = makeFakeElement('offline-1');
     const el2 = makeFakeElement('offline-2');
-    dispatchMutationEvent({ type: 'update', elements: [el1], before: [] });
-    dispatchMutationEvent({ type: 'update', elements: [el2], before: [] });
+    dispatchMutationEvent({
+      type: 'patch',
+      elements: [{ ...el1, x: 10 }],
+      before: [el1],
+    });
+    dispatchMutationEvent({
+      type: 'patch',
+      elements: [{ ...el2, x: 20 }],
+      before: [el2],
+    });
 
     // Reconnect and receive ROOM_DIFF
     mockSocket.connected = true;
@@ -786,13 +1130,16 @@ describe('socket-client — P3A-03/AC-5 (T014) ROOM_DIFF replays pending queue v
     const diffHandler = _handlers[WS_EVENTS.ROOM_DIFF];
     diffHandler({ changed: [], deleted: [], documentClock: 15 });
 
-    // Pending queue should be flushed via ELEMENT_UPDATE
-    const updateCalls = mockEmit.mock.calls.filter((c) => c[0] === WS_EVENTS.ELEMENT_UPDATE);
-    expect(updateCalls).toHaveLength(1);
-    const payload = updateCalls[0][1] as { elements: unknown[] };
-    expect(payload.elements).toHaveLength(2);
-    expect((payload.elements as Array<{ id: string }>).map((e) => e.id)).toContain('offline-1');
-    expect((payload.elements as Array<{ id: string }>).map((e) => e.id)).toContain('offline-2');
+    // Pending queue should be flushed via bounded P5 sync commands.
+    const updateCalls = mockEmit.mock.calls.filter((c) => c[0] === WS_EVENTS.SYNC_COMMAND);
+    expect(updateCalls).toHaveLength(2);
+    const commands = updateCalls.map(
+      (call) => call[1] as { patches: Array<{ elementId: string }> },
+    );
+    expect(commands.flatMap((command) => command.patches.map((patch) => patch.elementId))).toEqual([
+      'offline-1',
+      'offline-2',
+    ]);
   });
 });
 
@@ -809,7 +1156,9 @@ describe('socket-client — P3A-03/AC-6 (T014) no pending → no ELEMENT_UPDATE 
     diffHandler({ changed: [], deleted: [], documentClock: 5 });
 
     const updateCalls = mockEmit.mock.calls.filter((c) => c[0] === WS_EVENTS.ELEMENT_UPDATE);
+    const syncCalls = mockEmit.mock.calls.filter((c) => c[0] === WS_EVENTS.SYNC_COMMAND);
     expect(updateCalls).toHaveLength(0);
+    expect(syncCalls).toHaveLength(0);
   });
 });
 
@@ -856,8 +1205,9 @@ describe('socket-client — P3A-03/AC-7 (T014) LWW: pending changes not silently
 
     // Queue offline mutation: element X at version 7 (higher than server's version 5)
     mockSocket.connected = false;
-    const pendingEl = makeFakeElement('conflict-el', 7); // version 7
-    dispatchMutationEvent({ type: 'update', elements: [pendingEl], before: [] });
+    const baseEl = makeFakeElement('conflict-el', 5);
+    const pendingEl = { ...makeFakeElement('conflict-el', 7), x: 70 }; // version 7
+    dispatchMutationEvent({ type: 'patch', elements: [pendingEl], before: [baseEl] });
 
     mockSocket.connected = true;
     mockEmit.mockClear();
@@ -867,12 +1217,14 @@ describe('socket-client — P3A-03/AC-7 (T014) LWW: pending changes not silently
     const diffHandler = _handlers[WS_EVENTS.ROOM_DIFF];
     diffHandler({ changed: [serverEl], deleted: [], documentClock: 10 });
 
-    // Pending element (version 7) must be re-emitted after diff — not silently dropped
-    const updateCalls = mockEmit.mock.calls.filter((c) => c[0] === WS_EVENTS.ELEMENT_UPDATE);
+    // Pending patch must be re-emitted after diff — not silently dropped.
+    const updateCalls = mockEmit.mock.calls.filter((c) => c[0] === WS_EVENTS.SYNC_COMMAND);
     expect(updateCalls).toHaveLength(1);
-    const payload = updateCalls[0][1] as { elements: Array<{ id: string; version: number }> };
-    const replayedEl = payload.elements.find((e) => e.id === 'conflict-el');
-    expect(replayedEl).toBeDefined();
-    expect(replayedEl!.version).toBe(7); // higher version preserved
+    const payload = updateCalls[0][1] as {
+      patches: Array<{ elementId: string; changes: { x?: number } }>;
+    };
+    const replayedPatch = payload.patches.find((patch) => patch.elementId === 'conflict-el');
+    expect(replayedPatch).toBeDefined();
+    expect(replayedPatch?.changes.x).toBe(70);
   });
 });

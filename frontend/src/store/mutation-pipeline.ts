@@ -1,12 +1,22 @@
-import type { Element } from '../types/shared';
+import type { Element, SyncReadPrecondition } from '../types/shared';
 import { generateId } from '../utils/id';
 import { useElementsStore } from './elements.store';
 import { normalizeLinearBounds } from '../utils/geometry';
 
 export interface MutationEvent {
-  type: 'create' | 'patch' | 'delete' | 'update';
+  type: 'create' | 'patch' | 'delete' | 'restore' | 'update';
   elements: Element[];
   before: Element[];
+  sync?: MutationSyncOptions;
+}
+
+export interface MutationSyncOptions {
+  final?: boolean;
+  readPreconditions?: SyncReadPrecondition[];
+}
+
+interface MutationOptions {
+  sync?: MutationSyncOptions;
 }
 
 type MutationHook = (event: MutationEvent) => void;
@@ -33,10 +43,13 @@ function nextNonce(): number {
   return Math.floor(Math.random() * 1_000_000_000);
 }
 
-/** Keeps x,y,width,height in sync with props.points for arrow/line elements. */
+/** Keeps x,y,width,height in sync with props.points for point-based elements. */
 function applyLinearNorm(el: Element): Element {
   if (
-    (el.type === 'arrow' || el.type === 'line') &&
+    (el.type === 'arrow' ||
+      el.type === 'line' ||
+      el.type === 'freehand' ||
+      el.type === 'highlighter') &&
     el.props.points &&
     el.props.points.length >= 2
   ) {
@@ -95,6 +108,7 @@ export function createElement(draft: ElementDraft): Element {
 export function patchElement(
   id: string,
   patch: Partial<Omit<Element, 'id' | 'version' | 'versionNonce' | 'updatedAt'>>,
+  options: MutationOptions = {},
 ): void {
   const { elements } = useElementsStore.getState();
   const existing = elements.find((e) => e.id === id);
@@ -110,7 +124,7 @@ export function patchElement(
   });
 
   useElementsStore.getState().updateElement(updated);
-  fireHooks({ type: 'patch', elements: [updated], before: [existing] });
+  fireHooks({ type: 'patch', elements: [updated], before: [existing], sync: options.sync });
 }
 
 export function deleteElements(ids: string[]): void {
@@ -138,6 +152,7 @@ export function updateElements(
     id: string;
     patch: Partial<Omit<Element, 'id' | 'version' | 'versionNonce' | 'updatedAt'>>;
   }[],
+  options: MutationOptions = {},
 ): void {
   const { elements } = useElementsStore.getState();
   const now = Date.now();
@@ -163,15 +178,16 @@ export function updateElements(
 
   const before = updated.map((el) => beforeMap.get(el.id)!);
   useElementsStore.getState().updateElements(updated);
-  fireHooks({ type: 'update', elements: updated, before });
+  fireHooks({ type: 'update', elements: updated, before, sync: options.sync });
 }
 
-export function applySnapshot(elements: Element[]): void {
+export function applySnapshot(elements: Element[], options: MutationOptions = {}): void {
   if (elements.length === 0) return;
   const now = Date.now();
   const storeElements = useElementsStore.getState().elements;
+  const currentById = new Map(storeElements.map((element) => [element.id, element]));
   const bumped = elements.map((el) => {
-    const current = storeElements.find((s) => s.id === el.id);
+    const current = currentById.get(el.id);
     // Increment from the current store version so it is always monotonically increasing (AC-14)
     const baseVersion = current ? current.version : el.version;
     return {
@@ -181,7 +197,41 @@ export function applySnapshot(elements: Element[]): void {
       updatedAt: now,
     };
   });
+  const before = bumped.flatMap((element) => {
+    const current = currentById.get(element.id);
+    return current ? [current] : [];
+  });
   // Use the Zustand store setter directly (NOT the pipeline updateElements) to avoid version-doubling
-  useElementsStore.getState().updateElements(bumped);
-  fireHooks({ type: 'update', elements: bumped, before: elements });
+  const toUpdate = bumped.filter((el) => currentById.has(el.id));
+  const toAdd = bumped.filter((el) => !currentById.has(el.id));
+  if (toUpdate.length > 0) useElementsStore.getState().updateElements(toUpdate);
+  if (toAdd.length > 0) useElementsStore.getState().addElements(toAdd);
+  fireHooks({ type: 'update', elements: bumped, before, sync: options.sync });
+}
+
+/**
+ * Re-adds elements that were previously deleted or created then undone.
+ * Fires 'restore' so saved rooms can use the explicit tombstone-aware command.
+ */
+export function restoreElements(elements: Element[]): void {
+  if (elements.length === 0) return;
+  const now = Date.now();
+  const storeElements = useElementsStore.getState().elements;
+  const currentById = new Map(storeElements.map((el) => [el.id, el]));
+  const bumped = elements.map((el) => {
+    const current = currentById.get(el.id);
+    const baseVersion = current ? current.version : el.version;
+    return {
+      ...el,
+      isDeleted: false,
+      version: baseVersion + 1,
+      versionNonce: nextNonce(),
+      updatedAt: now,
+    };
+  });
+  const toAdd = bumped.filter((el) => !currentById.has(el.id));
+  const toUpdate = bumped.filter((el) => currentById.has(el.id));
+  if (toAdd.length > 0) useElementsStore.getState().addElements(toAdd);
+  if (toUpdate.length > 0) useElementsStore.getState().updateElements(toUpdate);
+  fireHooks({ type: 'restore', elements: bumped, before: [] });
 }

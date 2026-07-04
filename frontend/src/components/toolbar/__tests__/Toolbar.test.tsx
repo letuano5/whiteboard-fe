@@ -1,11 +1,18 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import Toolbar from '../Toolbar';
+import { insertImageFromSource } from '../image-insert';
 import { useInteractionStore } from '../../../store/interaction.store';
+import { useElementsStore } from '../../../store/elements.store';
 import * as laserTool from '../../../canvas/tools/laser-tool';
+import {
+  onHighlighterPointerDown,
+  onHighlighterPointerMove,
+} from '../../../canvas/tools/freehand-tool';
 
 beforeEach(() => {
   useInteractionStore.getState().reset();
+  useElementsStore.getState().setElements([]);
 });
 
 // @covers AC-8 (001-select-shape)
@@ -38,13 +45,118 @@ describe('Toolbar tool selection', () => {
 });
 
 // @covers AC-8 (005-detail-panel-toolbar)
+// @covers AC-1
 describe('AC-8 (005): toolbar shows tool buttons including laser', () => {
-  it('renders Select, Hand, Rectangle, Ellipse, Line, Text, Laser buttons', () => {
+  it('renders Select, Hand, Rectangle, Ellipse, Line, Text, Freehand, Highlighter, Eraser, Laser buttons', () => {
     render(<Toolbar />);
-    const expectedTitles = ['Select', 'Hand', 'Rectangle', 'Ellipse', 'Line', 'Text', 'Laser'];
+    const expectedTitles = [
+      'Select',
+      'Hand',
+      'Rectangle',
+      'Ellipse',
+      'Line',
+      'Text',
+      'Image',
+      'Freehand',
+      'Highlighter',
+      'Eraser',
+      'Laser',
+    ];
     expectedTitles.forEach((title) => {
       expect(screen.getByTitle(title)).toBeInTheDocument();
     });
+  });
+});
+
+describe('image insertion control', () => {
+  // @covers AC-1 (046-image-background)
+  // @covers AC-4 (046-image-background)
+  it('inserts a URL image element below existing visible elements', () => {
+    useElementsStore.getState().setElements([
+      {
+        id: 'shape-1',
+        type: 'rectangle',
+        x: 0,
+        y: 0,
+        width: 100,
+        height: 100,
+        angle: 0,
+        zIndex: 5,
+        props: {
+          strokeColor: '#000',
+          fillColor: '#fff',
+          strokeWidth: 1,
+          strokeStyle: 'solid',
+          opacity: 1,
+        },
+        version: 1,
+        versionNonce: 1,
+        updatedAt: 1,
+        isDeleted: false,
+        groupId: null,
+        frameId: null,
+        locked: false,
+        createdBy: 'test',
+      },
+    ]);
+
+    insertImageFromSource('https://example.com/map.png');
+
+    const image = useElementsStore.getState().elements.find((element) => element.type === 'image');
+    expect(image).toMatchObject({
+      type: 'image',
+      zIndex: 4,
+      props: expect.objectContaining({ src: 'https://example.com/map.png' }),
+    });
+    expect(useInteractionStore.getState().selectedIds).toEqual([image?.id]);
+  });
+
+  // @covers AC-2 (046-image-background)
+  it('inserts an uploaded data URL image element', () => {
+    insertImageFromSource('data:image/png;base64,AAAA');
+
+    const image = useElementsStore.getState().elements.find((element) => element.type === 'image');
+    expect(image?.props.src).toBe('data:image/png;base64,AAAA');
+  });
+});
+
+// @covers AC-1
+describe('freehand tool button', () => {
+  it('clicking Freehand sets tool to freehand', () => {
+    render(<Toolbar />);
+    fireEvent.click(screen.getByTitle('Freehand'));
+    expect(useInteractionStore.getState().tool).toBe('freehand');
+  });
+});
+
+// @covers AC-4
+describe('highlighter tool button', () => {
+  it('clicking Highlighter sets tool to highlighter', () => {
+    render(<Toolbar />);
+    fireEvent.click(screen.getByTitle('Highlighter'));
+    expect(useInteractionStore.getState().tool).toBe('highlighter');
+  });
+
+  it('switching away from Highlighter clears the in-progress draft', () => {
+    onHighlighterPointerDown({ x: 0, y: 0 });
+    onHighlighterPointerMove({ x: 10, y: 10 });
+    expect(useInteractionStore.getState().draftElement?.type).toBe('highlighter');
+
+    render(<Toolbar />);
+    fireEvent.click(screen.getByTitle('Select'));
+
+    expect(useInteractionStore.getState().tool).toBe('select');
+    expect(useInteractionStore.getState().draftElement).toBeNull();
+    expect(useInteractionStore.getState().dragStart).toBeNull();
+  });
+});
+
+// @covers AC-1 (044-p3c-04-eraser)
+describe('eraser tool button', () => {
+  it('clicking Eraser sets tool to eraser', () => {
+    render(<Toolbar />);
+    fireEvent.click(screen.getByTitle('Eraser'));
+    expect(useInteractionStore.getState().tool).toBe('eraser');
   });
 });
 
@@ -61,7 +173,9 @@ describe('AC-4: laser tool button activates laser tool', () => {
 describe('AC-5: switching away from laser clears trail immediately', () => {
   it('clicking another tool calls clearLaserTrail', () => {
     const clearSpy = vi.spyOn(laserTool, 'clearLaserTrail');
-    useInteractionStore.setState({ tool: 'laser' } as Parameters<typeof useInteractionStore.setState>[0]);
+    useInteractionStore.setState({ tool: 'laser' } as Parameters<
+      typeof useInteractionStore.setState
+    >[0]);
     render(<Toolbar />);
     fireEvent.click(screen.getByTitle('Select'));
     expect(clearSpy).toHaveBeenCalled();
@@ -73,7 +187,9 @@ describe('AC-5: switching away from laser clears trail immediately', () => {
 // @covers AC-9 (005-detail-panel-toolbar)
 describe('AC-9 (005): active tool is visually distinguished', () => {
   it('active tool button has different background from inactive tools', () => {
-    useInteractionStore.setState({ tool: 'rectangle' } as Parameters<typeof useInteractionStore.setState>[0]);
+    useInteractionStore.setState({ tool: 'rectangle' } as Parameters<
+      typeof useInteractionStore.setState
+    >[0]);
     render(<Toolbar />);
     const activeBtn = screen.getByTitle('Rectangle') as HTMLButtonElement;
     const inactiveBtn = screen.getByTitle('Select') as HTMLButtonElement;

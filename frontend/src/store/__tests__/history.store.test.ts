@@ -9,6 +9,9 @@ import {
   type ElementDraft,
 } from '../mutation-pipeline';
 import { initHistoryCapture } from '../../sync/history-capture';
+import { useInteractionStore } from '../interaction.store';
+import { onMergeSelected } from '../../canvas/tools/select/merge';
+import { resolveGroupDeletionIds } from '../../canvas/tools/select/group';
 
 function makeDraft(overrides: Partial<ElementDraft> = {}): ElementDraft {
   return {
@@ -62,6 +65,41 @@ describe('AC-1: undo createElement removes the element', () => {
   });
 });
 
+describe('group operation history', () => {
+  it('@covers AC-12 undoes and redoes merge as one step', () => {
+    const a = createElement(makeDraft());
+    const b = createElement(makeDraft({ x: 20 }));
+    useHistoryStore.setState({ undoStack: [], redoStack: [] });
+    useInteractionStore.getState().setSelectedIds([a.id, b.id]);
+
+    onMergeSelected();
+    expect(getElement(a.id).groupId).toBe(getElement(b.id).groupId);
+    expect(useHistoryStore.getState().undoStack).toHaveLength(1);
+
+    useHistoryStore.getState().undo();
+    expect(getElement(a.id).groupId).toBeNull();
+    expect(getElement(b.id).groupId).toBeNull();
+
+    useHistoryStore.getState().redo();
+    expect(getElement(a.id).groupId).toBe(getElement(b.id).groupId);
+  });
+
+  it('@covers AC-12 undoes group delete as one step', () => {
+    const a = createElement(makeDraft({ groupId: 'g' }));
+    const b = createElement(makeDraft({ groupId: 'g', x: 20 }));
+    useHistoryStore.setState({ undoStack: [], redoStack: [] });
+
+    deleteElements(resolveGroupDeletionIds([a.id], useElementsStore.getState().elements));
+    expect(getElement(a.id).isDeleted).toBe(true);
+    expect(getElement(b.id).isDeleted).toBe(true);
+    expect(useHistoryStore.getState().undoStack).toHaveLength(1);
+
+    useHistoryStore.getState().undo();
+    expect(getElement(a.id).isDeleted).toBe(false);
+    expect(getElement(b.id).isDeleted).toBe(false);
+  });
+});
+
 // @covers AC-2
 describe('AC-2: undo patchElement (move) reverts position', () => {
   it('element returns to position before the move', () => {
@@ -108,8 +146,26 @@ describe('AC-4: undo deleteElements restores element (isDeleted becomes false)',
 // @covers AC-5
 describe('AC-5: undo style/text change restores previous values', () => {
   it('previous fillColor is restored after undo of style patch', () => {
-    const el = createElement(makeDraft({ props: { strokeColor: '#000', fillColor: '#fff', strokeWidth: 2, strokeStyle: 'solid', opacity: 1 } }));
-    patchElement(el.id, { props: { strokeColor: '#000', fillColor: '#ff0000', strokeWidth: 2, strokeStyle: 'solid', opacity: 1 } });
+    const el = createElement(
+      makeDraft({
+        props: {
+          strokeColor: '#000',
+          fillColor: '#fff',
+          strokeWidth: 2,
+          strokeStyle: 'solid',
+          opacity: 1,
+        },
+      }),
+    );
+    patchElement(el.id, {
+      props: {
+        strokeColor: '#000',
+        fillColor: '#ff0000',
+        strokeWidth: 2,
+        strokeStyle: 'solid',
+        opacity: 1,
+      },
+    });
 
     useHistoryStore.getState().undo();
 
@@ -140,6 +196,46 @@ describe('AC-7: redo re-applies undone action', () => {
     useHistoryStore.getState().redo();
 
     expect(getElement(el.id).isDeleted).toBe(false);
+  });
+});
+
+describe('ink history interactions', () => {
+  it('undoes and redoes a highlighter create as a whole stroke', () => {
+    const el = createElement(
+      makeDraft({
+        type: 'highlighter',
+        x: 0,
+        y: 0,
+        width: 20,
+        height: 20,
+        props: {
+          strokeColor: '#facc15',
+          fillColor: 'transparent',
+          strokeWidth: 14,
+          strokeStyle: 'solid',
+          opacity: 0.35,
+          points: [
+            [0, 0],
+            [10, 20],
+            [20, 0],
+          ],
+        },
+      }),
+    );
+
+    useHistoryStore.getState().undo();
+    expect(getElement(el.id).isDeleted).toBe(true);
+
+    useHistoryStore.getState().redo();
+    expect(getElement(el.id)).toMatchObject({
+      type: 'highlighter',
+      isDeleted: false,
+    });
+    expect(getElement(el.id).props.points).toEqual([
+      [0, 0],
+      [10, 20],
+      [20, 0],
+    ]);
   });
 });
 
@@ -235,9 +331,9 @@ describe('AC-12: history capped at 100 entries; oldest discarded', () => {
 describe('AC-13: all four pipeline functions are captured as undoable steps', () => {
   it('createElement, patchElement, deleteElements, updateElements each push one entry', () => {
     const el1 = createElement(makeDraft()); // entry 1
-    patchElement(el1.id, { x: 10 });       // entry 2
+    patchElement(el1.id, { x: 10 }); // entry 2
     const el2 = createElement(makeDraft()); // entry 3
-    deleteElements([el2.id]);               // entry 4 (soft-delete el2)
+    deleteElements([el2.id]); // entry 4 (soft-delete el2)
     updateElements([{ id: el1.id, patch: { x: 20 } }]); // entry 5 (el1 is not deleted)
     expect(useHistoryStore.getState().undoStack.length).toBe(5);
   });

@@ -2,18 +2,12 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import './index.css';
 import App from './app/App';
-import { initHistoryCapture } from './sync/history-capture';
-import { initSocketClient } from './sync/socket-client';
-import { loadCamera, startCameraPersistence } from './sync/camera-persistence';
+import { bootstrapApp } from './app/bootstrap';
 
 const roomId = new URLSearchParams(window.location.search).get('room') ?? '';
+const route = window.location.pathname === '/dashboard' ? 'dashboard' : 'canvas';
 
-initHistoryCapture();
-if (roomId) {
-  loadCamera(roomId);
-  startCameraPersistence(roomId);
-  initSocketClient(roomId);
-}
+void bootstrapApp(roomId, { route });
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

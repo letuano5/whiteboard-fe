@@ -14,3 +14,5 @@
 | AC-8 | US2 | Given user A is creating a new element by drawing (drag to create), When user B observes, Then user B sees the in-progress shape appear as a ghost element before user A releases. |
 | AC-9 | US2 | Given user A cancels a drag (presses Escape), When user B observes, Then the ghost/draft preview disappears and the element returns to its last committed position. |
 | AC-10 | US2 | Given user A commits the change (releases pointer), When the commit lands on user B, Then the ghost preview is replaced by the committed element with full opacity. |
+| AC-11 | US2 | Given user A and user B both have the same element selected, When user A drags or resizes that element and user B receives remote drafts, Then user B's local selection bbox follows the draft geometry instead of the stale committed geometry. |
+| AC-12 | US1/US2 | Given a selected or drafted element has a non-zero `angle`, When another user observes its remote selection/draft bbox, Then the bbox is rotated by the same angle around the element bbox center. |

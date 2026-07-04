@@ -18,6 +18,12 @@ describe('shape registry', () => {
     expect(getShapeUtil('diamond')).toBeDefined();
     expect(getShapeUtil('diamond')?.type).toBe('diamond');
 
+    expect(getShapeUtil('triangle')).toBeDefined();
+    expect(getShapeUtil('triangle')?.type).toBe('triangle');
+
+    expect(getShapeUtil('polygon')).toBeDefined();
+    expect(getShapeUtil('polygon')?.type).toBe('polygon');
+
     expect(getShapeUtil('line')).toBeDefined();
     expect(getShapeUtil('line')?.type).toBe('line');
 
@@ -26,11 +32,17 @@ describe('shape registry', () => {
 
     expect(getShapeUtil('text')).toBeDefined();
     expect(getShapeUtil('text')?.type).toBe('text');
-  });
 
-  it('returns undefined for unregistered types', () => {
-    expect(getShapeUtil('freehand')).toBeUndefined();
-    expect(getShapeUtil('image')).toBeUndefined();
+    expect(getShapeUtil('freehand')).toBeDefined();
+    expect(getShapeUtil('freehand')?.type).toBe('freehand');
+
+    expect(getShapeUtil('highlighter')).toBeDefined();
+    expect(getShapeUtil('highlighter')?.type).toBe('highlighter');
+
+    // @covers AC-1 (046-image-background)
+    // @covers AC-2 (046-image-background)
+    expect(getShapeUtil('image')).toBeDefined();
+    expect(getShapeUtil('image')?.type).toBe('image');
   });
 
   it('overwrites an existing util when re-registered', () => {

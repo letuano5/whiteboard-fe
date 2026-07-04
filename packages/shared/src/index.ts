@@ -11,7 +11,7 @@ export type ElementType =
   | 'arrow' // P2
   | 'image' // P2.5 — renders via SVG <image> / DOM <img>
   | 'freehand'
-  | 'highlighter' // P3C — Canvas overlay
+  | 'highlighter' // P3C — SVG ink
   | 'frame'
   | 'sticky'
   | 'embed'; // P4
@@ -29,9 +29,14 @@ export interface ElementProps {
   fontFamily?: string;
   textAlign?: 'left' | 'center' | 'right';
   src?: string; // image
-  startBinding?: string | null; // arrow
-  endBinding?: string | null; // arrow
+  startBinding?: ArrowEndpointBinding | string | null; // arrow; string is legacy P1-P4 format
+  endBinding?: ArrowEndpointBinding | string | null; // arrow; string is legacy P1-P4 format
   url?: string; // embed
+}
+
+export interface ArrowEndpointBinding {
+  elementId: string;
+  anchorRatio: { x: number; y: number };
 }
 
 export interface Element {
@@ -58,11 +63,7 @@ export interface Element {
 
 // ─── Camera (§2.2) ───────────────────────────────────────────────────────────
 
-export interface Camera {
-  x: number;
-  y: number;
-  zoom: number; // clamped [0.1, 8]
-}
+export * from './camera';
 
 // ─── Presence (§2.4) — ephemeral, from P2 ────────────────────────────────────
 
@@ -75,6 +76,72 @@ export interface Presence {
   selectedIds: string[];
   status: 'active' | 'idle' | 'away';
   viewport?: { x: number; y: number; zoom: number };
+  baseRole?: EffectiveRoomRole;
+  effectiveRole?: EffectiveRoomRole;
+}
+
+// ─── Room access (§P3B-02) ──────────────────────────────────────────────────
+
+export type RoomRole = 'owner' | 'editor' | 'viewer';
+export type EffectiveRoomRole = RoomRole | 'none';
+export type RoomAccessMode = 'private' | 'link_view' | 'link_edit';
+
+export const ROOM_CAPACITY_LIMITS = {
+  MAX_PARTICIPANTS: 50,
+  MAX_EDITORS: 10,
+} as const;
+
+// ─── Dashboard document preview ─────────────────────────────────────────────
+
+// Shared by the backend preview query (`take`) and the frontend thumbnail
+// renderer (`slice`) so the two never drift out of sync.
+export const DASHBOARD_PREVIEW_ELEMENT_LIMIT = 24;
+
+export interface RoomMemberSummary {
+  userId: string;
+  email: string | null;
+  name: string | null;
+  avatarUrl: string | null;
+  role: RoomRole;
+}
+
+export interface RoomInvitationSummary {
+  id: string;
+  email: string;
+  role: Extract<RoomRole, 'editor' | 'viewer'>;
+  status: 'pending';
+}
+
+export interface RoomAccessPayload {
+  roomId: string;
+  role: RoomRole;
+  baseRole: EffectiveRoomRole;
+  effectiveRole: EffectiveRoomRole;
+  visibility: RoomAccessMode;
+  maxParticipants: number | null;
+  maxEditors: number | null;
+  shareRevokedAt: string | null;
+  members: RoomMemberSummary[];
+  invitations: RoomInvitationSummary[];
+}
+
+export interface RoomRoleUpdatePayload {
+  roomId: string;
+  userId: string;
+  role: Extract<RoomRole, 'editor' | 'viewer'>;
+}
+
+export interface RoomAccessErrorPayload {
+  code:
+    | 'room-access/unauthenticated'
+    | 'room-access/forbidden'
+    | 'room-access/user-not-found'
+    | 'room-access/member-not-found'
+    | 'room-access/invitation-not-found'
+    | 'room-access/invalid-role'
+    | 'room-access/invalid-capacity'
+    | 'room-access/room-full';
+  message: string;
 }
 
 // ─── WebSocket event constants ────────────────────────────────────────────────
@@ -90,8 +157,19 @@ export const WS_EVENTS = {
   USER_JOIN: 'user-join',
   USER_LEAVE: 'user-leave',
   ROOM_DIFF: 'room-diff', // AC-12: distinct WS event for reconnect incremental diff (P3A-03)
+  ROOM_DIFF_REQUEST: 'room-diff-request',
   ROOM_SNAPSHOT: 'room-snapshot',
   ROOM_RESYNC: 'room-resync',
+  ROOM_REPLACED: 'room-replaced',
+  ROOM_ACCESS: 'room-access',
+  ROOM_ROLE_UPDATE: 'room-role-update',
+  ROOM_ACCESS_ERROR: 'room-access-error',
+  SYNC_COMMAND: 'sync-command',
+  SYNC_ACK: 'sync-ack',
+  SYNC_BROADCAST: 'sync-broadcast',
 } as const;
 
 export type WsEvent = (typeof WS_EVENTS)[keyof typeof WS_EVENTS];
+
+export * from './native-file';
+export * from './sync-contracts/index';

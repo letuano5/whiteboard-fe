@@ -31,6 +31,10 @@ export interface ResizeSession {
   anchor: Point;
 }
 
+export interface GroupResizeSession extends ResizeSession {
+  memberIds: string[];
+}
+
 export interface InteractionState {
   tool: ToolId;
   selectedIds: string[];
@@ -41,6 +45,7 @@ export interface InteractionState {
   marquee: Rect | null;
   resizeHandle: HandleId | null;
   resizeSession: ResizeSession | null;
+  groupResizeSession: GroupResizeSession | null;
   isRotating: boolean;
   editingId: string | null;
   laserTrail: Point[];

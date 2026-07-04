@@ -1,0 +1,51 @@
+# Production overlay: adds the whiteboard app backend + a Caddy reverse proxy
+# on top of the base docker-compose.yml (self-hosted Supabase stack).
+#
+# Usage on the VPS:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# Does not touch the base file's `db` port publish — local dev keeps using
+# docker-compose.yml alone. Public exposure on the VPS is restricted at the
+# GCP firewall level instead (see infra/scripts/bootstrap-vps.sh).
+
+name: supabase
+
+services:
+  backend:
+    container_name: whiteboard-backend
+    image: ghcr.io/${GHCR_OWNER:-letuano5}/whiteboard-backend:latest
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      PORT: 3001
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}
+      SUPABASE_JWT_SECRET: ${JWT_SECRET}
+      FRONTEND_ORIGINS: ${FRONTEND_ORIGINS}
+    depends_on:
+      db:
+        condition: service_healthy
+
+  caddy:
+    container_name: whiteboard-caddy
+    image: caddy:2-alpine
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - backend
+      - kong
+
+volumes:
+  caddy-data:
+  caddy-config:

@@ -11,3 +11,5 @@ AC-5: The inline editor is positioned and scaled so that its text visually align
 AC-6: If the user clears all text and blurs, the element remains with `props.text === ""` (element is NOT deleted).
 AC-7: Double-clicking a non-`text` element (e.g., rectangle, ellipse) does NOT open the inline editor.
 AC-8: While the inline editor is open, `editingId` in the interaction store equals the element's id; after the editor closes, `editingId` is `null`.
+AC-9: Changing a text element's `fontFamily` via the detail panel expands the bbox when the new font's natural text width or height is larger than the current bbox.
+AC-10: Changing a text element's `fontFamily` via the detail panel shrinks the bbox when the new font's natural text width or height is smaller than the previous fitted bbox.

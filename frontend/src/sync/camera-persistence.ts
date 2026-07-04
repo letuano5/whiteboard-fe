@@ -16,9 +16,9 @@ export function loadCamera(roomId: string): void {
     if (
       parsed !== null &&
       typeof parsed === 'object' &&
-      typeof (parsed as Record<string, unknown>).x === 'number' &&
-      typeof (parsed as Record<string, unknown>).y === 'number' &&
-      typeof (parsed as Record<string, unknown>).zoom === 'number'
+      Number.isFinite((parsed as Record<string, unknown>).x) &&
+      Number.isFinite((parsed as Record<string, unknown>).y) &&
+      Number.isFinite((parsed as Record<string, unknown>).zoom)
     ) {
       useCameraStore.getState().setCamera(parsed as Camera);
     }

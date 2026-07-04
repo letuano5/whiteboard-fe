@@ -5,8 +5,12 @@ import type { HandleId } from '../../types/interaction';
 
 export interface ShapeUtil<T extends Element = Element> {
   readonly type: ElementType;
-  render(element: T): React.ReactElement;
+  render(element: T, context?: ShapeRenderContext): React.ReactElement;
   hitTest(element: T, x: number, y: number): boolean;
   getBounds(element: T): Rect;
   resize(element: T, handle: HandleId, dx: number, dy: number): Partial<Element>;
+}
+
+export interface ShapeRenderContext {
+  elements: Element[];
 }

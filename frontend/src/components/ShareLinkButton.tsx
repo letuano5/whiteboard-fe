@@ -1,27 +1,26 @@
 import { useState } from 'react';
+import { Share2 } from 'lucide-react';
+import { ManageAccessModal } from '../rooms/ManageAccessModal';
+import { useRoomAccessStore } from '../rooms/room-access.store';
 
 export default function ShareLinkButton() {
-  const [copied, setCopied] = useState(false);
+  const [modalOpen, setModalOpen] = useState(false);
+  const roomId = useRoomAccessStore((state) => state.roomId);
+  const role = useRoomAccessStore((state) => state.effectiveRole);
 
-  function handleCopy() {
-    navigator.clipboard.writeText(window.location.href).then(
-      () => {
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
-      },
-      () => {
-        window.prompt('Copy this link:', window.location.href);
-      },
-    );
-  }
+  if (role !== 'owner' || !roomId) return null;
 
   return (
-    <button
-      onClick={handleCopy}
-      className="flex items-center gap-1.5 rounded-md border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 transition-colors"
-      title="Copy share link"
-    >
-      {copied ? 'Copied!' : 'Copy link'}
-    </button>
+    <>
+      <button
+        type="button"
+        onClick={() => setModalOpen(true)}
+        className="flex h-9 items-center gap-1.5 rounded-md border border-emerald-700 bg-emerald-600 px-3.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-emerald-700"
+      >
+        <Share2 size={16} />
+        Share
+      </button>
+      {modalOpen && <ManageAccessModal roomId={roomId} onClose={() => setModalOpen(false)} />}
+    </>
   );
 }

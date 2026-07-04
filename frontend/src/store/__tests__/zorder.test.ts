@@ -18,7 +18,12 @@ vi.mock('../mutation-pipeline', async (importOriginal) => {
   };
 });
 
-type SeedEl = { id: string; zIndex: number };
+type SeedEl = {
+  id: string;
+  zIndex: number;
+  type?: 'rectangle' | 'text';
+  groupId?: string | null;
+};
 
 function seedStore(els: SeedEl[]) {
   const base = {
@@ -234,9 +239,22 @@ describe('undo/redo for z-order — AC-17', () => {
 
     const base = {
       type: 'rectangle' as const,
-      x: 0, y: 0, width: 100, height: 50, angle: 0,
-      props: { strokeColor: '#000', fillColor: 'transparent', strokeWidth: 2, strokeStyle: 'solid' as const, opacity: 1 },
-      groupId: null, frameId: null, locked: false, createdBy: 'test',
+      x: 0,
+      y: 0,
+      width: 100,
+      height: 50,
+      angle: 0,
+      props: {
+        strokeColor: '#000',
+        fillColor: 'transparent',
+        strokeWidth: 2,
+        strokeStyle: 'solid' as const,
+        opacity: 1,
+      },
+      groupId: null,
+      frameId: null,
+      locked: false,
+      createdBy: 'test',
     };
     const elA = createElement({ ...base });
     const elB = createElement({ ...base });
@@ -256,5 +274,40 @@ describe('undo/redo for z-order — AC-17', () => {
     expect(aZAfterUndo).toBe(aZBefore);
 
     unregister();
+  });
+});
+
+// @covers AC-7
+describe('bound text z-order cascade — AC-7', () => {
+  beforeEach(() => {
+    seedStore([
+      { id: 'container', type: 'rectangle', groupId: 'g', zIndex: 1 },
+      { id: 'label', type: 'text', groupId: 'g', zIndex: 2 },
+      { id: 'other', zIndex: 3 },
+    ]);
+  });
+
+  it('AC-7: bringToFront on a bound container carries the label above it in one batch', () => {
+    bringToFront('container');
+
+    expect(getZIndex('label')).toBe(getZIndex('container') + 1);
+    expect(updateElementsSpy).toHaveBeenCalledOnce();
+    const ids = (updateElementsSpy.mock.calls[0][0] as { id: string }[]).map((patch) => patch.id);
+    expect(ids).toEqual(['container', 'label']);
+  });
+
+  it('AC-7: z-order directly on bound text is a no-op', () => {
+    sendToBack('label');
+    expect(updateElementsSpy).not.toHaveBeenCalled();
+  });
+
+  it('AC-7: bringForward on a bound container skips its label as the swap target', () => {
+    bringForward('container');
+
+    expect(getZIndex('label')).toBe(getZIndex('container') + 1);
+    expect(getZIndex('container')).toBeGreaterThan(getZIndex('other'));
+    expect(updateElementsSpy).toHaveBeenCalledOnce();
+    const ids = (updateElementsSpy.mock.calls[0][0] as { id: string }[]).map((patch) => patch.id);
+    expect(ids).toEqual(['container', 'label', 'other']);
   });
 });

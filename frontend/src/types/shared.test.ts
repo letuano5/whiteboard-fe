@@ -28,17 +28,29 @@ describe('WS_EVENTS', () => {
   it('defines sync events', () => {
     expect(WS_EVENTS.ROOM_SNAPSHOT).toBe('room-snapshot');
     expect(WS_EVENTS.ROOM_RESYNC).toBe('room-resync');
+    expect(WS_EVENTS.ROOM_REPLACED).toBe('room-replaced');
+    expect(WS_EVENTS.SYNC_COMMAND).toBe('sync-command');
+    expect(WS_EVENTS.SYNC_ACK).toBe('sync-ack');
+    expect(WS_EVENTS.SYNC_BROADCAST).toBe('sync-broadcast');
   });
 
   it('defines ROOM_DIFF event for reconnect diff protocol (P3A-03 AC-12)', () => {
     // @covers AC-12
     expect(WS_EVENTS.ROOM_DIFF).toBe('room-diff');
+    expect(WS_EVENTS.ROOM_DIFF_REQUEST).toBe('room-diff-request');
   });
 
-  it('has 12 distinct event values', () => {
-    // P3A-03: ROOM_DIFF added (AC-12)
+  it('defines room access events', () => {
+    expect(WS_EVENTS.ROOM_ACCESS).toBe('room-access');
+    expect(WS_EVENTS.ROOM_ROLE_UPDATE).toBe('room-role-update');
+    expect(WS_EVENTS.ROOM_ACCESS_ERROR).toBe('room-access-error');
+  });
+
+  it('has 20 distinct event values', () => {
+    // P5-05: slot-level sync command/ack/broadcast events added.
+    // P5-09: whole-document replace notification added.
     const values = Object.values(WS_EVENTS);
-    expect(values).toHaveLength(12);
-    expect(new Set(values).size).toBe(12);
+    expect(values).toHaveLength(20);
+    expect(new Set(values).size).toBe(20);
   });
 });

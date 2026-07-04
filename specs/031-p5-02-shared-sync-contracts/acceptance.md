@@ -1,0 +1,10 @@
+# Acceptance Criteria
+
+AC-1: `@vdt/shared` exports the P5 `SyncSlot` vocabulary and an exhaustive field-to-slot mapping where every mutable `Element` field is mapped to a slot or explicitly classified as identity, derived, non-sync, or legacy-only.
+AC-2: `SlotPatch` carries `elementId`, `slot`, `baseClock`, full semantic `changes`, optional `inverseChanges`, and shared validation rejects unknown fields, incomplete slot values, duplicate slots, direct `order` patches, and `isDeleted` patches.
+AC-3: `SyncCommand` is a discriminated union of `CreateElementCommand`, `PatchSlotsCommand`, `ReorderElementsCommand`, `UpdateArrowBindingCommand`, `DeleteElementsCommand`, and `ReplaceDocumentCommand`, and every command carries protocol/schema/room/request/client/epoch metadata plus optional read preconditions without accepting `actorId` in the payload.
+AC-4: `CreateElementCommand` supports order hints, is validated as a create rather than a patch into a missing element, rejects duplicate active IDs, rejects IDs still inside the tombstone retention window, materializes a full element before slot clocks are initialized, and exposes server-normalized order in the change-set contract.
+AC-5: `ReorderElementsCommand` is the only command allowed to change ordering in this phase; shared validation rejects `PatchSlotsCommand` attempts to patch the `order` slot directly.
+AC-6: Slot clocks use `baseClock = 0` for slots that have never been set, never accept `null` clocks, and shared validation rejects a slot patch with `baseClock > currentSlotClock` as `STALE_CLIENT_STATE`.
+AC-7: `SlotReadPrecondition` carries `elementId`, `slot`, `baseClock`, and `onStale: 'reject' | 'rebase' | 'server_recompute'`; shared helpers classify stale read preconditions into the requested branch.
+AC-8: `UpdateArrowBindingCommand` carries `arrowId`, `terminal`, `binding: ArrowEndpointBinding | null`, `baseBindingClock`, and `baseGeometryClock`; command validation uses command-level `requestId` only and rejects `batchId` or patch-level ACK/request fields.

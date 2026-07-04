@@ -2,6 +2,10 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import HomePage from '../HomePage';
 
+vi.mock('../../auth/AuthPanel', () => ({
+  AuthPanel: () => <div data-testid="auth-panel" />,
+}));
+
 const mockPushState = vi.fn();
 const mockReload = vi.fn();
 

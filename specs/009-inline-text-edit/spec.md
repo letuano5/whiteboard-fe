@@ -80,6 +80,7 @@ A user double-clicks on a rectangle, ellipse, or other non-text element. No inli
 - **FR-010**: The inline editor MUST support multi-line text; the Enter key inserts a newline (natural `contenteditable` behavior).
 - **FR-012**: When the user resizes a text element with any resize handle (corner or edge), `props.fontSize` MUST adapt to the size change. Text resize behaves as uniform scaling: derive a scale from the dragged bbox ratio, update `fontSize = max(1, originalFontSize × scale)`, then adjust both bbox dimensions to the same scale so the bbox always fits the rendered text. Edge handles (top, bottom, left, right) MUST scale the font too; the non-dragged bbox dimension is expanded or shrunk as needed to keep the bbox proportional to the font.
 - **FR-013**: When the user changes `fontSize` via the detail panel, the element's `width` and `height` MUST scale by the same ratio (`newSize / oldSize`) so the bounding box stays proportional to the new font size.
+- **FR-014**: When the user changes `fontFamily` via the detail panel, the element's natural text dimensions MUST be measured or estimated for the new font and the bbox MUST fit those dimensions, expanding for wider fonts and shrinking for narrower fonts.
 
 ### Key Entities
 
@@ -97,6 +98,7 @@ A user double-clicks on a rectangle, ellipse, or other non-text element. No inli
 - **SC-005**: Double-clicking a non-text element never opens the inline editor.
 - **SC-006**: Resizing a text element to 2× in either width or height results in `fontSize` exactly doubling and the other bbox dimension also doubling so the bbox stays fitted to the text.
 - **SC-007**: Changing `fontSize` from 16 to 32 in the detail panel causes the element's `width` and `height` to also double.
+- **SC-008**: Changing a text element from a narrower font to a wider font leaves no glyph overflow outside the selection bbox, and changing to a narrower font shrinks the bbox to the fitted text dimensions.
 
 ## Assumptions
 
@@ -105,6 +107,6 @@ A user double-clicks on a rectangle, ellipse, or other non-text element. No inli
 - Escape commits (does not discard) the current text, matching the spec's stated behavior.
 - Creating a new text element automatically opens the inline editor (FR-011); the initial text ("Text") is pre-selected so the user can type immediately to replace it.
 - **Color field semantics for text elements**: `strokeColor` = font/text color; `fillColor` = text outline/border color; `strokeWidth` = text outline thickness. The detail panel relabels these as "Font color", "Border color", and "Border width" when a text element is selected. The SVG renderer uses `stroke={fillColor}` with `paint-order: stroke fill` to draw the outline behind the glyph fill.
-- The auto-bbox measurement is done via the DOM dimensions of the `contenteditable` div at commit time.
+- The auto-bbox measurement is done via the DOM dimensions of the `contenteditable` div at commit time; detail-panel font-family changes may use text metrics or a conservative estimate because no editor DOM node is active.
 - The `editingId` field is added to `InteractionState` in `interaction.store.ts` as transient state, never synced or persisted.
 - Text element rotation (`angle !== 0`) is handled: the editor overlay is positioned using a CSS transform that includes both translation and rotation.

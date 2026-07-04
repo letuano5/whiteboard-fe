@@ -45,6 +45,21 @@ export interface SnapResult {
   y: number;
 }
 
+export function pointKeyToAnchorRatio(pointKey: PointKey): { x: number; y: number } {
+  switch (pointKey) {
+    case 'center':
+      return { x: 0.5, y: 0.5 };
+    case 'top':
+      return { x: 0.5, y: 0 };
+    case 'right':
+      return { x: 1, y: 0.5 };
+    case 'bottom':
+      return { x: 0.5, y: 1 };
+    case 'left':
+      return { x: 0, y: 0.5 };
+  }
+}
+
 /**
  * Finds the nearest attachment point among all non-arrow, non-deleted elements
  * (excluding `excludeId`) within ARROW_SNAP_THRESHOLD.
@@ -79,15 +94,42 @@ export function findNearestSnap(
   return best;
 }
 
-/** Parses a binding string "elementId:pointKey" into its components. Returns null for null/undefined/malformed. */
-export function parseBinding(b: string | null | undefined): { elementId: string; pointKey: PointKey } | null {
+/** Parses legacy "elementId:pointKey" bindings and P5 object bindings. */
+export function parseBinding(
+  b: Element['props']['startBinding'],
+): { elementId: string; pointKey: PointKey } | null {
   if (!b) return null;
+  if (typeof b === 'object') {
+    return { elementId: b.elementId, pointKey: pointKeyFromAnchorRatio(b.anchorRatio) };
+  }
   const idx = b.lastIndexOf(':');
   if (idx === -1) return null;
   const elementId = b.slice(0, idx);
   const pointKey = b.slice(idx + 1) as PointKey;
   if (!elementId || !['center', 'top', 'right', 'bottom', 'left'].includes(pointKey)) return null;
   return { elementId, pointKey };
+}
+
+function pointKeyFromAnchorRatio(anchorRatio: { x: number; y: number }): PointKey {
+  const candidates: Array<{ key: PointKey; x: number; y: number }> = [
+    { key: 'center', x: 0.5, y: 0.5 },
+    { key: 'top', x: 0.5, y: 0 },
+    { key: 'right', x: 1, y: 0.5 },
+    { key: 'bottom', x: 0.5, y: 1 },
+    { key: 'left', x: 0, y: 0.5 },
+  ];
+  let best = candidates[0];
+  let bestDistance = Infinity;
+  for (const candidate of candidates) {
+    const dx = candidate.x - anchorRatio.x;
+    const dy = candidate.y - anchorRatio.y;
+    const distance = dx * dx + dy * dy;
+    if (distance < bestDistance) {
+      best = candidate;
+      bestDistance = distance;
+    }
+  }
+  return best.key;
 }
 
 /** Computes the world position of an attachment point on the target element, accounting for rotation. */

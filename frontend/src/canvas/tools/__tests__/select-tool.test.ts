@@ -154,6 +154,40 @@ describe('onSelectPointerDown — edge cases', () => {
   });
 });
 
+describe('onSelectPointerDown — Ctrl/Cmd-click toggle multi-select', () => {
+  it('ctrl-click adds a second shape to the existing selection', () => {
+    const a = makeElement({ id: 'shape-a', x: 0, y: 0, width: 50, height: 50 });
+    const b = makeElement({ id: 'shape-b', x: 100, y: 0, width: 50, height: 50 });
+    useElementsStore.getState().setElements([a, b]);
+    useInteractionStore.getState().setSelectedIds(['shape-a']);
+
+    onSelectPointerDown({ x: 125, y: 25 }, false, true);
+
+    expect(useInteractionStore.getState().selectedIds).toEqual(['shape-a', 'shape-b']);
+  });
+
+  it('cmd-click on an already-selected shape removes it from the selection', () => {
+    const a = makeElement({ id: 'shape-a', x: 0, y: 0, width: 50, height: 50 });
+    const b = makeElement({ id: 'shape-b', x: 100, y: 0, width: 50, height: 50 });
+    useElementsStore.getState().setElements([a, b]);
+    useInteractionStore.getState().setSelectedIds(['shape-a', 'shape-b']);
+
+    onSelectPointerDown({ x: 25, y: 25 }, false, true);
+
+    expect(useInteractionStore.getState().selectedIds).toEqual(['shape-b']);
+  });
+
+  it('ctrl-click on empty area preserves the existing selection', () => {
+    const a = makeElement({ id: 'shape-a', x: 0, y: 0, width: 50, height: 50 });
+    useElementsStore.getState().setElements([a]);
+    useInteractionStore.getState().setSelectedIds(['shape-a']);
+
+    onSelectPointerDown({ x: 200, y: 200 }, false, true);
+
+    expect(useInteractionStore.getState().selectedIds).toEqual(['shape-a']);
+  });
+});
+
 // ─── P1A-03: Move / Resize / Delete ──────────────────────────────────────────
 
 function resetDragState() {
@@ -269,6 +303,21 @@ describe('P1A-03 — Move', () => {
       [40, 40],
       [140, 90],
     ]);
+  });
+
+  // @covers AC-3 (046-image-background)
+  it('moves image elements through the existing select draft and commit path', () => {
+    const el = makeElement({ id: 'image-move', type: 'image', x: 10, y: 10 });
+    useElementsStore.getState().setElements([el]);
+    useInteractionStore.getState().setDraggingId(el.id);
+    useInteractionStore.getState().setDragStart({ x: 50, y: 50 });
+    useInteractionStore.getState().setResizeHandle(null);
+
+    onSelectPointerMove({ x: 80, y: 70 });
+    onSelectPointerUp({ x: 80, y: 70 });
+
+    const updated = useElementsStore.getState().elements.find((element) => element.id === el.id)!;
+    expect(updated).toMatchObject({ x: 40, y: 30, version: 2 });
   });
 });
 
@@ -430,6 +479,47 @@ describe('P1A-03 — Resize via onSelectPointerMove', () => {
     expect(updated.width).toBe(130);
     expect(updated.height).toBe(70);
     expect(updated.version).toBe(2);
+  });
+
+  // @covers AC-3 (046-image-background)
+  it('resizes image elements through the existing select draft and commit path', () => {
+    const el = makeElement({
+      id: 'image-resize',
+      type: 'image',
+      x: 10,
+      y: 10,
+      width: 100,
+      height: 50,
+      version: 1,
+    });
+    useElementsStore.getState().setElements([el]);
+    useInteractionStore.getState().setSelectedIds([el.id]);
+    onSelectHandlePointerDown('se', { x: 110, y: 60 });
+
+    onSelectPointerMove({ x: 160, y: 100 });
+    onSelectPointerUp({ x: 160, y: 100 });
+
+    const updated = useElementsStore.getState().elements.find((element) => element.id === el.id)!;
+    expect(updated).toMatchObject({ x: 10, y: 10, width: 180, height: 90, version: 2 });
+  });
+
+  it('ignores edge resize handles for image elements', () => {
+    const el = makeElement({
+      id: 'image-edge-resize',
+      type: 'image',
+      x: 10,
+      y: 10,
+      width: 100,
+      height: 50,
+    });
+    useElementsStore.getState().setElements([el]);
+    useInteractionStore.getState().setSelectedIds([el.id]);
+
+    onSelectHandlePointerDown('e', { x: 110, y: 35 });
+
+    expect(useInteractionStore.getState().draggingId).toBeNull();
+    expect(useInteractionStore.getState().resizeHandle).toBeNull();
+    expect(useInteractionStore.getState().resizeSession).toBeNull();
   });
 
   // @covers AC-14 (002-move-resize-delete)

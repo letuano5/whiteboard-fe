@@ -3,21 +3,31 @@ import { render, screen } from '@testing-library/react';
 import OnlineUsersPanel from '../ui/OnlineUsersPanel';
 import type { Presence } from '../../types/shared';
 import { useInteractionStore } from '../../store/interaction.store';
+import { useRoomAccessStore } from '../../rooms/room-access.store';
 
 // Stable local presence for all tests
 vi.mock('../../sync/presence', () => ({
   LOCAL_PRESENCE: { sessionId: 'local-session', name: 'Blue Fox', color: '#3b82f6' },
   toPresence: (local: { sessionId: string; name: string; color: string }) => ({
-    ...local, cursor: null, selectedIds: [], status: 'active' as const,
+    ...local,
+    cursor: null,
+    selectedIds: [],
+    status: 'active' as const,
   }),
 }));
 
-function makePresence(sessionId: string, name: string, color: string): Presence {
-  return { sessionId, name, color, cursor: null, selectedIds: [], status: 'active' };
+function makePresence(
+  sessionId: string,
+  name: string,
+  color: string,
+  roles: Pick<Presence, 'baseRole' | 'effectiveRole'> = {},
+): Presence {
+  return { sessionId, name, color, cursor: null, selectedIds: [], status: 'active', ...roles };
 }
 
 beforeEach(() => {
   useInteractionStore.setState({ remoteCursors: new Map() });
+  useRoomAccessStore.getState().resetRoomAccess();
 });
 
 describe('OnlineUsersPanel — AC-8 (shows all connected users on join)', () => {
@@ -77,5 +87,44 @@ describe('OnlineUsersPanel — AC-11 (solo user sees only themselves)', () => {
     render(<OnlineUsersPanel />);
     expect(screen.getByText('Blue Fox')).toBeDefined();
     expect(screen.getByText('(you)')).toBeDefined();
+  });
+
+  it('shows Owner for the local owner without changing the presence color', () => {
+    useRoomAccessStore.getState().setRoomAccess({
+      roomId: 'room-1',
+      role: 'owner',
+      baseRole: 'owner',
+      effectiveRole: 'owner',
+      visibility: 'private',
+      shareRevokedAt: null,
+      members: [],
+      invitations: [],
+    });
+
+    render(<OnlineUsersPanel />);
+
+    expect(screen.getByText('Owner')).toBeDefined();
+    expect(screen.queryByText('Blue Fox')).toBeNull();
+  });
+
+  it('shows effective role for a downgraded editor peer', () => {
+    // @covers AC-5
+    useInteractionStore.setState({
+      remoteCursors: new Map([
+        [
+          'peer-1',
+          makePresence('peer-1', 'Red Bear', '#ef4444', {
+            baseRole: 'editor',
+            effectiveRole: 'viewer',
+          }),
+        ],
+      ]),
+    });
+
+    render(<OnlineUsersPanel />);
+
+    expect(screen.getByText('Red Bear')).toBeDefined();
+    expect(screen.getByText('Viewer')).toBeDefined();
+    expect(screen.getByTitle('Base: Editor')).toBeDefined();
   });
 });

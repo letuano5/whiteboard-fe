@@ -3,14 +3,22 @@ import {
   Hand,
   Square,
   Circle,
+  Diamond,
+  Triangle,
+  Hexagon,
   Minus,
   ArrowRight,
   Type,
   Zap,
+  Pencil,
+  Highlighter,
+  Eraser,
 } from 'lucide-react';
 import { useInteractionStore } from '../../store/interaction.store';
 import { clearLaserTrail } from '../../canvas/tools/laser-tool';
+import { cancelFreehandDraw, cancelHighlighterDraw } from '../../canvas/tools/freehand-tool';
 import type { ToolId } from '../../types/interaction';
+import ImageInsertControl from './ImageInsertControl';
 
 interface ToolButton {
   id: ToolId;
@@ -23,9 +31,15 @@ const TOOLS: ToolButton[] = [
   { id: 'hand', label: 'Hand', Icon: Hand },
   { id: 'rectangle', label: 'Rectangle', Icon: Square },
   { id: 'ellipse', label: 'Ellipse', Icon: Circle },
+  { id: 'diamond', label: 'Diamond', Icon: Diamond },
+  { id: 'triangle', label: 'Triangle', Icon: Triangle },
+  { id: 'polygon', label: 'Polygon', Icon: Hexagon },
   { id: 'line', label: 'Line', Icon: Minus },
   { id: 'arrow', label: 'Arrow', Icon: ArrowRight },
   { id: 'text', label: 'Text', Icon: Type },
+  { id: 'freehand', label: 'Freehand', Icon: Pencil },
+  { id: 'highlighter', label: 'Highlighter', Icon: Highlighter },
+  { id: 'eraser', label: 'Eraser', Icon: Eraser },
   { id: 'laser', label: 'Laser', Icon: Zap },
 ];
 
@@ -39,15 +53,21 @@ export default function Toolbar() {
   const setResizeHandle = useInteractionStore((s) => s.setResizeHandle);
   const setResizeSession = useInteractionStore((s) => s.setResizeSession);
 
-  function chooseTool(id: ToolId) {
+  function resetInteraction() {
     clearLaserTrail();
-    setTool(id);
+    cancelFreehandDraw();
+    cancelHighlighterDraw();
     setSelectedIds([]);
     setDraggingId(null);
     setDragStart(null);
     setDraftElement(null);
     setResizeHandle(null);
     setResizeSession(null);
+  }
+
+  function chooseTool(id: ToolId) {
+    resetInteraction();
+    setTool(id);
   }
 
   return (
@@ -89,12 +109,14 @@ export default function Toolbar() {
             if (tool !== id) (e.currentTarget as HTMLButtonElement).style.background = '#f3f4f6';
           }}
           onMouseLeave={(e) => {
-            if (tool !== id) (e.currentTarget as HTMLButtonElement).style.background = 'transparent';
+            if (tool !== id)
+              (e.currentTarget as HTMLButtonElement).style.background = 'transparent';
           }}
         >
           <Icon size={18} />
         </button>
       ))}
+      <ImageInsertControl resetInteraction={resetInteraction} />
     </div>
   );
 }

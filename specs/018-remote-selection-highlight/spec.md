@@ -78,6 +78,8 @@ position via the existing element-update broadcast.
 - **FR-008**: Draft previews MUST NOT be written into the committed elements store — they are transient and must disappear when a commit arrives or the remote user cancels.
 - **FR-009**: `selectedIds` MUST be emitted as part of the `cursor-move` event payload.
 - **FR-010**: Draft element broadcasts MUST be throttled (≤ 50 ms interval) to avoid flooding the server.
+- **FR-011**: If an element selected locally also has a remote draft for the same element id, the local selection bbox MUST render against the remote draft geometry rather than the stale committed geometry.
+- **FR-012**: Remote draft borders and remote selection borders MUST apply the element's `angle` so bbox orientation matches rotated elements during both committed and in-progress states.
 
 ### Key Entities
 
@@ -93,6 +95,7 @@ position via the existing element-update broadcast.
 - **SC-003**: All remote selection and draft state is cleared within 500 ms of a remote user disconnecting from the room.
 - **SC-004**: The feature introduces no observable frame-rate degradation (< 1 dropped frame per second on average) when 5 remote users are actively moving elements simultaneously.
 - **SC-005**: Remote selection highlights and draft previews render correctly across all element types supported by the whiteboard (rectangle, ellipse, diamond, text, image, arrow, line, etc.).
+- **SC-006**: When two users select the same element and one user drags, resizes, or rotates it, the observing user's local and remote selection bboxes stay attached to the draft preview without using the stale committed bbox.
 
 ## Assumptions
 

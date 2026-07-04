@@ -4,8 +4,9 @@ import type { Point } from '../../types/geometry';
 import { useElementsStore } from '../../store/elements.store';
 import { useInteractionStore } from '../../store/interaction.store';
 import { patchElement } from '../../store/mutation-pipeline';
-import { getShapeUtil } from '../shapes';
-import { unrotatePoint } from '../../utils/geometry';
+import { hitTestElementAtWorldPoint } from '../shapes/hit-test';
+import { resolveGroupBinding } from './select/group';
+import { computeBoundTextLayout } from '../text/text-wrap';
 
 export function onCanvasDoubleClick(worldPt: Point): void {
   const elements = useElementsStore.getState().elements;
@@ -14,10 +15,7 @@ export function onCanvasDoubleClick(worldPt: Point): void {
 
   for (const el of visible) {
     if (el.type !== 'text') continue;
-    const util = getShapeUtil(el.type);
-    const center = { x: el.x + el.width / 2, y: el.y + el.height / 2 };
-    const localPt = el.angle !== 0 ? unrotatePoint(worldPt, center, el.angle) : worldPt;
-    if (util && util.hitTest(el, localPt.x, localPt.y)) {
+    if (hitTestElementAtWorldPoint(el, worldPt)) {
       setEditingId(el.id);
       setSelectedIds([el.id]);
       return;
@@ -48,13 +46,30 @@ export default function TextEditor({ element, camera }: TextEditorProps) {
     committed.current = true;
     const div = divRef.current;
     const text = div.innerText;
-    const w = div.scrollWidth / zoom;
-    const h = div.scrollHeight / zoom;
-    patchElement(element.id, {
-      props: { ...element.props, text },
-      width: Math.max(w, 1),
-      height: Math.max(h, 1),
-    });
+    const props = { ...element.props, text };
+
+    const elements = useElementsStore.getState().elements;
+    const binding = element.groupId ? resolveGroupBinding(element.groupId, elements) : null;
+    const container =
+      binding?.textId === element.id
+        ? elements.find((el) => el.id === binding.containerId && !el.isDeleted)
+        : undefined;
+
+    if (container) {
+      // Bound label: re-center and re-wrap to the container instead of free-growing to content.
+      const layout = computeBoundTextLayout(container, { props });
+      patchElement(element.id, {
+        props,
+        x: layout.x,
+        y: layout.y,
+        width: layout.width,
+        height: layout.height,
+      });
+    } else {
+      const w = div.scrollWidth / zoom;
+      const h = div.scrollHeight / zoom;
+      patchElement(element.id, { props, width: Math.max(w, 1), height: Math.max(h, 1) });
+    }
     setEditingId(null);
   }
 

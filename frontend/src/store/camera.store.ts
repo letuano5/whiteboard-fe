@@ -19,7 +19,20 @@ const DEFAULT_CAMERA: Camera = { x: 0, y: 0, zoom: 1 };
 export const useCameraStore = create<CameraState & CameraActions>()((set) => ({
   camera: DEFAULT_CAMERA,
 
-  setCamera: (camera) => set({ camera }),
+  // Central guard against corrupted/untrusted camera data (localStorage, socket echo,
+  // native file import): non-finite fields fall back to the current camera, and zoom is
+  // always clamped to [MIN_ZOOM, MAX_ZOOM] — otherwise a bad zoom (0, negative, NaN)
+  // propagates into screenToWorld and blanks the whole canvas.
+  setCamera: (camera) =>
+    set((state) => ({
+      camera: {
+        x: Number.isFinite(camera.x) ? camera.x : state.camera.x,
+        y: Number.isFinite(camera.y) ? camera.y : state.camera.y,
+        zoom: Number.isFinite(camera.zoom)
+          ? Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, camera.zoom))
+          : state.camera.zoom,
+      },
+    })),
 
   panBy: (dx, dy) =>
     set((state) => ({

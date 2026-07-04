@@ -14,71 +14,13 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { createWhiteboardServer } from '../index.js';
+import { createWhiteboardServer } from '../realtime/whiteboard-server.js';
 import { createAutosaveManager } from './autosave.js';
 import type { Element, Presence } from '@vdt/shared';
 import { WS_EVENTS } from '@vdt/shared';
 import { makeElement } from '../test/element-fixtures.js';
+import { makeFakeIo } from '../test/fake-socket-io.js';
 import type { PrismaClient } from '@prisma/client';
-
-// ---------------------------------------------------------------------------
-// Fake io-server helpers (reused from socket-join.test.ts pattern)
-// ---------------------------------------------------------------------------
-
-type ConnectionHandler = (socket: FakeSocket) => void;
-
-interface FakeSocket {
-  id: string;
-  data: { sessionId: string; roomId: string };
-  join: ReturnType<typeof vi.fn>;
-  emit: ReturnType<typeof vi.fn>;
-  to: ReturnType<typeof vi.fn>;
-  on: ReturnType<typeof vi.fn>;
-}
-
-function makeFakeIo() {
-  let connectionHandler: ConnectionHandler | null = null;
-
-  const toReturn = {
-    emit: vi.fn(),
-  };
-
-  const ioServer = {
-    on: vi.fn((event: string, handler: ConnectionHandler) => {
-      if (event === 'connection') {
-        connectionHandler = handler;
-      }
-    }),
-    to: vi.fn().mockReturnValue(toReturn),
-  };
-
-  function makeSocket(socketId = 'socket-1'): FakeSocket {
-    return {
-      id: socketId,
-      data: { sessionId: '', roomId: '' },
-      join: vi.fn(),
-      emit: vi.fn(),
-      to: vi.fn().mockReturnValue({ emit: vi.fn() }),
-      on: vi.fn(),
-    };
-  }
-
-  function connect(socket: FakeSocket): void {
-    if (!connectionHandler) throw new Error('connection handler not registered');
-    connectionHandler(socket);
-  }
-
-  function getHandler(socket: FakeSocket, event: string) {
-    const onCalls = (socket.on as ReturnType<typeof vi.fn>).mock.calls as Array<
-      [string, (...args: unknown[]) => unknown]
-    >;
-    const entry = onCalls.find((c) => c[0] === event);
-    if (!entry) throw new Error(`No handler registered for '${event}'`);
-    return entry[1];
-  }
-
-  return { ioServer, makeSocket, connect, getHandler, toReturn };
-}
 
 // ---------------------------------------------------------------------------
 // DB mock builder for the reconnect-diff path
@@ -100,31 +42,42 @@ function makeDiffMockDb(opts: {
   documentClock: number;
   /** For tombstone.aggregate: MIN(deletedClock). null = no tombstones. */
   minDeletedClock: bigint | null;
-  /** Records returned by record.findMany (changed since lastServerClock) */
+  /** Records returned by record.findMany (changed since lastServerClock, diff path) */
   changedRecords?: Array<{ state: unknown; recordClock: bigint }>;
   /** Tombstones returned by tombstone.findMany (deleted since lastServerClock) */
   deletedTombstones?: Array<{ recordId: string }>;
+  /** All active DB records returned in wipe-all path (record.findMany without clock filter) */
+  allRecords?: Array<{
+    recordId: string;
+    state: unknown;
+    recordClock: bigint;
+    slotClocks: unknown;
+  }>;
 }) {
   const clock = BigInt(opts.documentClock);
 
   // room.findUnique may be called multiple times: once for getRoomClock, once inside getRoomDiff.
-  const roomFindUnique = vi
-    .fn()
-    .mockResolvedValue({ documentClock: clock });
+  const roomFindUnique = vi.fn().mockResolvedValue({ documentClock: clock });
 
   const tombstoneAggregate = vi.fn().mockResolvedValue({
     _min: { deletedClock: opts.minDeletedClock },
   });
 
+  // Distinguish wipe-all query (no recordClock filter) from diff query (has recordClock filter).
   const recordFindMany = vi
     .fn()
-    .mockResolvedValue(opts.changedRecords ?? []);
+    .mockImplementation((args: { where: Record<string, unknown> }) =>
+      Promise.resolve(
+        'recordClock' in args.where
+          ? (opts.changedRecords ?? [])
+          : (opts.allRecords ?? opts.changedRecords ?? []),
+      ),
+    );
 
-  const tombstoneFindMany = vi
-    .fn()
-    .mockResolvedValue(opts.deletedTombstones ?? []);
+  const tombstoneFindMany = vi.fn().mockResolvedValue(opts.deletedTombstones ?? []);
 
   const db = {
+    $transaction: (task: (tx: unknown) => unknown) => task(db),
     room: { findUnique: roomFindUnique },
     tombstone: { aggregate: tombstoneAggregate, findMany: tombstoneFindMany },
     record: { findMany: recordFindMany },
@@ -377,6 +330,10 @@ describe('AC-8: wipe-all returned when tombstone history is insufficient', () =>
       minDeletedClock: 10n, // lastServerClock=3 < 10 → wipe-all
       changedRecords: [],
       deletedTombstones: [],
+      allRecords: [
+        { recordId: 'wipe-el-1', state: el1, recordClock: 20n, slotClocks: {} },
+        { recordId: 'wipe-el-2', state: el2, recordClock: 20n, slotClocks: {} },
+      ],
     });
 
     const { ioServer, makeSocket, connect, getHandler } = makeFakeIo();
