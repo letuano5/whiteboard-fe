@@ -1,10 +1,14 @@
 import type { RoomAccessMode, RoomAccessPayload, RoomRole } from '../types/shared';
 import { authenticatedFetch } from '../auth/authenticated-fetch';
 
+const SERVER_URL = import.meta.env?.VITE_BACKEND_URL ?? '';
+
 type EditableRole = Extract<RoomRole, 'editor' | 'viewer'>;
 
 export async function fetchRoomAccess(roomId: string): Promise<RoomAccessPayload> {
-  return readRoomAccessResponse(await authenticatedFetch(`/api/rooms/${roomId}/access`));
+  return readRoomAccessResponse(
+    await authenticatedFetch(`${SERVER_URL}/api/rooms/${roomId}/access`),
+  );
 }
 
 export async function setRoomShareMode(
@@ -12,7 +16,7 @@ export async function setRoomShareMode(
   mode: RoomAccessMode,
 ): Promise<RoomAccessPayload> {
   return readRoomAccessResponse(
-    await authenticatedFetch(`/api/rooms/${roomId}/share`, {
+    await authenticatedFetch(`${SERVER_URL}/api/rooms/${roomId}/share`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ mode }),
@@ -22,7 +26,7 @@ export async function setRoomShareMode(
 
 export async function revokeRoomShareLink(roomId: string): Promise<RoomAccessPayload> {
   return readRoomAccessResponse(
-    await authenticatedFetch(`/api/rooms/${roomId}/share`, { method: 'DELETE' }),
+    await authenticatedFetch(`${SERVER_URL}/api/rooms/${roomId}/share`, { method: 'DELETE' }),
   );
 }
 
@@ -36,7 +40,7 @@ export async function updateRoomCapacitySettings(
   input: RoomCapacitySettingsInput,
 ): Promise<RoomAccessPayload> {
   return readRoomAccessResponse(
-    await authenticatedFetch(`/api/rooms/${roomId}/capacity`, {
+    await authenticatedFetch(`${SERVER_URL}/api/rooms/${roomId}/capacity`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(input),
@@ -50,7 +54,7 @@ export async function inviteRoomUser(
   role: EditableRole,
 ): Promise<RoomAccessPayload> {
   return readRoomAccessResponse(
-    await authenticatedFetch(`/api/rooms/${roomId}/invitations`, {
+    await authenticatedFetch(`${SERVER_URL}/api/rooms/${roomId}/invitations`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, role }),
@@ -64,7 +68,7 @@ export async function updateRoomMemberRole(
   role: EditableRole,
 ): Promise<RoomAccessPayload> {
   return readRoomAccessResponse(
-    await authenticatedFetch(`/api/rooms/${roomId}/members/${userId}`, {
+    await authenticatedFetch(`${SERVER_URL}/api/rooms/${roomId}/members/${userId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ role }),
@@ -74,7 +78,9 @@ export async function updateRoomMemberRole(
 
 export async function removeRoomMember(roomId: string, userId: string): Promise<RoomAccessPayload> {
   return readRoomAccessResponse(
-    await authenticatedFetch(`/api/rooms/${roomId}/members/${userId}`, { method: 'DELETE' }),
+    await authenticatedFetch(`${SERVER_URL}/api/rooms/${roomId}/members/${userId}`, {
+      method: 'DELETE',
+    }),
   );
 }
 
@@ -83,7 +89,7 @@ export async function revokeRoomInvitation(
   invitationId: string,
 ): Promise<RoomAccessPayload> {
   return readRoomAccessResponse(
-    await authenticatedFetch(`/api/rooms/${roomId}/invitations/${invitationId}`, {
+    await authenticatedFetch(`${SERVER_URL}/api/rooms/${roomId}/invitations/${invitationId}`, {
       method: 'DELETE',
     }),
   );
