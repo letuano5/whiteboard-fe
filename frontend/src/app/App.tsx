@@ -8,6 +8,7 @@ import { useRoomAccessStore } from '../rooms/room-access.store';
 import { registerMutationHook } from '../store/mutation-pipeline';
 import { createArrowBindingHook } from '../sync/arrow-binding-hook';
 import { initSocketClient, stopSocketClient } from '../sync/socket-client';
+import { isDashboardPath } from './routing';
 
 export default function App() {
   const session = useAuthStore((state) => state.session);
@@ -37,7 +38,7 @@ export default function App() {
 
   const boardMode = roomId ? 'saved' : 'local';
 
-  if (window.location.pathname === '/dashboard') {
+  if (isDashboardPath(window.location.pathname)) {
     return <DocumentDashboard />;
   }
 

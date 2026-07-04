@@ -1,5 +1,6 @@
 import { FileText, FolderOpen, Loader2 } from 'lucide-react';
 import { AuthPanel } from '../auth/AuthPanel';
+import { homePath } from '../app/routing';
 
 export function DocumentDashboardLogin({ isCheckingAuth }: { isCheckingAuth: boolean }) {
   return (
@@ -17,7 +18,7 @@ export function DocumentDashboardLogin({ isCheckingAuth }: { isCheckingAuth: boo
           <button
             type="button"
             onClick={() => {
-              window.history.pushState({}, '', '/');
+              window.history.pushState({}, '', homePath());
               window.location.reload();
             }}
             className="mt-5 inline-flex h-10 items-center gap-2 rounded-lg border border-[#173f35] bg-white px-4 text-sm font-semibold text-[#173f35] hover:bg-[#edf5ef]"

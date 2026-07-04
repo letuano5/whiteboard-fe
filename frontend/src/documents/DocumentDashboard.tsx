@@ -15,6 +15,7 @@ import {
 } from './document-api';
 import { DocumentCard } from './DocumentCard';
 import { DocumentDashboardLogin } from './DocumentDashboardLogin';
+import { roomPath } from '../app/routing';
 
 const EMPTY_DASHBOARD: DocumentDashboardResponse = {
   documents: [],
@@ -155,7 +156,7 @@ export function DocumentDashboard() {
 
   async function openAndNavigate(roomId: string) {
     await openDocument(roomId);
-    window.history.pushState({}, '', '/?room=' + roomId);
+    window.history.pushState({}, '', roomPath(roomId));
     window.location.reload();
   }
 

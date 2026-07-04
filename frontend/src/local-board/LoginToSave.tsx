@@ -7,6 +7,7 @@ import { useElementsStore } from '../store/elements.store';
 import { saveCamera } from '../sync/camera-persistence';
 import { clearLocalScene } from '../sync/local-storage';
 import { saveLocalBoard } from './local-board-save';
+import { roomPath } from '../app/routing';
 
 export function LoginToSave() {
   const session = useAuthStore((state: AuthStoreState) => state.session);
@@ -28,7 +29,7 @@ export function LoginToSave() {
       const result = await saveLocalBoard({ elements: elements.filter((e) => !e.isDeleted), camera });
       saveCamera(result.roomId, camera);
       clearLocalScene();
-      window.history.pushState({}, '', '/?room=' + result.roomId);
+      window.history.pushState({}, '', roomPath(result.roomId));
       window.location.reload();
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Could not save this board.');

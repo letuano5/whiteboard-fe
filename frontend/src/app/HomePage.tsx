@@ -1,10 +1,11 @@
 import { Crosshair, Plus } from 'lucide-react';
 import { AuthPanel } from '../auth/AuthPanel';
+import { roomPath } from './routing';
 
 export default function HomePage() {
   function handleCreateRoom() {
     const id = crypto.randomUUID();
-    window.history.pushState({}, '', '/?room=' + id);
+    window.history.pushState({}, '', roomPath(id));
     window.location.reload();
   }
 
