@@ -1,0 +1,15 @@
+# Reverse proxy for the whiteboard backend + self-hosted Supabase (kong).
+# {$API_DOMAIN} / {$SUPABASE_DOMAIN} come from the .env file, e.g.:
+#   API_DOMAIN=api.203.0.113.10.nip.io
+#   SUPABASE_DOMAIN=supabase.203.0.113.10.nip.io
+# nip.io resolves any <name>.<ip-with-dots>.nip.io back to <ip>, so no real
+# domain purchase/DNS setup is required. Caddy auto-issues Let's Encrypt certs
+# for these hostnames on first request (needs ports 80 + 443 reachable).
+
+{$API_DOMAIN} {
+	reverse_proxy backend:3001
+}
+
+{$SUPABASE_DOMAIN} {
+	reverse_proxy kong:8000
+}

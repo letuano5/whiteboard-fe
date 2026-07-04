@@ -1,8 +1,10 @@
+import cors from 'cors';
 import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import type { PrismaClient } from '@prisma/client';
 import type { AppUserRepository, AuthVerifier } from './auth/index.js';
+import { parseAllowedOrigins } from './config/cors-origins.js';
 import { createDocumentDashboardRouter } from './documents/document-dashboard.js';
 import { createLocalBoardSaveRouter } from './rooms/local-board-save.js';
 import { createNativeFileExportRouter } from './rooms/native-file-export.js';
@@ -21,9 +23,13 @@ export interface AppServerOptions {
 }
 
 export function createAppServer(options: AppServerOptions = {}) {
+  const allowedOrigins = parseAllowedOrigins(process.env.FRONTEND_ORIGINS);
+  const corsOrigin = allowedOrigins.length > 0 ? allowedOrigins : true;
+
   const app = express();
+  app.use(cors({ origin: corsOrigin }));
   const httpServer = createServer(app);
-  const io = new Server(httpServer);
+  const io = new Server(httpServer, { cors: { origin: corsOrigin } });
 
   if (options.authVerifier && options.appUserRepository && options.db) {
     app.use(
