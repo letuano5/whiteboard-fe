@@ -1,5 +1,7 @@
 import { authenticatedFetch } from '../auth/authenticated-fetch';
 
+const SERVER_URL = import.meta.env?.VITE_BACKEND_URL ?? '';
+
 export type SnapshotReason = 'interval' | 'restore_safety' | 'import_safety';
 
 export interface RoomSnapshotMetadata {
@@ -18,7 +20,7 @@ export interface RestoreSnapshotResult {
 }
 
 export async function fetchRoomSnapshots(roomId: string): Promise<RoomSnapshotMetadata[]> {
-  const response = await authenticatedFetch(`/api/rooms/${roomId}/snapshots`);
+  const response = await authenticatedFetch(`${SERVER_URL}/api/rooms/${roomId}/snapshots`);
   if (!response.ok) throw new Error(await readErrorMessage(response));
 
   const body: unknown = await response.json();
@@ -33,7 +35,7 @@ export async function restoreRoomSnapshot(
   snapshotId: string,
 ): Promise<RestoreSnapshotResult> {
   const response = await authenticatedFetch(
-    `/api/rooms/${roomId}/snapshots/${snapshotId}/restore`,
+    `${SERVER_URL}/api/rooms/${roomId}/snapshots/${snapshotId}/restore`,
     { method: 'POST' },
   );
   if (!response.ok) throw new Error(await readErrorMessage(response));
