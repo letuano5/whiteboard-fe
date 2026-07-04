@@ -4,7 +4,7 @@ import { resolveGroupBinding } from '../tools/select/group';
 export type MeasureFn = (text: string, font: string) => number;
 
 const FALLBACK_FONT_SIZE = 16;
-const TEXT_PADDING = 8;
+export const TEXT_PADDING = 8;
 const MIN_WRAP_WIDTH = 24;
 
 let measureContext: CanvasRenderingContext2D | null | undefined;
