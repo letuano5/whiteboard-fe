@@ -6,7 +6,7 @@ import { useInteractionStore } from '../../store/interaction.store';
 import { patchElement } from '../../store/mutation-pipeline';
 import { hitTestElementAtWorldPoint } from '../shapes/hit-test';
 import { resolveGroupBinding } from './select/group';
-import { computeBoundTextLayout } from '../text/text-wrap';
+import { computeBoundTextLayout, TEXT_PADDING } from '../text/text-wrap';
 
 export function onCanvasDoubleClick(worldPt: Point): void {
   const elements = useElementsStore.getState().elements;
@@ -21,6 +21,12 @@ export function onCanvasDoubleClick(worldPt: Point): void {
       return;
     }
   }
+}
+
+function resolveBoundContainer(text: Element, elements: Element[]): Element | undefined {
+  const binding = text.groupId ? resolveGroupBinding(text.groupId, elements) : null;
+  if (binding?.textId !== text.id) return undefined;
+  return elements.find((el) => el.id === binding.containerId && !el.isDeleted);
 }
 
 interface TextEditorProps {
@@ -41,6 +47,12 @@ export default function TextEditor({ element, camera }: TextEditorProps) {
   const fontSize = (element.props.fontSize ?? 16) * zoom;
   const angleDeg = (element.angle * 180) / Math.PI;
 
+  const elements = useElementsStore.getState().elements;
+  const container = resolveBoundContainer(element, elements);
+  const boundLayout = container
+    ? computeBoundTextLayout(container, { props: element.props })
+    : null;
+
   function commit() {
     if (committed.current || !divRef.current) return;
     committed.current = true;
@@ -48,22 +60,29 @@ export default function TextEditor({ element, camera }: TextEditorProps) {
     const text = div.innerText;
     const props = { ...element.props, text };
 
-    const elements = useElementsStore.getState().elements;
-    const binding = element.groupId ? resolveGroupBinding(element.groupId, elements) : null;
-    const container =
-      binding?.textId === element.id
-        ? elements.find((el) => el.id === binding.containerId && !el.isDeleted)
-        : undefined;
+    const freshElements = useElementsStore.getState().elements;
+    const container = resolveBoundContainer(element, freshElements);
 
     if (container) {
       // Bound label: re-center and re-wrap to the container instead of free-growing to content.
       const layout = computeBoundTextLayout(container, { props });
+      const requiredHeight = layout.height + TEXT_PADDING * 2;
+      let finalLayout = layout;
+      if (requiredHeight > container.height) {
+        // Text wraps taller than the container — grow the container's height (keeping its
+        // center fixed) instead of letting the label overflow past its bounds.
+        const newHeight = requiredHeight;
+        const newY = container.y - (newHeight - container.height) / 2;
+        patchElement(container.id, { y: newY, height: newHeight });
+        const grownContainer = { ...container, y: newY, height: newHeight };
+        finalLayout = computeBoundTextLayout(grownContainer, { props });
+      }
       patchElement(element.id, {
         props,
-        x: layout.x,
-        y: layout.y,
-        width: layout.width,
-        height: layout.height,
+        x: finalLayout.x,
+        y: finalLayout.y,
+        width: finalLayout.width,
+        height: finalLayout.height,
       });
     } else {
       const w = div.scrollWidth / zoom;
@@ -107,6 +126,7 @@ export default function TextEditor({ element, camera }: TextEditorProps) {
         position: 'absolute',
         left: `${screenLeft}px`,
         top: `${screenTop}px`,
+        width: boundLayout ? `${boundLayout.width * zoom}px` : undefined,
         fontSize: `${fontSize}px`,
         fontFamily: element.props.fontFamily ?? 'sans-serif',
         color: element.props.strokeColor,
@@ -114,7 +134,7 @@ export default function TextEditor({ element, camera }: TextEditorProps) {
         textAlign: element.props.textAlign ?? 'left',
         transformOrigin: `${screenW / 2}px ${screenH / 2}px`,
         transform: `rotate(${angleDeg}deg)`,
-        whiteSpace: 'pre',
+        whiteSpace: boundLayout ? 'pre-wrap' : 'pre',
         outline: 'none',
         background: 'transparent',
         border: 'none',

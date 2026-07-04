@@ -13,7 +13,7 @@ vi.mock('../../../store/mutation-pipeline', () => ({
 
 import { patchElement } from '../../../store/mutation-pipeline';
 import TextEditor, { onCanvasDoubleClick } from '../text-editor';
-import { computeBoundTextLayout } from '../../text/text-wrap';
+import { computeBoundTextLayout, TEXT_PADDING } from '../../text/text-wrap';
 
 const mockPatchElement = patchElement as ReturnType<typeof vi.fn>;
 
@@ -467,5 +467,197 @@ describe('TextEditor — bound text recenters and rewraps on commit', () => {
         height: expected.height,
       }),
     );
+  });
+});
+
+// ─── Bound text: editor overlay matches wrap layout while editing ───────────
+
+describe('TextEditor — bound text overlay matches wrap layout while editing', () => {
+  it('sets div width from computeBoundTextLayout and whiteSpace to pre-wrap for bound text', () => {
+    const container = makeRectElement({
+      id: 'container-1',
+      x: 0,
+      y: 0,
+      width: 200,
+      height: 100,
+      groupId: 'group-1',
+    });
+    const text = makeTextElement({
+      id: 'text-1',
+      groupId: 'group-1',
+      props: {
+        strokeColor: '#1a1a1a',
+        fillColor: 'transparent',
+        strokeWidth: 0,
+        strokeStyle: 'solid',
+        opacity: 1,
+        text: 'Hi',
+        fontSize: 16,
+        fontFamily: 'sans-serif',
+        textAlign: 'center',
+      },
+    });
+    useElementsStore.getState().setElements([container, text]);
+    useInteractionStore.getState().setEditingId(text.id);
+
+    const { container: dom } = render(<TextEditor element={text} camera={defaultCamera} />);
+    const div = dom.querySelector('[contenteditable]') as HTMLElement;
+
+    const expected = computeBoundTextLayout(container, { props: text.props });
+
+    expect(div.style.width).toBe(`${expected.width}px`);
+    expect(div.style.whiteSpace).toBe('pre-wrap');
+  });
+
+  it('scales the bound width by camera zoom', () => {
+    const zoomedCamera: Camera = { x: 0, y: 0, zoom: 2 };
+    const container = makeRectElement({
+      id: 'container-1',
+      x: 0,
+      y: 0,
+      width: 200,
+      height: 100,
+      groupId: 'group-1',
+    });
+    const text = makeTextElement({
+      id: 'text-1',
+      groupId: 'group-1',
+      props: {
+        strokeColor: '#1a1a1a',
+        fillColor: 'transparent',
+        strokeWidth: 0,
+        strokeStyle: 'solid',
+        opacity: 1,
+        text: 'Hi',
+        fontSize: 16,
+        fontFamily: 'sans-serif',
+        textAlign: 'center',
+      },
+    });
+    useElementsStore.getState().setElements([container, text]);
+    useInteractionStore.getState().setEditingId(text.id);
+
+    const { container: dom } = render(<TextEditor element={text} camera={zoomedCamera} />);
+    const div = dom.querySelector('[contenteditable]') as HTMLElement;
+    const expected = computeBoundTextLayout(container, { props: text.props });
+
+    expect(div.style.width).toBe(`${expected.width * 2}px`);
+  });
+
+  it('leaves width unset and whiteSpace as pre for unbound (free) text', () => {
+    const el = makeTextElement({ id: 'text-1' }); // groupId: null by default
+    useInteractionStore.getState().setEditingId(el.id);
+
+    const { container } = render(<TextEditor element={el} camera={defaultCamera} />);
+    const div = container.querySelector('[contenteditable]') as HTMLElement;
+
+    expect(div.style.width).toBe('');
+    expect(div.style.whiteSpace).toBe('pre');
+  });
+});
+
+// ─── Bound text: container auto-grows height to fit wrapped text on commit ──
+
+describe('TextEditor — bound text grows container height to fit wrapped text', () => {
+  it('grows the container height (keeping its center fixed) when wrapped text overflows it', () => {
+    const container = makeRectElement({
+      id: 'container-1',
+      x: 0,
+      y: 0,
+      width: 200,
+      height: 40,
+      groupId: 'group-1',
+    });
+    const text = makeTextElement({
+      id: 'text-1',
+      groupId: 'group-1',
+      props: {
+        strokeColor: '#1a1a1a',
+        fillColor: 'transparent',
+        strokeWidth: 0,
+        strokeStyle: 'solid',
+        opacity: 1,
+        text: 'Hi',
+        fontSize: 16,
+        fontFamily: 'sans-serif',
+        textAlign: 'center',
+      },
+    });
+    useElementsStore.getState().setElements([container, text]);
+    useInteractionStore.getState().setEditingId(text.id);
+
+    const { container: dom } = render(<TextEditor element={text} camera={defaultCamera} />);
+    const div = dom.querySelector('[contenteditable]') as HTMLElement;
+
+    const longText = 'Hello World Wraps Here';
+    div.innerText = longText;
+    act(() => {
+      fireEvent.blur(div);
+    });
+
+    const wrapped = computeBoundTextLayout(container, { props: { ...text.props, text: longText } });
+    const requiredHeight = wrapped.height + TEXT_PADDING * 2;
+    expect(requiredHeight).toBeGreaterThan(container.height); // sanity: text really overflows
+
+    const newHeight = requiredHeight;
+    const newY = container.y - (newHeight - container.height) / 2;
+
+    expect(mockPatchElement).toHaveBeenCalledWith(
+      'container-1',
+      expect.objectContaining({ y: newY, height: newHeight }),
+    );
+
+    const grownContainer = { ...container, y: newY, height: newHeight };
+    const finalLayout = computeBoundTextLayout(grownContainer, {
+      props: { ...text.props, text: longText },
+    });
+
+    expect(mockPatchElement).toHaveBeenCalledWith(
+      'text-1',
+      expect.objectContaining({
+        x: finalLayout.x,
+        y: finalLayout.y,
+        width: finalLayout.width,
+        height: finalLayout.height,
+      }),
+    );
+  });
+
+  it('does not resize the container when wrapped text fits within its existing height', () => {
+    const container = makeRectElement({
+      id: 'container-1',
+      x: 0,
+      y: 0,
+      width: 200,
+      height: 100,
+      groupId: 'group-1',
+    });
+    const text = makeTextElement({
+      id: 'text-1',
+      groupId: 'group-1',
+      props: {
+        strokeColor: '#1a1a1a',
+        fillColor: 'transparent',
+        strokeWidth: 0,
+        strokeStyle: 'solid',
+        opacity: 1,
+        text: 'Hi',
+        fontSize: 16,
+        fontFamily: 'sans-serif',
+        textAlign: 'center',
+      },
+    });
+    useElementsStore.getState().setElements([container, text]);
+    useInteractionStore.getState().setEditingId(text.id);
+
+    const { container: dom } = render(<TextEditor element={text} camera={defaultCamera} />);
+    const div = dom.querySelector('[contenteditable]') as HTMLElement;
+
+    div.innerText = 'Short';
+    act(() => {
+      fireEvent.blur(div);
+    });
+
+    expect(mockPatchElement).not.toHaveBeenCalledWith('container-1', expect.anything());
   });
 });

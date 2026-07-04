@@ -295,7 +295,15 @@ export function useWhiteboardPointerHandlers({
         setEditingId(binding.textId);
         return;
       }
-      // No label yet — create one centered in the container and start editing it right away.
+      const isMergedWithOthers =
+        !!hit.groupId && resolveGroupMembers(hit.groupId, elements).length > 1;
+      if (isMergedWithOthers) {
+        // Part of a multi-shape merge without a qualifying 1-text+1-container binding —
+        // bind-text-on-double-click only applies to standalone containers. Just select it.
+        setSelectedIds([hit.id]);
+        return;
+      }
+      // Standalone container, no label yet — create one centered in it and start editing right away.
       const text = createBoundTextForContainer(hit);
       setSelectedIds([text.id]);
       setEditingId(text.id);
