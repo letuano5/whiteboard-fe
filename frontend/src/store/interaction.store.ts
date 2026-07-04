@@ -13,6 +13,7 @@ const DEFAULT_STATE: InteractionState = {
   marquee: null,
   resizeHandle: null,
   resizeSession: null,
+  groupResizeSession: null,
   isRotating: false,
   editingId: null,
   laserTrail: [],
@@ -33,6 +34,7 @@ interface InteractionActions {
   setMarquee: (rect: Rect | null) => void;
   setResizeHandle: (h: HandleId | null) => void;
   setResizeSession: (session: ResizeSession | null) => void;
+  setGroupResizeSession: (session: InteractionState['groupResizeSession']) => void;
   setIsRotating: (v: boolean) => void;
   setEditingId: (id: string | null) => void;
   setLaserTrail: (trail: Point[]) => void;
@@ -56,6 +58,7 @@ export const useInteractionStore = create<InteractionState & InteractionActions>
   setMarquee: (marquee) => set({ marquee }),
   setResizeHandle: (resizeHandle) => set({ resizeHandle }),
   setResizeSession: (resizeSession) => set({ resizeSession }),
+  setGroupResizeSession: (groupResizeSession) => set({ groupResizeSession }),
   setIsRotating: (isRotating) => set({ isRotating }),
   setEditingId: (editingId) => set({ editingId }),
   setLaserTrail: (laserTrail) => set({ laserTrail }),

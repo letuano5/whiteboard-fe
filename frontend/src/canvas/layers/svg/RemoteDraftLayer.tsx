@@ -18,6 +18,7 @@ export default function RemoteDraftLayer({ remoteDrafts, remoteCursors }: Remote
           <RemoteDraftElement
             key={`remote-draft-${sessionId}-${draftEl.id}`}
             element={draftEl}
+            elements={draftEls}
             peerColor={peerColor}
           />
         ));
@@ -28,16 +29,17 @@ export default function RemoteDraftLayer({ remoteDrafts, remoteCursors }: Remote
 
 interface RemoteDraftElementProps {
   element: Element;
+  elements: Element[];
   peerColor: string;
 }
 
-function RemoteDraftElement({ element, peerColor }: RemoteDraftElementProps) {
+function RemoteDraftElement({ element, elements, peerColor }: RemoteDraftElementProps) {
   const util = getShapeUtil(element.type);
   if (!util) return null;
 
   return (
     <g opacity={0.5} style={{ pointerEvents: 'none' }}>
-      {util.render(element)}
+      {util.render(element, { elements })}
       <ElementOutline element={element} stroke={peerColor} strokeWidth={1} />
     </g>
   );

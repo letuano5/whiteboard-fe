@@ -1,5 +1,18 @@
 import { useEffect, useRef } from 'react';
 import { bringToFront, sendToBack, bringForward, sendBackward } from '../../store/zorder';
+import { useElementsStore } from '../../store/elements.store';
+import { useInteractionStore } from '../../store/interaction.store';
+import {
+  canMergeSelection,
+  canUnmergeSelection,
+  onMergeSelected,
+  onUnmergeSelected,
+} from '../../canvas/tools/select/merge';
+import {
+  canToggleLockSelection,
+  isSelectionLocked,
+  onToggleLockSelected,
+} from '../../canvas/tools/select/lock';
 
 interface ContextMenuProps {
   x: number;
@@ -28,9 +41,45 @@ const DISABLED_STYLE: React.CSSProperties = {
   cursor: 'not-allowed',
 };
 
-export default function ContextMenu({ x, y, selectedId, selectedCount, onClose }: ContextMenuProps) {
+interface MenuItemProps {
+  label: string;
+  disabled: boolean;
+  onClick: () => void;
+}
+
+function MenuItem({ label, disabled, onClick }: MenuItemProps) {
+  return (
+    <button
+      style={disabled ? DISABLED_STYLE : BUTTON_STYLE}
+      disabled={disabled}
+      onClick={onClick}
+      onMouseEnter={(e) => {
+        if (!disabled) (e.currentTarget as HTMLButtonElement).style.background = '#f3f4f6';
+      }}
+      onMouseLeave={(e) => {
+        (e.currentTarget as HTMLButtonElement).style.background = 'none';
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
+export default function ContextMenu({
+  x,
+  y,
+  selectedId,
+  selectedCount,
+  onClose,
+}: ContextMenuProps) {
   const ref = useRef<HTMLDivElement>(null);
   const disabled = selectedCount !== 1 || !selectedId;
+  const elements = useElementsStore((state) => state.elements);
+  const selectedIds = useInteractionStore((state) => state.selectedIds);
+  const mergeDisabled = !canMergeSelection(elements, selectedIds);
+  const unmergeDisabled = !canUnmergeSelection(elements, selectedIds);
+  const lockDisabled = !canToggleLockSelection(elements, selectedIds);
+  const lockLabel = isSelectionLocked(elements, selectedIds) ? 'Unlock' : 'Lock';
 
   // Dismiss on click-outside or Escape
   useEffect(() => {
@@ -56,6 +105,24 @@ export default function ContextMenu({ x, y, selectedId, selectedCount, onClose }
     onClose();
   }
 
+  function handleMerge() {
+    if (mergeDisabled) return;
+    onMergeSelected();
+    onClose();
+  }
+
+  function handleUnmerge() {
+    if (unmergeDisabled) return;
+    onUnmergeSelected();
+    onClose();
+  }
+
+  function handleToggleLock() {
+    if (lockDisabled) return;
+    onToggleLockSelected();
+    onClose();
+  }
+
   return (
     <div
       ref={ref}
@@ -72,42 +139,15 @@ export default function ContextMenu({ x, y, selectedId, selectedCount, onClose }
         zIndex: 9999,
       }}
     >
-      <button
-        style={disabled ? DISABLED_STYLE : BUTTON_STYLE}
-        disabled={disabled}
-        onClick={() => handle(bringToFront)}
-        onMouseEnter={(e) => { if (!disabled) (e.currentTarget as HTMLButtonElement).style.background = '#f3f4f6'; }}
-        onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'none'; }}
-      >
-        Bring to Front
-      </button>
-      <button
-        style={disabled ? DISABLED_STYLE : BUTTON_STYLE}
-        disabled={disabled}
-        onClick={() => handle(bringForward)}
-        onMouseEnter={(e) => { if (!disabled) (e.currentTarget as HTMLButtonElement).style.background = '#f3f4f6'; }}
-        onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'none'; }}
-      >
-        Forward
-      </button>
-      <button
-        style={disabled ? DISABLED_STYLE : BUTTON_STYLE}
-        disabled={disabled}
-        onClick={() => handle(sendBackward)}
-        onMouseEnter={(e) => { if (!disabled) (e.currentTarget as HTMLButtonElement).style.background = '#f3f4f6'; }}
-        onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'none'; }}
-      >
-        Backward
-      </button>
-      <button
-        style={disabled ? DISABLED_STYLE : BUTTON_STYLE}
-        disabled={disabled}
-        onClick={() => handle(sendToBack)}
-        onMouseEnter={(e) => { if (!disabled) (e.currentTarget as HTMLButtonElement).style.background = '#f3f4f6'; }}
-        onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'none'; }}
-      >
-        Send to Back
-      </button>
+      <MenuItem label="Bring to Front" disabled={disabled} onClick={() => handle(bringToFront)} />
+      <MenuItem label="Forward" disabled={disabled} onClick={() => handle(bringForward)} />
+      <MenuItem label="Backward" disabled={disabled} onClick={() => handle(sendBackward)} />
+      <MenuItem label="Send to Back" disabled={disabled} onClick={() => handle(sendToBack)} />
+      <div style={{ borderTop: '1px solid #e5e7eb', margin: '4px 0' }} />
+      <MenuItem label="Merge" disabled={mergeDisabled} onClick={handleMerge} />
+      <MenuItem label="Unmerge" disabled={unmergeDisabled} onClick={handleUnmerge} />
+      <div style={{ borderTop: '1px solid #e5e7eb', margin: '4px 0' }} />
+      <MenuItem label={lockLabel} disabled={lockDisabled} onClick={handleToggleLock} />
     </div>
   );
 }

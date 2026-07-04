@@ -19,6 +19,7 @@ export function onSelectPointerUp(_worldPt: Point): void {
     setDragStart,
     setResizeHandle,
     setResizeSession,
+    setGroupResizeSession,
     setIsRotating,
     setDraftElement,
     setDraftElements,
@@ -46,12 +47,53 @@ export function onSelectPointerUp(_worldPt: Point): void {
     updateElements(
       draftElements.map((el) => ({
         id: el.id,
-        patch: { x: el.x, y: el.y, ...(el.props.points ? { props: el.props } : {}) },
+        patch: {
+          x: el.x,
+          y: el.y,
+          width: el.width,
+          height: el.height,
+          zIndex: el.zIndex,
+          props: el.props,
+        },
       })),
     );
     setDraftElements([]);
     setDraggingId(null);
     setDragStart(null);
+    setResizeHandle(null);
+    setResizeSession(null);
+    setGroupResizeSession(null);
+    setIsRotating(false);
+    setDraftElement(null);
+    return;
+  }
+
+  if (
+    draftElements.length > 0 &&
+    draftElement &&
+    !isRotating &&
+    !(draftElement.type === 'arrow' && draftElement.props.points)
+  ) {
+    updateElements(
+      [draftElement, ...draftElements].map((el) => ({
+        id: el.id,
+        patch: {
+          x: el.x,
+          y: el.y,
+          width: el.width,
+          height: el.height,
+          zIndex: el.zIndex,
+          props: el.props,
+        },
+      })),
+    );
+    setDraftElement(null);
+    setDraftElements([]);
+    setDraggingId(null);
+    setDragStart(null);
+    setResizeHandle(null);
+    setResizeSession(null);
+    setGroupResizeSession(null);
     return;
   }
 
@@ -60,7 +102,7 @@ export function onSelectPointerUp(_worldPt: Point): void {
     updateElements(
       draftElements.map((el) => ({
         id: el.id,
-        patch: { x: el.x, y: el.y, props: el.props },
+        patch: { x: el.x, y: el.y, width: el.width, height: el.height, props: el.props },
       })),
     );
     setDraftElements([]);
@@ -152,6 +194,7 @@ export function onSelectPointerUp(_worldPt: Point): void {
   setDragStart(null);
   setResizeHandle(null);
   setResizeSession(null);
+  setGroupResizeSession(null);
   setIsRotating(false);
   setDraftElement(null);
   setDraftElements([]);

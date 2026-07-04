@@ -1,13 +1,18 @@
 import { deleteElements } from '../../store/mutation-pipeline';
+import { useElementsStore } from '../../store/elements.store';
 import { useInteractionStore } from '../../store/interaction.store';
 import { onCopySelected, onDuplicateSelected, onPasteSelected } from '../tools/select/clipboard';
+import { resolveGroupDeletionIds } from '../tools/select/group';
+import { onMergeSelected, onUnmergeSelected } from '../tools/select/merge';
 import {
   type KeyboardShortcutInput,
   isCopyShortcut,
   isDeleteShortcut,
   isDuplicateShortcut,
+  isMergeShortcut,
   isModifierPressed,
   isPasteShortcut,
+  isUnmergeShortcut,
 } from './shortcut-matchers';
 
 interface KeyboardShortcutEvent extends KeyboardShortcutInput {
@@ -20,8 +25,25 @@ export function handleDeleteSelectedShortcut(event: KeyboardShortcutInput): bool
   const { selectedIds, setSelectedIds } = useInteractionStore.getState();
   if (selectedIds.length === 0) return false;
 
-  deleteElements(selectedIds);
+  const elements = useElementsStore.getState().elements;
+  deleteElements(resolveGroupDeletionIds(selectedIds, elements));
   setSelectedIds([]);
+  return true;
+}
+
+export function handleMergeSelectedShortcut(event: KeyboardShortcutEvent): boolean {
+  if (!isMergeShortcut(event)) return false;
+
+  event.preventDefault?.();
+  onMergeSelected();
+  return true;
+}
+
+export function handleUnmergeSelectedShortcut(event: KeyboardShortcutEvent): boolean {
+  if (!isUnmergeShortcut(event)) return false;
+
+  event.preventDefault?.();
+  onUnmergeSelected();
   return true;
 }
 
@@ -53,6 +75,8 @@ export function handleSelectKeyboardShortcut(event: KeyboardShortcutEvent): bool
   if (handleDeleteSelectedShortcut(event)) return true;
   if (!isModifierPressed(event)) return false;
   return (
+    handleUnmergeSelectedShortcut(event) ||
+    handleMergeSelectedShortcut(event) ||
     handleDuplicateSelectedShortcut(event) ||
     handleCopySelectedShortcut(event) ||
     handlePasteSelectedShortcut(event)

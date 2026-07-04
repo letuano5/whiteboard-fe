@@ -2,8 +2,22 @@ import { useElementsStore } from '../../../store/elements.store';
 import { useInteractionStore } from '../../../store/interaction.store';
 import { createElements, type ElementDraft } from '../../../store/mutation-pipeline';
 import type { Element } from '../../../types/shared';
+import { generateId } from '../../../utils/id';
 
-function cloneAsNewDraft(el: Element, offsetX: number, offsetY: number): ElementDraft {
+function buildGroupIdRemap(elements: Element[]): Map<string, string> {
+  const remap = new Map<string, string>();
+  for (const el of elements) {
+    if (el.groupId && !remap.has(el.groupId)) remap.set(el.groupId, generateId());
+  }
+  return remap;
+}
+
+function cloneAsNewDraft(
+  el: Element,
+  offsetX: number,
+  offsetY: number,
+  groupId: string | null,
+): ElementDraft {
   return {
     type: el.type,
     x: el.x + offsetX,
@@ -14,7 +28,7 @@ function cloneAsNewDraft(el: Element, offsetX: number, offsetY: number): Element
     props: el.props.points
       ? { ...el.props, points: el.props.points.map(([px, py]) => [px + offsetX, py + offsetY]) }
       : { ...el.props },
-    groupId: el.groupId,
+    groupId,
     frameId: el.frameId,
     locked: el.locked,
     createdBy: el.createdBy,
@@ -29,7 +43,10 @@ export function onDuplicateSelected(): void {
   const originals = elements.filter((el) => selectedIds.includes(el.id) && !el.isDeleted);
   if (originals.length === 0) return;
 
-  const drafts = originals.map((el) => cloneAsNewDraft(el, 10, 10));
+  const groupIdRemap = buildGroupIdRemap(originals);
+  const drafts = originals.map((el) =>
+    cloneAsNewDraft(el, 10, 10, el.groupId ? (groupIdRemap.get(el.groupId) ?? null) : null),
+  );
   const created = createElements(drafts);
   setSelectedIds(created.map((el) => el.id));
 }
@@ -54,7 +71,10 @@ export function onPasteSelected(): void {
 
   const nextOffset = pasteOffset + 1;
   const delta = nextOffset * 10;
-  const drafts = clipboard.map((el) => cloneAsNewDraft(el, delta, delta));
+  const groupIdRemap = buildGroupIdRemap(clipboard);
+  const drafts = clipboard.map((el) =>
+    cloneAsNewDraft(el, delta, delta, el.groupId ? (groupIdRemap.get(el.groupId) ?? null) : null),
+  );
   const created = createElements(drafts);
   setSelectedIds(created.map((el) => el.id));
   setClipboard(clipboard);

@@ -175,7 +175,7 @@ describe('P5-04 SyncRoom conflict resolution and validation', () => {
     expect(room.getStateSnapshot().documentClock).toBe(0);
   });
 
-  it('rejects invalid asset, group, and frame references before commit', async () => {
+  it('rejects invalid asset and frame references before commit', async () => {
     // @covers AC-9
     const image = makeElement({ id: 'image', type: 'image' });
     const shape = makeElement({ id: 'shape' });
@@ -187,18 +187,6 @@ describe('P5-04 SyncRoom conflict resolution and validation', () => {
       ),
     ).rejects.toMatchObject({ code: 'INVALID_VALUE' });
 
-    const groupRoom = createRoomWithElements([shape]);
-    await expect(
-      groupRoom.execute(
-        patchCommand('missing-group', [
-          patch('shape', 'transform.position', 0, { x: 10, y: 20 }),
-          patch('shape', 'grouping.groupId', 0, { groupId: 'missing-group' }),
-        ]),
-        editor,
-      ),
-    ).rejects.toMatchObject({ code: 'INVALID_BINDING_TARGET' });
-    expect(getElement(groupRoom, 'shape')).toMatchObject({ x: 0, y: 0, groupId: null });
-
     await expect(
       createRoomWithElements([shape]).execute(
         patchCommand('missing-frame', [
@@ -207,6 +195,27 @@ describe('P5-04 SyncRoom conflict resolution and validation', () => {
         editor,
       ),
     ).rejects.toMatchObject({ code: 'INVALID_BINDING_TARGET' });
+  });
+
+  it('accepts grouping.groupId as an opaque shared tag, not an element reference', async () => {
+    // @covers AC-9 — groupId is a client-generated tag shared by group members, never an
+    // existing element's id, so it must not be validated as a binding target.
+    const shape = makeElement({ id: 'shape' });
+    const groupRoom = createRoomWithElements([shape]);
+
+    await groupRoom.execute(
+      patchCommand('assign-group', [
+        patch('shape', 'transform.position', 0, { x: 10, y: 20 }),
+        patch('shape', 'grouping.groupId', 0, { groupId: 'brand-new-group-id' }),
+      ]),
+      editor,
+    );
+
+    expect(getElement(groupRoom, 'shape')).toMatchObject({
+      x: 10,
+      y: 20,
+      groupId: 'brand-new-group-id',
+    });
   });
 
   it('rejects derived and local-only fields with INVALID_FIELD', async () => {

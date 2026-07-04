@@ -7,8 +7,9 @@ import {
   getSelectedOverlayElement,
   type ElementLookup,
 } from './selectors';
-import { MultiSelectionOverlay, SelectionOverlay } from './SelectionOverlay';
+import { GroupSelectionOverlay, MultiSelectionOverlay, SelectionOverlay } from './SelectionOverlay';
 import type { HandleId } from '../../../types/interaction';
+import { resolveSelectionGroupIds } from '../../tools/select/group';
 
 interface LocalSelectionLayerProps {
   elementsById: ElementLookup;
@@ -36,6 +37,8 @@ export default function LocalSelectionLayer({
     remoteDraftsByElementId,
   );
   const multiSelectBounds = getMultiSelectBounds(Array.from(elementsById.values()), selectedIds);
+  const groupMemberIds = resolveSelectionGroupIds(selectedIds, Array.from(elementsById.values()));
+  const isGroupSelection = groupMemberIds !== null;
   const canShowLocalSelection = !editingId && draftElementsLength === 0;
 
   return (
@@ -43,7 +46,13 @@ export default function LocalSelectionLayer({
       {overlayElement && canShowLocalSelection && (
         <SelectionOverlay element={overlayElement} onHandlePointerDown={onHandlePointerDown} />
       )}
-      {multiSelectBounds && canShowLocalSelection && (
+      {multiSelectBounds && canShowLocalSelection && isGroupSelection && (
+        <GroupSelectionOverlay
+          bounds={multiSelectBounds}
+          onHandlePointerDown={onHandlePointerDown}
+        />
+      )}
+      {multiSelectBounds && canShowLocalSelection && !isGroupSelection && (
         <MultiSelectionOverlay bounds={multiSelectBounds} />
       )}
     </>

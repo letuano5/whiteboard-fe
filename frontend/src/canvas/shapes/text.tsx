@@ -1,10 +1,11 @@
 import type { Element } from '../../types/shared';
 import type { ShapeUtil } from './types';
+import { getBoundTextLines } from '../text/text-wrap';
 
 export const textShapeUtil: ShapeUtil = {
   type: 'text',
 
-  render(element) {
+  render(element, context) {
     const { x, y, angle, props } = element;
     const cx = x + element.width / 2;
     const cy = y + element.height / 2;
@@ -20,14 +21,19 @@ export const textShapeUtil: ShapeUtil = {
           : x;
     const hasBorder =
       props.fillColor !== 'transparent' && props.fillColor !== 'none' && props.strokeWidth > 0;
-    const lines = (props.text ?? '').split('\n');
+    const boundLines = context ? getBoundTextLines(element, context.elements) : null;
+    const lines = boundLines?.lines ?? (props.text ?? '').split('\n');
+    const renderedTextX = boundLines?.textX ?? textX;
+    const renderedY = boundLines?.firstLineY ?? y + fontSize;
+    const renderedLineHeight = boundLines?.lineHeight ?? lineHeight;
+    const renderedTextAnchor = boundLines ? 'middle' : textAnchor;
     return (
       <text
-        x={textX}
-        y={y + fontSize}
+        x={renderedTextX}
+        y={renderedY}
         fontSize={fontSize}
         fontFamily={props.fontFamily ?? 'sans-serif'}
-        textAnchor={textAnchor}
+        textAnchor={renderedTextAnchor}
         fill={props.strokeColor}
         stroke={hasBorder ? props.fillColor : undefined}
         strokeWidth={hasBorder ? props.strokeWidth : undefined}
@@ -37,7 +43,7 @@ export const textShapeUtil: ShapeUtil = {
         style={{ userSelect: 'none', WebkitUserSelect: 'none' }}
       >
         {lines.map((line, i) => (
-          <tspan key={i} x={textX} dy={i === 0 ? 0 : lineHeight}>
+          <tspan key={i} x={renderedTextX} dy={i === 0 ? 0 : renderedLineHeight}>
             {line}
           </tspan>
         ))}

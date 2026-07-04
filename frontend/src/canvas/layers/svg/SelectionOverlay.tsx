@@ -138,6 +138,45 @@ export function MultiSelectionOverlay({ bounds }: MultiSelectionOverlayProps) {
   );
 }
 
+interface GroupSelectionOverlayProps {
+  bounds: MultiSelectBounds;
+  onHandlePointerDown?: (handle: HandleId, e: React.PointerEvent<SVGCircleElement>) => void;
+}
+
+export function GroupSelectionOverlay({ bounds, onHandlePointerDown }: GroupSelectionOverlayProps) {
+  const { x, y, width, height } = bounds;
+  const handles: [ResizeHandleId, number, number][] = [
+    ['nw', x, y],
+    ['ne', x + width, y],
+    ['sw', x, y + height],
+    ['se', x + width, y + height],
+    ['n', x + width / 2, y],
+    ['s', x + width / 2, y + height],
+    ['e', x + width, y + height / 2],
+    ['w', x, y + height / 2],
+  ];
+
+  return (
+    <g>
+      <MultiSelectionOverlay bounds={bounds} />
+      {handles.map(([id, hx, hy]) => (
+        <circle
+          key={id}
+          data-handle={id}
+          cx={hx}
+          cy={hy}
+          r={4}
+          fill="white"
+          stroke="#3b82f6"
+          strokeWidth={1.5}
+          style={{ cursor: 'pointer' }}
+          onPointerDown={(e) => handlePointerDown(id, e, onHandlePointerDown)}
+        />
+      ))}
+    </g>
+  );
+}
+
 function handlePointerDown(
   handle: HandleId,
   e: React.PointerEvent<SVGCircleElement>,

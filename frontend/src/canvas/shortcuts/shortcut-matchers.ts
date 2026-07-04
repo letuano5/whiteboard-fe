@@ -21,6 +21,14 @@ export function isDuplicateShortcut(event: KeyboardShortcutInput): boolean {
   return isModifierPressed(event) && event.key === 'd';
 }
 
+export function isMergeShortcut(event: KeyboardShortcutInput): boolean {
+  return isModifierPressed(event) && event.key === 'g' && !event.shiftKey;
+}
+
+export function isUnmergeShortcut(event: KeyboardShortcutInput): boolean {
+  return isModifierPressed(event) && event.key === 'g' && event.shiftKey === true;
+}
+
 export function isDeleteShortcut(event: KeyboardShortcutInput): boolean {
   return event.key === 'Delete' || event.key === 'Backspace';
 }

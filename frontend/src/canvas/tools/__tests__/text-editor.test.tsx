@@ -13,6 +13,7 @@ vi.mock('../../../store/mutation-pipeline', () => ({
 
 import { patchElement } from '../../../store/mutation-pipeline';
 import TextEditor, { onCanvasDoubleClick } from '../text-editor';
+import { computeBoundTextLayout } from '../../text/text-wrap';
 
 const mockPatchElement = patchElement as ReturnType<typeof vi.fn>;
 
@@ -408,6 +409,63 @@ describe('TextEditor — AC-4b (auto-bbox uses content dimensions)', () => {
     expect(mockPatchElement).toHaveBeenCalledWith(
       'text-1',
       expect.objectContaining({ width: 60, height: 20 }),
+    );
+  });
+});
+
+// ─── Bound text: recenter/rewrap on commit instead of free-growing to content ─
+
+describe('TextEditor — bound text recenters and rewraps on commit', () => {
+  it('recenters using the bound container, ignoring the editor scroll dimensions', () => {
+    const container = makeRectElement({
+      id: 'container-1',
+      x: 0,
+      y: 0,
+      width: 200,
+      height: 100,
+      groupId: 'group-1',
+    });
+    const text = makeTextElement({
+      id: 'text-1',
+      groupId: 'group-1',
+      props: {
+        strokeColor: '#1a1a1a',
+        fillColor: 'transparent',
+        strokeWidth: 0,
+        strokeStyle: 'solid',
+        opacity: 1,
+        text: 'Hi',
+        fontSize: 16,
+        fontFamily: 'sans-serif',
+        textAlign: 'center',
+      },
+    });
+    useElementsStore.getState().setElements([container, text]);
+    useInteractionStore.getState().setEditingId(text.id);
+
+    const { container: dom } = render(<TextEditor element={text} camera={defaultCamera} />);
+    const div = dom.querySelector('[contenteditable]') as HTMLElement;
+
+    div.innerText = 'Hello World Wraps Here';
+    // Free-content scroll size the old (non-bound) code path would have used — must be ignored.
+    Object.defineProperty(div, 'scrollWidth', { configurable: true, value: 900 });
+    Object.defineProperty(div, 'scrollHeight', { configurable: true, value: 900 });
+    act(() => {
+      fireEvent.blur(div);
+    });
+
+    const expected = computeBoundTextLayout(container, {
+      props: { ...text.props, text: 'Hello World Wraps Here' },
+    });
+
+    expect(mockPatchElement).toHaveBeenCalledWith(
+      'text-1',
+      expect.objectContaining({
+        x: expected.x,
+        y: expected.y,
+        width: expected.width,
+        height: expected.height,
+      }),
     );
   });
 });

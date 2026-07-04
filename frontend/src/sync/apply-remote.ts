@@ -16,12 +16,15 @@ export function applyRemoteElements(incoming: Element[]): void {
   if (incoming.length === 0) return;
 
   const { elements } = useElementsStore.getState();
-  const { draggingId, selectedIds, resizeSession, isRotating, editingId } =
+  const { draggingId, selectedIds, resizeSession, groupResizeSession, isRotating, editingId } =
     useInteractionStore.getState();
 
   const activeIds = new Set<string>();
   if (draggingId) activeIds.add(draggingId);
-  if ((resizeSession !== null || isRotating) && selectedIds.length > 0) {
+  if (
+    (resizeSession !== null || groupResizeSession !== null || isRotating) &&
+    selectedIds.length > 0
+  ) {
     selectedIds.forEach((id) => activeIds.add(id));
   }
   if (editingId) activeIds.add(editingId);

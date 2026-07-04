@@ -3,12 +3,19 @@ import { useInteractionStore } from '../../../store/interaction.store';
 import type { Point } from '../../../types/geometry';
 import type { HandleId, ResizeHandleId } from '../../../types/interaction';
 import type { Element } from '../../../types/shared';
+import { getMultiSelectBounds } from '../../layers/svg/selectors';
 import { hitTestElementAtWorldPoint } from '../../shapes/hit-test';
 import { isFullyBoundArrow } from './bound-arrows';
 import { normalizeRect } from './geometry';
+import { resolveGroupMembers, resolveSelectionGroupIds } from './group';
 import { getResizeAnchor, isCornerResizeHandle, resizeBoundsFromAnchorAndPointer } from './resize';
 
-export function onSelectPointerDown(worldPt: Point, shiftKey = false): void {
+export function onSelectPointerDown(
+  worldPt: Point,
+  shiftKey = false,
+  toggleModifierKey = false,
+): void {
+  const toggleKey = shiftKey || toggleModifierKey;
   const elements = useElementsStore.getState().elements;
   const visible = elements.filter((el) => !el.isDeleted).sort((a, b) => b.zIndex - a.zIndex);
   const {
@@ -18,14 +25,15 @@ export function onSelectPointerDown(worldPt: Point, shiftKey = false): void {
     setDragStart,
     setResizeHandle,
     setResizeSession,
+    setGroupResizeSession,
     setMarquee,
   } = useInteractionStore.getState();
 
   for (const el of visible) {
     if (hitTestElementAtWorldPoint(el, worldPt)) {
       setMarquee(null);
-      if (shiftKey) {
-        // @covers AC-4, AC-5, AC-6: shift-click toggles element in/out of selection
+      if (toggleKey) {
+        // @covers AC-4, AC-5, AC-6: shift-click/ctrl-click/cmd-click toggles element in/out of selection
         const alreadySelected = selectedIds.includes(el.id);
         const newIds = alreadySelected
           ? selectedIds.filter((id) => id !== el.id)
@@ -40,15 +48,18 @@ export function onSelectPointerDown(worldPt: Point, shiftKey = false): void {
           setDragStart(worldPt);
           setResizeHandle(null);
           setResizeSession(null);
+          setGroupResizeSession(null);
         }
       } else {
         // Replace selection with this element
-        setSelectedIds([el.id]);
+        const groupMembers = el.groupId ? resolveGroupMembers(el.groupId, elements) : [];
+        setSelectedIds(groupMembers.length > 1 ? groupMembers.map((member) => member.id) : [el.id]);
         if (!isFullyBoundArrow(el)) {
           setDraggingId(el.id);
           setDragStart(worldPt);
           setResizeHandle(null);
           setResizeSession(null);
+          setGroupResizeSession(null);
         }
       }
       return;
@@ -56,21 +67,28 @@ export function onSelectPointerDown(worldPt: Point, shiftKey = false): void {
   }
 
   // Miss: start marquee drag; @covers AC-3, AC-7
-  if (!shiftKey) setSelectedIds([]);
+  if (!toggleKey) setSelectedIds([]);
   setDraggingId(null);
   setDragStart(worldPt);
   setResizeHandle(null);
   setResizeSession(null);
+  setGroupResizeSession(null);
   setMarquee(normalizeRect(worldPt, worldPt));
 }
 
 export function onSelectHandlePointerDown(handle: HandleId, worldPt: Point): void {
-  const { selectedIds, setDraggingId, setDragStart, setResizeHandle, setResizeSession } =
-    useInteractionStore.getState();
+  const {
+    selectedIds,
+    setDraggingId,
+    setDragStart,
+    setResizeHandle,
+    setResizeSession,
+    setGroupResizeSession,
+  } = useInteractionStore.getState();
   if (selectedIds.length === 0) return;
-  const selected = useElementsStore
-    .getState()
-    .elements.find((el) => el.id === selectedIds[0] && !el.isDeleted);
+  const elements = useElementsStore.getState().elements;
+  const groupMemberIds = resolveSelectionGroupIds(selectedIds, elements);
+  const selected = elements.find((el) => el.id === selectedIds[0] && !el.isDeleted);
   if (!selected) return;
 
   // Endpoint handles: just start a drag without creating a resize session
@@ -79,17 +97,35 @@ export function onSelectHandlePointerDown(handle: HandleId, worldPt: Point): voi
     setDragStart(worldPt);
     setResizeHandle(handle);
     setResizeSession(null);
+    setGroupResizeSession(null);
     return;
   }
 
   // At this point handle is ResizeHandleId | 'rotate'; 'rotate' is handled by
   // Whiteboard.tsx before calling this function, so it is always a ResizeHandleId here.
   const resizeHandle = handle as ResizeHandleId;
+  if (groupMemberIds) {
+    const bounds = getMultiSelectBounds(elements, groupMemberIds);
+    if (!bounds) return;
+    setDraggingId(selected.id);
+    setDragStart(worldPt);
+    setResizeHandle(resizeHandle);
+    setResizeSession(null);
+    setGroupResizeSession({
+      originalBounds: bounds,
+      originalHandle: resizeHandle,
+      anchor: getResizeAnchor({ ...selected, ...bounds }, resizeHandle),
+      memberIds: groupMemberIds,
+    });
+    return;
+  }
+
   if (selected.type === 'image' && !isCornerResizeHandle(resizeHandle)) return;
 
   setDraggingId(selected.id);
   setDragStart(worldPt);
   setResizeHandle(resizeHandle);
+  setGroupResizeSession(null);
   setResizeSession({
     originalBounds: {
       x: selected.x,

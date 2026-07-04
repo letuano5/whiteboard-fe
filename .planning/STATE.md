@@ -1,12 +1,20 @@
 ---
-gsd_state_version: '1.0'
+gsd_state_version: 1.0
+milestone: v1.0
+milestone_name: milestone
+current_phase: 2.57
+current_phase_name: P2.5-07 Merge items + bind text into container
 status: complete
+stopped_at: Phase 2.57 implemented and verified
+last_updated: "2026-07-04T15:01:00+07:00"
+last_activity: 2026-07-04
+last_activity_desc: Completed P2.5-07 merge items and bound text support.
 progress:
-  total_phases: 23
-  completed_phases: 23
+  total_phases: 24
+  completed_phases: 20
   total_plans: 26
-  completed_plans: 26
-  percent: 100
+  completed_plans: 22
+  percent: 83
 ---
 
 # Project State
@@ -16,14 +24,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-30)
 
 **Core value:** Users can create tactical whiteboards without losing work, then collaborate or persist documents when the workflow calls for it.
-**Current focus:** Phase 3.33: P3C-03 Highlighter (completed)
+**Current focus:** Phase 2.57: P2.5-07 Merge items + bind text into container (completed)
 
 ## Current Position
 
-Phase: 3.33 of active GSD bootstrap (P3C-03 Highlighter)
-Plan: 1 of 1 in current phase
+Phase: 2.57 of active GSD bootstrap (P2.5-07 Merge items + bind text into container)
+Plan: 3 of 3 in current phase
 Status: Complete
-Last activity: 2026-07-03 - Completed P3C-03 SVG highlighter drawing support.
+Last activity: 2026-07-04 - Completed P2.5-07 merge/grouping, bound text, group drag/resize.
 
 Progress: [##########] 100%
 
@@ -33,8 +41,10 @@ Progress: [##########] 100%
 
 - [Phase 2.51]: Image elements use existing `Element` records with `type: 'image'` and
   `props.src`; rendering stays SVG-only and insertion supports URL plus data URL upload.
+
 - [Phase 2.51]: Background image insertion means assigning a lower `zIndex` than every currently
   visible element while move/resize remains the existing select-tool path.
+
 - [Phase 4.0]: Root path without `room` is the local-only board surface.
 - [Phase 4.0]: Saved documents continue to use `/?room=<uuid>`.
 - [Phase 4.1]: Dashboard uses `/dashboard` with native pathname checks; saved documents still open through `/?room=<uuid>`.
@@ -61,26 +71,36 @@ Progress: [##########] 100%
 - [Phase 5.6]: Persistence recovery rebuilds hot room indexes/maps from Postgres before accepting subsequent commands.
 - [Phase 5.7]: Reconnect/load payloads use P5 `serverClock`, `roomEpoch`, and slot clocks; legacy
   clock aliases are compatibility only.
+
 - [Phase 5.7]: Diff must not cross `roomEpoch`; replace-boundary or stale-history requests return
   wipe-all snapshots.
+
 - [Phase 5.8]: Arrow binding repair is server-authoritative; repaired binding and geometry slots
   must be emitted in the same committed change set as the triggering delete or target mutation.
+
 - [Phase 5.9]: Whole-document saved-room import/restore uses `ReplaceDocumentCommand` through
   `SyncRoom`; direct repository writes remain legacy/bypass and are not authoritative.
+
 - [Phase 5.10]: Local-board export can still use frontend local state, but saved-document export
   must materialize from the backend SyncRoom/repository path and remain read-only.
+
 - [Phase 5.11]: Saved-room frontend mutations use P5 `SyncCommand` queues; presence/cursor,
   selection, and draft preview remain ephemeral and must not persist or advance documentClock.
+
 - [Phase 3.30]: P3C ink remains SVG-only; draft point-heavy rendering is isolated in child SVG
   layers and committed element rendering is memoized before adding freehand/highlighter/eraser.
+
 - [Phase 3.31]: P3C-01 adds committed freehand/highlighter SVG rendering only; drawing tools,
   point simplification, highlighter styling controls, and eraser behavior remain later P3C phases.
+
 - [Phase 3.32]: Freehand uses SVG-only point geometry with local Douglas-Peucker simplification,
   `MAX_POINTS_PER_FREEHAND_STROKE = 600`, and automatic stroke splitting while staying on the
   existing frontend mutation pipeline.
+
 - [Phase 3.33]: Highlighter uses the same SVG-only freehand point pipeline with fixed
   semi-transparent, wider stroke defaults; no blend mode, filter, Canvas overlay, backend schema,
   or P5 sync contract changes are required.
+
 - [Phase 3.34]: Eraser remains SVG/pointer-pipeline only, reuses registered shape hit-test
   utilities by sampling each drag segment, and deletes whole elements through `deleteElements`.
 
@@ -118,6 +138,6 @@ Progress: [##########] 100%
 
 ## Session Continuity
 
-Last session: 2026-07-01
-Stopped at: P5-08 implemented and verified
-Resume file: None
+Last session: 2026-07-04T06:54:18.469Z
+Stopped at: Phase 2.57 implemented and verified
+Resume file: .planning/phases/02.57-p2-5-07-merge-items-bind-text/02.57-03-SUMMARY.md

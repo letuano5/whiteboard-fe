@@ -224,7 +224,7 @@ describe('ink shape utils', () => {
     const p = jsx.props as AnyProps;
 
     expect(jsx.type).toBe('g');
-    const child = (p['children'] as { type: string; props: AnyProps });
+    const child = p['children'] as { type: string; props: AnyProps };
     expect(child.type).toBe('path');
     expect(child.props['d']).toBe('M 10 20 Q 30 45 45 40 L 60 35');
     expect(child.props['fill']).toBe('none');
@@ -255,7 +255,7 @@ describe('ink shape utils', () => {
     const p = jsx.props as AnyProps;
 
     expect(jsx.type).toBe('g');
-    const child = (p['children'] as { type: string; props: AnyProps });
+    const child = p['children'] as { type: string; props: AnyProps };
     expect(child.type).toBe('path');
     expect(child.props['d']).toBe('M -5 5 L 15 25');
     expect(child.props['stroke']).toBe('#facc15');
@@ -324,7 +324,6 @@ describe('ink shape utils', () => {
     const p = jsx.props as AnyProps;
     expect(p['transform']).toBe('rotate(90 35 32.5)');
   });
-
 });
 
 describe('textShapeUtil', () => {
@@ -381,6 +380,42 @@ describe('textShapeUtil', () => {
     expect(children[0].props['dy']).toBe(0);
     expect(children[1].props['children']).toBe('World');
     expect(children[1].props['dy']).toBeCloseTo(16 * 1.2); // fontSize * lineHeight ratio
+  });
+
+  it('renders bound text using the provided element context', () => {
+    const container = makeElement({
+      id: 'box',
+      type: 'rectangle',
+      x: 100,
+      y: 20,
+      width: 100,
+      height: 60,
+      groupId: 'g',
+    });
+    const label = makeElement({
+      id: 'label',
+      type: 'text',
+      x: 0,
+      y: 0,
+      width: 10,
+      height: 10,
+      groupId: 'g',
+      props: {
+        strokeColor: '#333',
+        fillColor: 'none',
+        strokeWidth: 1,
+        strokeStyle: 'solid',
+        opacity: 1,
+        text: 'Label',
+        fontSize: 10,
+      },
+    });
+
+    const jsx = textShapeUtil.render(label, { elements: [container, label] });
+    const props = jsx.props as AnyProps;
+
+    expect(props['x']).toBe(150);
+    expect(props['textAnchor']).toBe('middle');
   });
 
   it('getBounds returns element bounds', () => {
@@ -530,7 +565,10 @@ describe('lineShapeUtil.hitTest', () => {
       strokeWidth: 2,
       strokeStyle: 'solid' as const,
       opacity: 1,
-      points: [[0, 0], [100, 0]] as [number, number][],
+      points: [
+        [0, 0],
+        [100, 0],
+      ] as [number, number][],
     },
   });
 

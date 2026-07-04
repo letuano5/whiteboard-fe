@@ -154,6 +154,40 @@ describe('onSelectPointerDown — edge cases', () => {
   });
 });
 
+describe('onSelectPointerDown — Ctrl/Cmd-click toggle multi-select', () => {
+  it('ctrl-click adds a second shape to the existing selection', () => {
+    const a = makeElement({ id: 'shape-a', x: 0, y: 0, width: 50, height: 50 });
+    const b = makeElement({ id: 'shape-b', x: 100, y: 0, width: 50, height: 50 });
+    useElementsStore.getState().setElements([a, b]);
+    useInteractionStore.getState().setSelectedIds(['shape-a']);
+
+    onSelectPointerDown({ x: 125, y: 25 }, false, true);
+
+    expect(useInteractionStore.getState().selectedIds).toEqual(['shape-a', 'shape-b']);
+  });
+
+  it('cmd-click on an already-selected shape removes it from the selection', () => {
+    const a = makeElement({ id: 'shape-a', x: 0, y: 0, width: 50, height: 50 });
+    const b = makeElement({ id: 'shape-b', x: 100, y: 0, width: 50, height: 50 });
+    useElementsStore.getState().setElements([a, b]);
+    useInteractionStore.getState().setSelectedIds(['shape-a', 'shape-b']);
+
+    onSelectPointerDown({ x: 25, y: 25 }, false, true);
+
+    expect(useInteractionStore.getState().selectedIds).toEqual(['shape-b']);
+  });
+
+  it('ctrl-click on empty area preserves the existing selection', () => {
+    const a = makeElement({ id: 'shape-a', x: 0, y: 0, width: 50, height: 50 });
+    useElementsStore.getState().setElements([a]);
+    useInteractionStore.getState().setSelectedIds(['shape-a']);
+
+    onSelectPointerDown({ x: 200, y: 200 }, false, true);
+
+    expect(useInteractionStore.getState().selectedIds).toEqual(['shape-a']);
+  });
+});
+
 // ─── P1A-03: Move / Resize / Delete ──────────────────────────────────────────
 
 function resetDragState() {

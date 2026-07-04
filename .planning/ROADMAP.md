@@ -58,7 +58,7 @@ project roadmap, phase order, and product scope remain canonical in `docs/SPECS.
 - [x] **Phase 5.9: P5-09 Replace document for import/restore** - Saved-room import/restore replaces the document through the authoritative sync room path, bumps room epoch, and broadcasts one server truth.
 - [x] **Phase 5.10: P5-10 Export adapters use materialized server truth** - Saved-room native export reads a materialized server snapshot and shared import/export normalization reports unsupported objects without partial mutation.
 - [x] **Phase 5.11: P5-11 Frontend reconciliation** - Saved-room frontend mutations use bounded P5 command queues, slot-aware reconciliation, reconnect-safe pending replay, and ephemeral presence/draft preview.
-- [ ] **Phase 2.57: P2.5-07 Merge items + bind text vào container** - Users can merge multiple elements into a group via `groupId`, and merging exactly one text with one container shape binds the text as a centered, wrapping, container-following label.
+- [x] **Phase 2.57: P2.5-07 Merge items + bind text vào container** - Users can merge multiple elements into a group via `groupId`, and merging exactly one text with one container shape binds the text as a centered, wrapping, container-following label.
 
 ## Phase Details
 
@@ -584,9 +584,9 @@ container shape so the label follows the container's move/resize/delete/z-order.
 
 Plans:
 
-- [ ] 02.57-01-PLAN.md — Merge/Unmerge commands (context menu + Cmd/Ctrl+G / Cmd/Ctrl+Shift+G), join-vs-flatten rule, group-aware delete cascade, copy/duplicate groupId remap (AC-1, AC-2, AC-3, AC-10, AC-11, AC-12).
-- [ ] 02.57-02-PLAN.md — Text-binding at merge: derived resolveGroupBinding, jsdom-safe text-wrap, centered/wrapped/higher-zIndex label, move/resize/delete + z-order cascade to bound text (AC-4, AC-5, AC-6, AC-7, AC-12).
-- [ ] 02.57-03-PLAN.md — Group-bbox resize + full group-drag + D-01 group-click selection: non-text scaling, bound-text recenter/rewrap, independent-text position-only (D-03), no-new-slot regression (AC-8, AC-9, AC-12, AC-13).
+- [x] 02.57-01-PLAN.md — Merge/Unmerge commands (context menu + Cmd/Ctrl+G / Cmd/Ctrl+Shift+G), join-vs-flatten rule, group-aware delete cascade, copy/duplicate groupId remap (AC-1, AC-2, AC-3, AC-10, AC-11, AC-12).
+- [x] 02.57-02-PLAN.md — Text-binding at merge: derived resolveGroupBinding, jsdom-safe text-wrap, centered/wrapped/higher-zIndex label, move/resize/delete + z-order cascade to bound text (AC-4, AC-5, AC-6, AC-7, AC-12).
+- [x] 02.57-03-PLAN.md — Group-bbox resize + full group-drag + D-01 group-click selection: non-text scaling, bound-text recenter/rewrap, independent-text position-only (D-03), no-new-slot regression (AC-8, AC-9, AC-12, AC-13).
 
 ## Progress
 

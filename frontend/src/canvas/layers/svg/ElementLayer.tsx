@@ -46,7 +46,12 @@ function ElementLayer({ elements, editingId }: ElementLayerProps) {
   return (
     <>
       {visibleElements.map((el) => (
-        <CommittedElement key={el.id} element={el} isEditing={el.id === editingId} />
+        <CommittedElement
+          key={el.id}
+          element={el}
+          elements={elements}
+          isEditing={el.id === editingId}
+        />
       ))}
     </>
   );
@@ -54,11 +59,13 @@ function ElementLayer({ elements, editingId }: ElementLayerProps) {
 
 interface CommittedElementProps {
   element: Element;
+  elements: Element[];
   isEditing: boolean;
 }
 
 const CommittedElement = memo(function CommittedElement({
   element,
+  elements,
   isEditing,
 }: CommittedElementProps) {
   const util = getShapeUtil(element.type);
@@ -70,7 +77,7 @@ const CommittedElement = memo(function CommittedElement({
     return null;
   }
 
-  return <g opacity={isEditing ? 0 : undefined}>{util.render(element)}</g>;
+  return <g opacity={isEditing ? 0 : undefined}>{util.render(element, { elements })}</g>;
 });
 
 export default memo(ElementLayer);

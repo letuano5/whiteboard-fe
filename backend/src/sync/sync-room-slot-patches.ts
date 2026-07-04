@@ -158,11 +158,9 @@ function validateReferencePatch(
       if (context.referenceValidator?.canUseAssetSrc?.(src, context.actorContext) === true) return;
       throw new SyncRoomCommandError('INVALID_VALUE');
     }
-    case 'grouping.groupId': {
-      const changes = patch.changes as SlotValue<'grouping.groupId'>;
-      validateElementReference(context, elementId, changes.groupId, 'group');
+    case 'grouping.groupId':
+      // groupId is an opaque shared tag, not a reference to an existing element — no lookup needed.
       return;
-    }
     case 'grouping.frameId': {
       const changes = patch.changes as SlotValue<'grouping.frameId'>;
       validateElementReference(context, elementId, changes.frameId, 'frame');

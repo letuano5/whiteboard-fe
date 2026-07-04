@@ -9,6 +9,9 @@ import {
   type ElementDraft,
 } from '../mutation-pipeline';
 import { initHistoryCapture } from '../../sync/history-capture';
+import { useInteractionStore } from '../interaction.store';
+import { onMergeSelected } from '../../canvas/tools/select/merge';
+import { resolveGroupDeletionIds } from '../../canvas/tools/select/group';
 
 function makeDraft(overrides: Partial<ElementDraft> = {}): ElementDraft {
   return {
@@ -59,6 +62,41 @@ describe('AC-1: undo createElement removes the element', () => {
     useHistoryStore.getState().undo();
 
     expect(getElement(el.id).isDeleted).toBe(true);
+  });
+});
+
+describe('group operation history', () => {
+  it('@covers AC-12 undoes and redoes merge as one step', () => {
+    const a = createElement(makeDraft());
+    const b = createElement(makeDraft({ x: 20 }));
+    useHistoryStore.setState({ undoStack: [], redoStack: [] });
+    useInteractionStore.getState().setSelectedIds([a.id, b.id]);
+
+    onMergeSelected();
+    expect(getElement(a.id).groupId).toBe(getElement(b.id).groupId);
+    expect(useHistoryStore.getState().undoStack).toHaveLength(1);
+
+    useHistoryStore.getState().undo();
+    expect(getElement(a.id).groupId).toBeNull();
+    expect(getElement(b.id).groupId).toBeNull();
+
+    useHistoryStore.getState().redo();
+    expect(getElement(a.id).groupId).toBe(getElement(b.id).groupId);
+  });
+
+  it('@covers AC-12 undoes group delete as one step', () => {
+    const a = createElement(makeDraft({ groupId: 'g' }));
+    const b = createElement(makeDraft({ groupId: 'g', x: 20 }));
+    useHistoryStore.setState({ undoStack: [], redoStack: [] });
+
+    deleteElements(resolveGroupDeletionIds([a.id], useElementsStore.getState().elements));
+    expect(getElement(a.id).isDeleted).toBe(true);
+    expect(getElement(b.id).isDeleted).toBe(true);
+    expect(useHistoryStore.getState().undoStack).toHaveLength(1);
+
+    useHistoryStore.getState().undo();
+    expect(getElement(a.id).isDeleted).toBe(false);
+    expect(getElement(b.id).isDeleted).toBe(false);
   });
 });
 

@@ -4,6 +4,9 @@ import type { Point } from '../../../types/geometry';
 import { normalizeLinearBounds, rotatePoint, unrotatePoint } from '../../../utils/geometry';
 import { computeBoundArrowDrafts, computeMultiDragDrafts } from './bound-arrows';
 import { normalizeRect } from './geometry';
+import { computeBoundContainerCascade, computeGroupDragDrafts } from './group-drag';
+import { computeGroupResizeDrafts } from './group-resize';
+import { resolveSelectionGroupIds } from './group';
 import { translatePointGeometry } from './point-geometry';
 import {
   computeResizeProps,
@@ -17,6 +20,7 @@ export function onSelectPointerMove(worldPt: Point): void {
     draggingId,
     dragStart,
     resizeSession,
+    groupResizeSession,
     isRotating,
     marquee,
     selectedIds,
@@ -34,17 +38,40 @@ export function onSelectPointerMove(worldPt: Point): void {
 
   if (!draggingId || !dragStart) return;
 
-  // @covers AC-8: multi-drag — move all selected elements together
-  if (selectedIds.length > 1) {
-    const dx = worldPt.x - dragStart.x;
-    const dy = worldPt.y - dragStart.y;
-    const allElements = useElementsStore.getState().elements;
-    // @covers AC-8: add non-selected arrows bound to any selected element
-    setDraftElements(computeMultiDragDrafts(selectedIds, dx, dy, allElements));
+  const elements = useElementsStore.getState().elements;
+  const groupMemberIds = resolveSelectionGroupIds(selectedIds, elements);
+
+  if (groupResizeSession) {
+    const { flippedX, flippedY, activeHandle, ...newBounds } = resizeBoundsFromAnchorAndPointer(
+      groupResizeSession,
+      worldPt,
+    );
+    void flippedX;
+    void flippedY;
+    setDraftElements(
+      computeGroupResizeDrafts(
+        groupResizeSession.memberIds,
+        groupResizeSession.originalBounds,
+        newBounds,
+        elements,
+      ),
+    );
+    setResizeHandle(activeHandle);
     return;
   }
 
-  const elements = useElementsStore.getState().elements;
+  // @covers AC-8: multi-drag — move all selected elements together
+  if (selectedIds.length > 1 || groupMemberIds) {
+    const dx = worldPt.x - dragStart.x;
+    const dy = worldPt.y - dragStart.y;
+    setDraftElements(
+      groupMemberIds
+        ? computeGroupDragDrafts(groupMemberIds, dx, dy, elements)
+        : computeMultiDragDrafts(selectedIds, dx, dy, elements),
+    );
+    return;
+  }
+
   const el = elements.find((e) => e.id === draggingId);
   if (!el) return;
 
@@ -99,12 +126,11 @@ export function onSelectPointerMove(worldPt: Point): void {
         y: yl,
         width,
         height,
-      } =
-        el.type === 'image'
-          ? fitBoundsToAspectRatio(resizeSession, rawBounds, activeHandle)
-          : el.type === 'text'
-            ? fitTextBoundsToFontScale(resizeSession, rawBounds, activeHandle)
-            : rawBounds;
+      } = el.type === 'image'
+        ? fitBoundsToAspectRatio(resizeSession, rawBounds, activeHandle)
+        : el.type === 'text'
+          ? fitTextBoundsToFontScale(resizeSession, rawBounds, activeHandle)
+          : rawBounds;
 
       // 4. The session.anchor may be at any corner/edge of the new box.
       //    Compute its fraction within the new box (0=min edge, 1=max edge).
@@ -127,7 +153,10 @@ export function onSelectPointerMove(worldPt: Point): void {
         props: computeResizeProps(el, resizeSession, bounds, flippedX, flippedY),
       };
       setDraftElement(draftEl);
-      setDraftElements(computeBoundArrowDrafts(draftEl, useElementsStore.getState().elements));
+      setDraftElements([
+        ...computeBoundArrowDrafts(draftEl, elements),
+        ...computeBoundContainerCascade(draftEl, elements),
+      ]);
       setResizeHandle(activeHandle);
     } else {
       const { flippedX, flippedY, activeHandle, ...rawBounds } = resizeBoundsFromAnchorAndPointer(
@@ -146,7 +175,10 @@ export function onSelectPointerMove(worldPt: Point): void {
         props: computeResizeProps(el, resizeSession, bounds, flippedX, flippedY),
       };
       setDraftElement(draftEl);
-      setDraftElements(computeBoundArrowDrafts(draftEl, useElementsStore.getState().elements));
+      setDraftElements([
+        ...computeBoundArrowDrafts(draftEl, elements),
+        ...computeBoundContainerCascade(draftEl, elements),
+      ]);
       setResizeHandle(activeHandle);
     }
   } else {
@@ -160,6 +192,9 @@ export function onSelectPointerMove(worldPt: Point): void {
       props: translatePointGeometry(el, dx, dy),
     };
     setDraftElement(draftEl);
-    setDraftElements(computeBoundArrowDrafts(draftEl, useElementsStore.getState().elements));
+    setDraftElements([
+      ...computeBoundArrowDrafts(draftEl, elements),
+      ...computeBoundContainerCascade(draftEl, elements),
+    ]);
   }
 }

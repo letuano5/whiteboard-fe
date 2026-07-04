@@ -580,6 +580,74 @@ ROOM_SNAPSHOT / ROOM_DIFF based on documentClock
 - [ ] Không cần reroute khi user di chuyển shape không phải source/target.
 - [ ] Không cần routing toàn cục giữa nhiều arrow.
 
+### [P2.5-07] Merge items + bind text vào container
+
+**Vấn đề:** Tactical board thường cần một ký hiệu gồm nhiều phần đi chung với nhau, ví dụ một
+shape làm container và một text label nằm bên trong. Hiện tại user có thể multi-select và kéo nhiều
+shape cùng lúc, nhưng sau khi bỏ chọn thì các item lại là object rời; text label không tự bám theo
+container khi container được move/resize/delete.
+
+**Mục tiêu:** Cung cấp MVP "merge items" theo nghĩa **gom nhiều element thành một đơn vị thao tác**
+dựa trên `groupId`, và hỗ trợ trường hợp quan trọng nhất là **bind text vào container**. Không làm
+boolean-union/flatten shape trong phase này.
+
+- [ ] Multi-select 2+ element → có lệnh **Merge/Group** gán cùng một `groupId` cho các element, thao
+      tác qua context menu chuột phải hiện có (`ContextMenu`, cần bỏ gate `selectedCount !== 1` để
+      menu không bị disable khi multi-select) kèm phím tắt **Cmd/Ctrl+G**.
+- [ ] Chọn element thuộc group → có lệnh **Unmerge/Ungroup** clear `groupId` cho toàn bộ group, cùng
+      qua context menu và phím tắt **Cmd/Ctrl+Shift+G**.
+- [ ] Nếu selection có sẵn element thuộc group `G` trộn với element rời (chưa có group), Merge gán
+      `groupId = G` cho toàn bộ selection (join vào group hiện có, không tạo id mới). Rule "flatten
+      thành `groupId` mới" ở mục Out of scope chỉ áp dụng khi selection chứa **từ 2 group khác nhau
+      trở lên**.
+- [ ] Nếu merge đúng 1 `text` + 1 container shape (`rectangle`, `ellipse`, `diamond`, `triangle`,
+      `polygon`, hoặc `image`), text được coi là bound label của container:
+  - [ ] Text được căn vào giữa container lúc merge.
+  - [ ] Text tự wrap theo width khả dụng của container, có padding tối thiểu để chữ không sát viền.
+  - [ ] Khi container resize, text bbox/wrap width được cập nhật theo container để label vẫn nằm
+        trong container trong trường hợp nội dung đủ ngắn/vừa.
+  - [ ] Text có `zIndex` cao hơn container để luôn nhìn thấy; lệnh z-order (Bring to
+        Front/Forward/Backward/Send to Back) áp lên container sẽ kéo luôn text bound đi kèm để giữ
+        invariant này, còn áp trực tiếp lệnh z-order lên bound text bị vô hiệu hoá vì vị trí z-order
+        của nó luôn suy ra theo container.
+  - [ ] Khi move container, text di chuyển theo cùng delta.
+  - [ ] Khi resize container, text được recenter theo bbox mới của container.
+  - [ ] Khi delete container, text bound cùng group cũng bị delete để không để label mồ côi.
+- [ ] Nếu merge 1 `text` với nhiều hơn 1 container-eligible shape, hoặc nhiều hơn 1 `text`, kết quả
+      là **plain group** (chỉ gán `groupId` chung) — không có hành vi center/wrap/recenter/zIndex
+      invariant nào ở trên; binding chỉ kích hoạt khi đúng 1 text + 1 container.
+- [ ] Drag một item bất kỳ trong group sẽ kéo cả group trong draft mode và commit cùng một mutation
+      batch qua mutation pipeline.
+- [ ] Resize một group cơ bản bằng bbox tổng hợp:
+  - [ ] Non-text elements scale theo bbox group mới.
+  - [ ] Text bound trong container recenter và rewrap theo container mới.
+  - [ ] Text độc lập trong group giữ vị trí tương đối; font size có thể scale tuyến tính theo group
+        resize nếu không làm chữ tràn xấu.
+- [ ] Delete một item trong group sẽ delete toàn bộ group, trừ khi user ungroup trước.
+- [ ] Copy/duplicate group giữ quan hệ group nội bộ bằng `groupId` mới, không reuse group id cũ.
+- [ ] Sync không thêm event mới: P1-P4 đi qua element update hiện có; P5 dùng slot
+      `grouping.groupId` đã có trong sync contracts.
+- [ ] Undo/redo vẫn coi merge/unmerge/move/delete group là các mutation có thể hoàn tác.
+
+**Out of scope phase này:**
+
+- [ ] Không làm boolean union, subtract, intersect, flatten path, hoặc xuất nhiều shape thành một
+      shape hình học duy nhất.
+- [ ] Không làm nested group hoặc group-in-group: nếu merge nhiều group với nhau, hệ thống flatten
+      tất cả element trong các group đó thành một `groupId` mới.
+- [ ] Không làm rotate group bằng bbox tổng hợp trong phase này; rotate từng element riêng vẫn theo
+      hành vi hiện có.
+- [ ] Không làm auto-layout phức tạp trong container như auto-grow container theo text, nhiều vùng
+      text, rich text, padding tuỳ chỉnh, hoặc vertical alignment nhiều mode. Phase này vẫn phải có
+      text wrapping cơ bản theo width container.
+- [ ] Không cần xử lý text tràn khỏi container sau khi container bị resize nhỏ lại: không clip,
+      không auto-shrink font — text có thể vẽ tràn ra ngoài container, chấp nhận xấu.
+
+**Ghi chú triển khai:** khi implement, nên chia thành 3 sub-phase/commit riêng theo convention "work
+one phase at a time": (a) Merge/Unmerge cơ bản + context menu + group-aware delete cascade + fix
+copy/duplicate groupId remap, (b) text-binding tại thời điểm merge (center/wrap/zIndex invariant),
+(c) group-bbox resize (bbox tổng hợp cho multi-element) + text rewrap theo container mới.
+
 ---
 
 ## 9. Phase 3A — Persistence & reconnect
