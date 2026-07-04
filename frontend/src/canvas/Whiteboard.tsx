@@ -20,7 +20,7 @@ import { useWheelPanZoom } from './hooks/use-wheel-pan-zoom';
 import { useWhiteboardPointerHandlers } from './hooks/use-whiteboard-pointer-handlers';
 import { useWhiteboardShortcuts } from './hooks/use-whiteboard-shortcuts';
 import { waitForSyncIdle } from '../sync/socket-client';
-import { dashboardPath } from '../app/routing';
+import { dashboardPath, navigate } from '../app/routing';
 
 interface WhiteboardProps {
   mode?: 'local' | 'saved';
@@ -32,8 +32,7 @@ async function openDashboard(isLocalBoard: boolean): Promise<void> {
   if (!isLocalBoard) {
     await waitForSyncIdle();
   }
-  window.history.pushState({}, '', dashboardPath());
-  window.location.reload();
+  navigate(dashboardPath());
 }
 
 export default function Whiteboard({ mode = 'saved' }: WhiteboardProps) {

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useSyncExternalStore } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { AuthMenu } from '../auth/AuthMenu';
 import { useAuthStore } from '../auth/auth.store';
@@ -8,13 +8,16 @@ import { useRoomAccessStore } from '../rooms/room-access.store';
 import { registerMutationHook } from '../store/mutation-pipeline';
 import { createArrowBindingHook } from '../sync/arrow-binding-hook';
 import { initSocketClient, stopSocketClient } from '../sync/socket-client';
-import { isDashboardPath } from './routing';
+import { getLocationSnapshot, isDashboardPath, subscribeToLocation } from './routing';
 
 export default function App() {
   const session = useAuthStore((state) => state.session);
   const authStatus = useAuthStore((state) => state.status);
   const accessErrorCode = useRoomAccessStore((state) => state.errorCode);
   const accessErrorMessage = useRoomAccessStore((state) => state.errorMessage);
+  // Re-renders on navigate() and on browser back/forward, so switching to/from
+  // the dashboard doesn't require a full page reload.
+  useSyncExternalStore(subscribeToLocation, getLocationSnapshot);
   const roomId = new URLSearchParams(window.location.search).get('room');
   const previousAccessTokenRef = useRef<string | null | undefined>(undefined);
 

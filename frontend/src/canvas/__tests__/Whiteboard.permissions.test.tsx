@@ -94,8 +94,9 @@ describe('Whiteboard role permissions', () => {
     render(<Whiteboard mode="saved" />);
     fireEvent.click(screen.getByRole('button', { name: /open dashboard/i }));
 
-    // Navigation now waits for any pending sync commands to settle first.
-    await waitFor(() => expect(reload).toHaveBeenCalledOnce());
-    expect(pushStateSpy).toHaveBeenCalledWith({}, '', '/dashboard');
+    // Navigation now waits for any pending sync commands to settle first, then
+    // pushes the route without a full page reload.
+    await waitFor(() => expect(pushStateSpy).toHaveBeenCalledWith({}, '', '/dashboard'));
+    expect(reload).not.toHaveBeenCalled();
   });
 });

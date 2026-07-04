@@ -22,6 +22,25 @@ export function isDashboardPath(pathname: string): boolean {
   return pathname === dashboardPath();
 }
 
+// Pushes a path without a full page reload. Dispatching a synthetic
+// popstate lets App.tsx react the same way it does to browser back/forward,
+// so callers don't need their own re-render mechanism.
+export function navigate(path: string): void {
+  window.history.pushState({}, '', path);
+  window.dispatchEvent(new PopStateEvent('popstate'));
+}
+
+// Pair for React's useSyncExternalStore so App.tsx re-renders on navigate()
+// and on browser back/forward, instead of reading window.location once.
+export function subscribeToLocation(callback: () => void): () => void {
+  window.addEventListener('popstate', callback);
+  return () => window.removeEventListener('popstate', callback);
+}
+
+export function getLocationSnapshot(): string {
+  return window.location.pathname + window.location.search;
+}
+
 // GitHub Pages is a static host with no SPA fallback: a hard navigation/
 // refresh on /whiteboard-fe/dashboard 404s before any JS runs. public/404.html
 // stashes the intended path and bounces back to the app root; this restores
