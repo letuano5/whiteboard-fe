@@ -8,6 +8,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { execSync } from 'child_process';
+import { existsSync } from 'fs';
 import { resolve } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -19,7 +20,9 @@ const SCRIPT = resolve(REPO_ROOT, '.agents/skills/implement-feature/scripts/chec
 const ACCEPTANCE_MD = resolve(REPO_ROOT, 'specs/021-postgresql-prisma-autosave/acceptance.md');
 const TEST_DIR = resolve(REPO_ROOT, 'backend/src');
 
-describe('AC-11: AC coverage guard', () => {
+// .agents/ is local dev tooling (gitignored, not checked out in CI or fresh
+// clones). Skip the guard there instead of failing on missing tooling.
+describe.skipIf(!existsSync(SCRIPT))('AC-11: AC coverage guard', () => {
   it('check-ac-coverage.sh passes — every AC-n has a @covers tag', () => {
     let output = '';
     let exitCode = 0;
