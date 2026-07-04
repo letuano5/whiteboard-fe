@@ -3,9 +3,12 @@ import { createRoot } from 'react-dom/client';
 import './index.css';
 import App from './app/App';
 import { bootstrapApp } from './app/bootstrap';
+import { isDashboardPath, restoreGhPagesRedirect } from './app/routing';
+
+restoreGhPagesRedirect();
 
 const roomId = new URLSearchParams(window.location.search).get('room') ?? '';
-const route = window.location.pathname === '/dashboard' ? 'dashboard' : 'canvas';
+const route = isDashboardPath(window.location.pathname) ? 'dashboard' : 'canvas';
 
 void bootstrapApp(roomId, { route });
 
