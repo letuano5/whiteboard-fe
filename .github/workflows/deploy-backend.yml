@@ -28,6 +28,9 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # @prisma/client v6 ships no default client — it must be generated from
+      # schema.prisma before anything can import PrismaClient/Prisma types.
+      - run: pnpm --filter whiteboard-be exec prisma generate
       - run: pnpm --filter whiteboard-be typecheck
       - run: pnpm --filter whiteboard-be test:run
 
