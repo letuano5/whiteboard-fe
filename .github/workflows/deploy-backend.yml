@@ -74,5 +74,7 @@ jobs:
           script: |
             set -e
             cd ${{ secrets.VPS_APP_DIR }}
+            git fetch origin main
+            git reset --hard origin/main
             docker compose -f docker-compose.yml -f docker-compose.prod.yml pull backend
             docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d backend
