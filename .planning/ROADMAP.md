@@ -27,6 +27,7 @@ project roadmap, phase order, and product scope remain canonical in `docs/SPECS.
 - Repo roadmap ID `P5-10` maps to GSD Phase `5.10`.
 - Repo roadmap ID `P5-11` maps to GSD Phase `5.11`.
 - Repo roadmap ID `P2.5-01` maps to GSD Phase `2.51`.
+- Repo roadmap ID `P2.5-07` maps to GSD Phase `2.57`.
 - Repo roadmap ID `P3C-00` maps to GSD Phase `3.30`.
 - Repo roadmap ID `P3C-01` maps to GSD Phase `3.31`.
 - Repo roadmap ID `P3C-02` maps to GSD Phase `3.32`.
@@ -57,6 +58,7 @@ project roadmap, phase order, and product scope remain canonical in `docs/SPECS.
 - [x] **Phase 5.9: P5-09 Replace document for import/restore** - Saved-room import/restore replaces the document through the authoritative sync room path, bumps room epoch, and broadcasts one server truth.
 - [x] **Phase 5.10: P5-10 Export adapters use materialized server truth** - Saved-room native export reads a materialized server snapshot and shared import/export normalization reports unsupported objects without partial mutation.
 - [x] **Phase 5.11: P5-11 Frontend reconciliation** - Saved-room frontend mutations use bounded P5 command queues, slot-aware reconciliation, reconnect-safe pending replay, and ephemeral presence/draft preview.
+- [ ] **Phase 2.57: P2.5-07 Merge items + bind text vào container** - Users can merge multiple elements into a group via `groupId`, and merging exactly one text with one container shape binds the text as a centered, wrapping, container-following label.
 
 ## Phase Details
 
@@ -554,6 +556,37 @@ replay, and ephemeral presence/draft previews.
 Plans:
 
 - [x] 05.11-01: Implement frontend P5 command queue, reconciliation lifecycle, and AC tests.
+
+### Phase 2.57: P2.5-07 Merge items + bind text vào container
+
+**Goal**: Provide a "merge items" MVP that groups multiple elements into one operational unit via
+`groupId`, with the most important case being binding exactly one text label into exactly one
+container shape so the label follows the container's move/resize/delete/z-order.
+**Depends on**: Phase 2.51
+**Source**: `docs/SPECS.md` `[P2.5-07]`
+**Canonical refs**: `docs/SPECS.md`, `specs/048-merge-items-bind-text/acceptance.md`
+**Requirements**: [AC-1, AC-2, AC-3, AC-4, AC-5, AC-6, AC-7, AC-8, AC-9, AC-10, AC-11, AC-12, AC-13]
+**Success Criteria** (what must be TRUE):
+
+1. Merge/Unmerge commands (context menu + Cmd/Ctrl+G / Cmd/Ctrl+Shift+G) assign/clear a shared
+   `groupId` across selections, joining an existing group instead of minting a new id unless 2+
+   distinct groups are merged together (which flattens into one new `groupId`).
+2. Merging exactly one `text` with exactly one container-eligible shape binds the text as a
+   centered, width-wrapped label with a higher `zIndex`, and any other text/container combination
+   produces a plain group instead.
+3. Group move, resize, delete, copy/duplicate, and z-order commands treat bound text and grouped
+   elements as one unit (delta move, bbox recenter/rewrap, cascade delete, new `groupId` on copy,
+   z-order following the container), all through the existing mutation pipeline as one undoable
+   step.
+4. No new WebSocket event types are introduced; `groupId` reuses the `grouping.groupId` slot
+   already defined in the sync contracts.
+   **Plans**: 3 plans
+
+Plans:
+
+- [ ] 02.57-01-PLAN.md — Merge/Unmerge commands (context menu + Cmd/Ctrl+G / Cmd/Ctrl+Shift+G), join-vs-flatten rule, group-aware delete cascade, copy/duplicate groupId remap (AC-1, AC-2, AC-3, AC-10, AC-11, AC-12).
+- [ ] 02.57-02-PLAN.md — Text-binding at merge: derived resolveGroupBinding, jsdom-safe text-wrap, centered/wrapped/higher-zIndex label, move/resize/delete + z-order cascade to bound text (AC-4, AC-5, AC-6, AC-7, AC-12).
+- [ ] 02.57-03-PLAN.md — Group-bbox resize + full group-drag + D-01 group-click selection: non-text scaling, bound-text recenter/rewrap, independent-text position-only (D-03), no-new-slot regression (AC-8, AC-9, AC-12, AC-13).
 
 ## Progress
 
