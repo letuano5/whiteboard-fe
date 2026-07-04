@@ -89,6 +89,17 @@ describe('resolveRoomAccess', () => {
     });
   });
 
+  it('rejects access to a room id that has never been created', async () => {
+    const db = makeDb([]);
+
+    await expect(resolveRoomAccess(db, 'unknown-room', outsider)).rejects.toThrow(
+      'Room access denied.',
+    );
+    await expect(resolveRoomAccess(db, 'unknown-room', undefined)).rejects.toThrow(
+      'Room access denied.',
+    );
+  });
+
   it('does not claim legacy pending invitations while resolving private access', async () => {
     // @covers AC-4
     const db = makeDb([

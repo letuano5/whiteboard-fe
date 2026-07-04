@@ -34,7 +34,7 @@ describe('handleRoomDiffRequest', () => {
       pendingRequests: [{ requestId: 'req-1', status: 'processed', serverClock: 5 }],
     });
 
-    await handleRoomDiffRequest(makeSocket(emit), deps, {
+    await handleRoomDiffRequest(makeSocket(emit, 'room-1'), deps, {
       roomId: 'room-1',
       lastServerClock: 3,
       roomEpoch: 0,
@@ -78,7 +78,10 @@ describe('handleRoomDiffRequest', () => {
       processedRequestHistoryStartsAtClock: 0,
     });
 
-    await handleRoomDiffRequest(makeSocket(emit), deps, { roomId: 'room-1', fromClock: 2 });
+    await handleRoomDiffRequest(makeSocket(emit, 'room-1'), deps, {
+      roomId: 'room-1',
+      fromClock: 2,
+    });
 
     // @covers AC-1, AC-5
     expect(emit).toHaveBeenCalledWith(
@@ -92,6 +95,22 @@ describe('handleRoomDiffRequest', () => {
         wipeAll: true,
       }),
     );
+  });
+
+  it('rejects a diff request for a room the socket has not joined', async () => {
+    const emit = vi.fn();
+    const deps = makeDeps();
+
+    await handleRoomDiffRequest(makeSocket(emit, 'room-1'), deps, {
+      roomId: 'room-2',
+      fromClock: 0,
+    });
+
+    expect(getRoomDiff).not.toHaveBeenCalled();
+    expect(emit).toHaveBeenCalledWith(WS_EVENTS.ROOM_ACCESS_ERROR, {
+      code: 'room-access/forbidden',
+      message: 'Join the room before requesting a diff.',
+    });
   });
 });
 
@@ -109,6 +128,6 @@ function makeDeps(): ResolvedWhiteboardServerDeps {
   };
 }
 
-function makeSocket(emit: ReturnType<typeof vi.fn>): Socket {
-  return { emit } as unknown as Socket;
+function makeSocket(emit: ReturnType<typeof vi.fn>, joinedRoomId: string): Socket {
+  return { emit, data: { roomId: joinedRoomId } } as unknown as Socket;
 }

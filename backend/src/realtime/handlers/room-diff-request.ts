@@ -9,6 +9,15 @@ export async function handleRoomDiffRequest(
   payload: RoomDiffRequestPayload,
 ): Promise<void> {
   const { roomId, fromClock, lastServerClock, roomEpoch, pendingRequests = [] } = payload;
+
+  if (socket.data?.roomId !== roomId) {
+    socket.emit(WS_EVENTS.ROOM_ACCESS_ERROR, {
+      code: 'room-access/forbidden',
+      message: 'Join the room before requesting a diff.',
+    });
+    return;
+  }
+
   const baseClock = lastServerClock ?? fromClock ?? 0;
   const inMemory = deps.roomElements.has(roomId)
     ? [...deps.roomElements.get(roomId)!.values()]

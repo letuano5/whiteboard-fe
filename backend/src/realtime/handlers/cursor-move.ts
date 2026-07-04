@@ -4,5 +4,6 @@ import type { CursorMovePayload } from '../types.js';
 
 export function handleCursorMove(socket: Socket, payload: CursorMovePayload): void {
   const { roomId, sessionId, cursor, viewport, selectedIds } = payload;
+  if (socket.data?.roomId !== roomId) return;
   socket.to(roomId).emit(WS_EVENTS.CURSOR_MOVE, { sessionId, cursor, viewport, selectedIds });
 }

@@ -62,6 +62,13 @@ export const ROOM_ACCESS_INCLUDE = {
   },
 } as const;
 
+export class RoomNotFoundError extends Error {
+  constructor(roomId: string) {
+    super(`Room ${roomId} does not exist.`);
+    this.name = 'RoomNotFoundError';
+  }
+}
+
 export async function loadRoomWithAccess(
   db: PrismaClient,
   roomId: string,
@@ -92,7 +99,14 @@ export async function loadRoomWithAccess(
       : loaded;
 
   if (!room) {
-    return makeLegacyEphemeralRoom(roomId);
+    // A room row only exists once it has been created through the dashboard's owned-room
+    // flow (see document-service.ts) or, pre-P3B, through hasSharingDelegate()===false legacy
+    // schemas. Fabricating a public link_edit room here would let anyone who guesses a fresh
+    // UUID edit and lazily persist an ownerless "saved" room.
+    if (!hasSharingDelegate(db)) {
+      return makeLegacyEphemeralRoom(roomId);
+    }
+    throw new RoomNotFoundError(roomId);
   }
 
   return normalizeLoadedRoom(room, roomId);

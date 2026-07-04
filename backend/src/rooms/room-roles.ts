@@ -13,6 +13,7 @@ import {
   hasSharingDelegate,
   loadRoomWithAccess,
   makeLegacyEphemeralRoom,
+  RoomNotFoundError,
   type RoomAccessRecord,
   type RoomInvitationRecord,
 } from './room-access-records.js';
@@ -39,7 +40,7 @@ export async function resolveRoomAccess(
     return toAccessPayload(makeLegacyEphemeralRoom(roomId), 'editor', 'editor');
   }
 
-  const room = await loadRoomWithAccess(db, roomId);
+  const room = await loadRoom(db, roomId);
 
   const { baseRole } = resolveBaseRole(room, user);
   if (baseRole === 'none') {
@@ -55,11 +56,22 @@ export async function loadRoomForOwnerAction(
   roomId: string,
   actor: AppUser,
 ): Promise<RoomAccessRecord> {
-  const room = await loadRoomWithAccess(db, roomId);
+  const room = await loadRoom(db, roomId);
   if (room.ownerId !== actor.id) {
     throw new RoomAccessError('room-access/forbidden', 'Only room owners can change roles.');
   }
   return room;
+}
+
+async function loadRoom(db: PrismaClient, roomId: string): Promise<RoomAccessRecord> {
+  try {
+    return await loadRoomWithAccess(db, roomId);
+  } catch (err) {
+    if (err instanceof RoomNotFoundError) {
+      throw new RoomAccessError('room-access/forbidden', 'Room access denied.');
+    }
+    throw err;
+  }
 }
 
 export class RoomAccessError extends Error {
