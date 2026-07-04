@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import App from '../App';
 import { useAuthStore } from '../../auth/auth.store';
 import { useRoomAccessStore } from '../../rooms/room-access.store';
@@ -80,6 +80,22 @@ describe('App routing — dashboard', () => {
     setLocation('/dashboard', '');
 
     render(<App />);
+
+    expect(screen.getByTestId('document-dashboard')).toBeInTheDocument();
+    expect(screen.queryByTestId('whiteboard')).not.toBeInTheDocument();
+  });
+
+  it('switches views on a location change without remounting the app', () => {
+    setLocation('/', '');
+    render(<App />);
+    expect(screen.getByTestId('whiteboard')).toBeInTheDocument();
+
+    // Simulates what navigate()/browser back-forward trigger: a location
+    // change followed by a popstate event, with no render() call in between.
+    setLocation('/dashboard', '');
+    act(() => {
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    });
 
     expect(screen.getByTestId('document-dashboard')).toBeInTheDocument();
     expect(screen.queryByTestId('whiteboard')).not.toBeInTheDocument();
