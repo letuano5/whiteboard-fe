@@ -11,29 +11,7 @@ export default function ZoomControl() {
       title="Reset zoom"
       aria-label={`Zoom ${pct}%, click to reset`}
       onClick={resetCamera}
-      style={{
-        minWidth: 40,
-        height: 30,
-        flexShrink: 0,
-        padding: '0 8px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        borderRadius: 6,
-        border: 'none',
-        cursor: 'pointer',
-        background: 'transparent',
-        color: '#374151',
-        fontSize: 12,
-        fontWeight: 500,
-        transition: 'background 0.1s',
-      }}
-      onMouseEnter={(e) => {
-        (e.currentTarget as HTMLButtonElement).style.background = '#f3f4f6';
-      }}
-      onMouseLeave={(e) => {
-        (e.currentTarget as HTMLButtonElement).style.background = 'transparent';
-      }}
+      className="flex h-[30px] min-w-[40px] shrink-0 items-center justify-center rounded-md px-2 text-xs font-medium text-ink transition-colors hover:bg-panel"
     >
       {pct}%
     </button>

@@ -50,13 +50,13 @@ export function CapacitySettings({ roomId }: CapacitySettingsProps) {
   }
 
   return (
-    <section style={sectionStyle} aria-label="Capacity">
-      <div style={sectionHeaderStyle}>
+    <section className="mt-[18px] grid gap-2.5 border-t border-rule pt-4" aria-label="Capacity">
+      <div className="flex items-center gap-2 text-[13px] font-bold text-ink">
         <Users size={16} />
         Capacity
       </div>
-      <div style={limitGridStyle}>
-        <label style={labelStyle}>
+      <div className="grid grid-cols-2 gap-2">
+        <label className="grid min-w-0 gap-1 text-xs font-bold text-muted">
           Participants
           <input
             aria-label="Max participants"
@@ -65,10 +65,10 @@ export function CapacitySettings({ roomId }: CapacitySettingsProps) {
             onChange={(event) => setParticipantLimit(event.target.value)}
             onBlur={() => handleLimitBlur('maxParticipants', participantLimit)}
             placeholder={`Up to ${ROOM_CAPACITY_LIMITS.MAX_PARTICIPANTS}`}
-            style={inputStyle}
+            className="h-[34px] min-w-0 rounded-md border border-field-border px-2.5 text-ink"
           />
         </label>
-        <label style={labelStyle}>
+        <label className="grid min-w-0 gap-1 text-xs font-bold text-muted">
           Editors
           <input
             aria-label="Max editors"
@@ -77,12 +77,12 @@ export function CapacitySettings({ roomId }: CapacitySettingsProps) {
             onChange={(event) => setEditorLimit(event.target.value)}
             onBlur={() => handleLimitBlur('maxEditors', editorLimit)}
             placeholder={`Up to ${ROOM_CAPACITY_LIMITS.MAX_EDITORS}`}
-            style={inputStyle}
+            className="h-[34px] min-w-0 rounded-md border border-field-border px-2.5 text-ink"
           />
         </label>
       </div>
-      <div style={errorSlotStyle}>
-        {error && <div style={{ color: '#b91c1c', fontSize: 13 }}>{error}</div>}
+      <div className="min-h-[18px]">
+        {error && <div className="text-[13px] text-danger">{error}</div>}
       </div>
     </section>
   );
@@ -108,46 +108,3 @@ function validateCapacity(
   }
   return null;
 }
-
-const sectionStyle = {
-  display: 'grid',
-  gap: 10,
-  marginTop: 18,
-  paddingTop: 16,
-  borderTop: '1px solid #e4ebe5',
-} satisfies React.CSSProperties;
-
-const sectionHeaderStyle = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: 8,
-  fontSize: 13,
-  fontWeight: 700,
-} satisfies React.CSSProperties;
-
-const limitGridStyle = {
-  display: 'grid',
-  gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-  gap: 8,
-} satisfies React.CSSProperties;
-
-const labelStyle = {
-  display: 'grid',
-  gap: 5,
-  minWidth: 0,
-  fontSize: 12,
-  fontWeight: 700,
-  color: '#34443a',
-} satisfies React.CSSProperties;
-
-const inputStyle = {
-  minWidth: 0,
-  height: 34,
-  border: '1px solid #c8d2ca',
-  borderRadius: 6,
-  padding: '0 10px',
-} satisfies React.CSSProperties;
-
-const errorSlotStyle = {
-  minHeight: 18,
-} satisfies React.CSSProperties;

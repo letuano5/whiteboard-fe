@@ -18,8 +18,8 @@ describe('MoreToolsMenu', () => {
     const menu = screen.getByRole('menu');
 
     expect(menu).toHaveClass('toolbar-scroll');
-    expect(menu.style.maxWidth).toBe('calc(100vw - 16px)');
-    expect(menu.style.overflowX).toBe('auto');
+    expect(menu).toHaveClass('max-w-[calc(100vw-16px)]');
+    expect(menu).toHaveClass('overflow-x-auto');
     expect(menu.style.scrollbarWidth).toBe('none');
     expect(menu.style.bottom).toBe('calc(72px + env(safe-area-inset-bottom))');
   });
@@ -56,12 +56,12 @@ describe('MoreToolsMenu', () => {
   it('shows the active highlight on the trigger when the active tool is in the overflow set, even while closed', () => {
     render(<MoreToolsMenu tool="laser" chooseTool={vi.fn()} />);
     const trigger = screen.getByTitle('More tools') as HTMLButtonElement;
-    expect(trigger.style.background).toBe('rgb(37, 99, 235)');
+    expect(trigger).toHaveClass('bg-primary');
   });
 
   it('does not show the active highlight when the active tool is a fixed tool and the menu is closed', () => {
     render(<MoreToolsMenu tool="select" chooseTool={vi.fn()} />);
     const trigger = screen.getByTitle('More tools') as HTMLButtonElement;
-    expect(trigger.style.background).toBe('transparent');
+    expect(trigger).not.toHaveClass('bg-primary');
   });
 });

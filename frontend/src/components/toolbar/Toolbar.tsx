@@ -36,24 +36,11 @@ export default function Toolbar() {
 
   return (
     <div
-      className="toolbar-scroll"
+      className="toolbar-scroll absolute left-1/2 z-10 flex max-w-[calc(100vw-16px)] -translate-x-1/2 gap-1 overflow-x-auto rounded-xl border border-rule bg-paper p-1.5 shadow-md"
       style={{
-        position: 'absolute',
         bottom: 'calc(16px + env(safe-area-inset-bottom))',
-        left: '50%',
-        transform: 'translateX(-50%)',
-        display: 'flex',
-        gap: 4,
-        padding: '6px',
-        maxWidth: 'calc(100vw - 16px)',
-        overflowX: 'auto',
         scrollbarWidth: 'none',
         WebkitOverflowScrolling: 'touch',
-        background: 'white',
-        borderRadius: 12,
-        boxShadow: '0 2px 12px rgba(0,0,0,0.12)',
-        border: '1px solid #e5e7eb',
-        zIndex: 10,
       }}
     >
       {FIXED_TOOLS.map(({ id, label, Icon }) => (

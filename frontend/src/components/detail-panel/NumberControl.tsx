@@ -9,9 +9,7 @@ interface NumberControlProps {
 
 export function NumberControl({ label, max, min, step, value, onChange }: NumberControlProps) {
   return (
-    <label
-      style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}
-    >
+    <label className="flex items-center justify-between gap-2">
       <span>{label}</span>
       <input
         type="number"
@@ -20,15 +18,7 @@ export function NumberControl({ label, max, min, step, value, onChange }: Number
         step={step}
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
-        style={{
-          width: 56,
-          background: '#f9fafb',
-          border: '1px solid #d1d5db',
-          borderRadius: 4,
-          padding: '2px 6px',
-          color: 'inherit',
-          fontSize: 13,
-        }}
+        className="w-14 rounded border border-field-border bg-panel px-1.5 py-0.5 text-[13px] text-inherit"
       />
     </label>
   );

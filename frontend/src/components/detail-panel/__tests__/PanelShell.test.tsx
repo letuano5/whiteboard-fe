@@ -12,8 +12,8 @@ describe('PanelShell mobile sizing', () => {
 
     const panel = screen.getByText('Panel content').parentElement as HTMLElement;
 
-    expect(panel.style.minWidth).toBe('220px');
-    expect(panel.style.maxWidth).toBe('min(320px, calc(100vw - 32px))');
+    expect(panel).toHaveClass('min-w-[220px]');
+    expect(panel).toHaveClass('max-w-[min(320px,calc(100vw-32px))]');
     expect(panel.style.maxHeight).toBe('60vh');
     expect(panel.style.overflowY).toBe('auto');
   });

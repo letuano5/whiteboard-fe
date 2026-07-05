@@ -23,7 +23,7 @@ export default function MoreToolsMenu({ tool, chooseTool }: MoreToolsMenuProps) 
   }
 
   return (
-    <div ref={ref} style={{ position: 'relative' }}>
+    <div ref={ref} className="relative">
       <ToolButton
         title="More tools"
         active={open || isOverflowToolActive}
@@ -32,26 +32,13 @@ export default function MoreToolsMenu({ tool, chooseTool }: MoreToolsMenuProps) 
       />
       {open && (
         <div
-          className="toolbar-scroll"
+          className="toolbar-scroll fixed left-1/2 z-[1000] flex max-w-[calc(100vw-16px)] -translate-x-1/2 gap-1 overflow-x-auto rounded-xl border border-rule bg-paper p-1.5 shadow-md"
           role="menu"
           aria-label="More tools"
           style={{
-            position: 'fixed',
-            left: '50%',
             bottom: 'calc(72px + env(safe-area-inset-bottom))',
-            transform: 'translateX(-50%)',
-            zIndex: 1000,
-            display: 'flex',
-            gap: 4,
-            padding: '6px',
-            maxWidth: 'calc(100vw - 16px)',
-            overflowX: 'auto',
             scrollbarWidth: 'none',
             WebkitOverflowScrolling: 'touch',
-            background: 'white',
-            borderRadius: 12,
-            boxShadow: '0 2px 12px rgba(0,0,0,0.12)',
-            border: '1px solid #e5e7eb',
           }}
         >
           {OVERFLOW_TOOLS.map(({ id, label, Icon }) => (

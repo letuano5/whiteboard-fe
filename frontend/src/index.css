@@ -8,12 +8,11 @@
   --color-muted: #6b6b6f;
   --color-rule: #e8e7e4;
   --color-field-border: #dcdbd7;
-  --color-dot: #e3e2de;
+  --color-dot: #d7d5cc;
 
-  /* Accent (tentative — swap this one value to retheme) */
-  --color-accent: #ee4d2e;
-  --color-accent-ink: #ffffff;
-  --color-accent-soft: #fdeee9;
+  /* Primary — the single action color: solid buttons, active states, focus rings */
+  --color-primary: #4f56d3;
+  --color-primary-soft: #e7e8fb;
 
   /* Status */
   --color-notice: #1f7a4d;
@@ -29,4 +28,23 @@
 
 .toolbar-scroll::-webkit-scrollbar {
   display: none;
+}
+
+/* Infinite-canvas dot grid used behind the landing/login pitch panel. */
+@keyframes canvas-grid-drift {
+  to {
+    background-position: 44px 44px;
+  }
+}
+
+.canvas-grid {
+  background-image: radial-gradient(var(--color-dot) 1.2px, transparent 1.6px);
+  background-size: 22px 22px;
+  animation: canvas-grid-drift 10s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .canvas-grid {
+    animation: none;
+  }
 }

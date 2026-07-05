@@ -52,8 +52,8 @@ describe('AC-8 (005): toolbar shows tool buttons including laser', () => {
     const root = container.firstElementChild as HTMLElement;
 
     expect(root).toHaveClass('toolbar-scroll');
-    expect(root.style.maxWidth).toBe('calc(100vw - 16px)');
-    expect(root.style.overflowX).toBe('auto');
+    expect(root).toHaveClass('max-w-[calc(100vw-16px)]');
+    expect(root).toHaveClass('overflow-x-auto');
     expect(root.style.scrollbarWidth).toBe('none');
     expect(root.style.bottom).toBe('calc(16px + env(safe-area-inset-bottom))');
   });
@@ -220,7 +220,8 @@ describe('More tools trigger active state', () => {
     render(<Toolbar />);
     const moreBtn = screen.getByTitle('More tools') as HTMLButtonElement;
     const selectBtn = screen.getByTitle('Select') as HTMLButtonElement;
-    expect(moreBtn.style.background).not.toBe(selectBtn.style.background);
+    expect(moreBtn).toHaveClass('bg-primary');
+    expect(selectBtn).not.toHaveClass('bg-primary');
   });
 
   it('does not show the active highlight when the active tool is a fixed tool', () => {
@@ -230,7 +231,8 @@ describe('More tools trigger active state', () => {
     render(<Toolbar />);
     const moreBtn = screen.getByTitle('More tools') as HTMLButtonElement;
     const inactiveBtn = screen.getByTitle('Rectangle') as HTMLButtonElement;
-    expect(moreBtn.style.background).toBe(inactiveBtn.style.background);
+    expect(moreBtn).not.toHaveClass('bg-primary');
+    expect(inactiveBtn).not.toHaveClass('bg-primary');
   });
 });
 
@@ -243,6 +245,7 @@ describe('AC-9 (005): active tool is visually distinguished', () => {
     render(<Toolbar />);
     const activeBtn = screen.getByTitle('Rectangle') as HTMLButtonElement;
     const inactiveBtn = screen.getByTitle('Select') as HTMLButtonElement;
-    expect(activeBtn.style.background).not.toBe(inactiveBtn.style.background);
+    expect(activeBtn).toHaveClass('bg-primary');
+    expect(inactiveBtn).not.toHaveClass('bg-primary');
   });
 });

@@ -116,7 +116,7 @@ export function NativeFileControls({ mode, roomId, canImport }: NativeFileContro
         type="button"
         onClick={() => void handleExport()}
         disabled={isExporting}
-        className="flex h-10 w-10 items-center justify-center rounded-lg border border-[#cbd9cb] bg-white text-[#173f35] shadow-[0_8px_24px_rgba(23,63,53,0.12)] hover:bg-[#edf5ef] focus:outline-none focus:ring-2 focus:ring-[#2457c5] focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+        className="flex h-10 w-10 items-center justify-center rounded-lg border border-rule bg-paper text-ink shadow-md hover:bg-panel focus:outline-none focus:ring-2 focus:ring-primary-soft focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
         aria-label="Export native file"
         title="Export native file"
       >
@@ -130,7 +130,7 @@ export function NativeFileControls({ mode, roomId, canImport }: NativeFileContro
         type="button"
         onClick={() => fileInputRef.current?.click()}
         disabled={!canImport || isImporting}
-        className="flex h-10 w-10 items-center justify-center rounded-lg border border-[#cbd9cb] bg-white text-[#173f35] shadow-[0_8px_24px_rgba(23,63,53,0.12)] hover:bg-[#edf5ef] focus:outline-none focus:ring-2 focus:ring-[#2457c5] focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+        className="flex h-10 w-10 items-center justify-center rounded-lg border border-rule bg-paper text-ink shadow-md hover:bg-panel focus:outline-none focus:ring-2 focus:ring-primary-soft focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
         aria-label="Import native file"
         title="Import native file"
       >
@@ -149,23 +149,23 @@ export function NativeFileControls({ mode, roomId, canImport }: NativeFileContro
       />
 
       {pendingDocument ? (
-        <div className="absolute right-0 top-12 z-[90] w-[min(340px,calc(100vw-24px))] rounded-lg border border-[#b7c7b7] bg-[#fbfdf9] p-4 text-[#18231d] shadow-[0_20px_60px_rgba(28,41,33,0.18)]">
+        <div className="absolute right-0 top-12 z-[90] w-[min(340px,calc(100vw-24px))] rounded-lg border border-rule bg-paper p-4 text-ink shadow-lg">
           <div className="mb-3 flex items-start justify-between gap-3">
             <div>
-              <p className="text-xs font-semibold uppercase text-[#68766a]">Native file</p>
+              <p className="text-xs font-semibold uppercase text-muted">Native file</p>
               <h2 className="mt-1 text-lg font-semibold">Confirm import</h2>
             </div>
             <button
               type="button"
               onClick={() => setPendingDocument(null)}
-              className="flex h-8 w-8 items-center justify-center rounded-lg border border-[#cbd9cb] bg-white text-[#314039] hover:bg-[#edf5ef]"
+              className="flex h-8 w-8 items-center justify-center rounded-lg border border-rule bg-paper text-ink hover:bg-panel"
               aria-label="Cancel import"
               disabled={isImporting}
             >
               <X className="h-4 w-4" />
             </button>
           </div>
-          <p className="text-sm leading-6 text-[#4c5d52]">
+          <p className="text-sm leading-6 text-muted">
             {mode === 'local'
               ? 'Replace the current local board with this file?'
               : 'Replace the current saved document with this file?'}
@@ -175,7 +175,7 @@ export function NativeFileControls({ mode, roomId, canImport }: NativeFileContro
               type="button"
               onClick={() => setPendingDocument(null)}
               disabled={isImporting}
-              className="flex h-10 items-center justify-center rounded-lg border border-[#173f35] bg-white px-3 text-sm font-semibold text-[#173f35] hover:bg-[#edf5ef] disabled:cursor-not-allowed disabled:opacity-60"
+              className="flex h-10 items-center justify-center rounded-lg border border-ink bg-paper px-3 text-sm font-semibold text-ink hover:bg-panel disabled:cursor-not-allowed disabled:opacity-60"
             >
               Cancel
             </button>
@@ -183,7 +183,7 @@ export function NativeFileControls({ mode, roomId, canImport }: NativeFileContro
               type="button"
               onClick={() => void applyDocument(pendingDocument)}
               disabled={isImporting}
-              className="flex h-10 items-center justify-center rounded-lg bg-[#173f35] px-3 text-sm font-semibold text-white hover:bg-[#0f2d26] disabled:cursor-not-allowed disabled:opacity-60"
+              className="flex h-10 items-center justify-center rounded-lg bg-primary px-3 text-sm font-semibold text-paper hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
             >
               Import
             </button>
@@ -194,7 +194,7 @@ export function NativeFileControls({ mode, roomId, canImport }: NativeFileContro
       {errorMessage ? (
         <p
           role="alert"
-          className="absolute right-0 top-12 z-[90] flex w-[min(340px,calc(100vw-24px))] gap-2 rounded-lg border border-[#dfb86a] bg-[#fff8e8] px-3 py-2 text-sm text-[#795014] shadow-[0_16px_44px_rgba(28,41,33,0.14)]"
+          className="absolute right-0 top-12 z-[90] flex w-[min(340px,calc(100vw-24px))] gap-2 rounded-lg border border-warning-border bg-warning-soft px-3 py-2 text-sm text-warning shadow-lg"
         >
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
           {errorMessage}

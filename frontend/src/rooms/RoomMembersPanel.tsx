@@ -26,30 +26,13 @@ export default function RoomMembersPanel() {
   return (
     <section
       aria-label="Room members"
-      style={{
-        width: 260,
-        border: '1px solid #d7dfd8',
-        borderRadius: 8,
-        background: 'rgba(255,255,255,0.96)',
-        boxShadow: '0 8px 24px rgba(24,35,29,0.12)',
-        padding: 10,
-        color: '#18231d',
-      }}
+      className="w-[260px] rounded-lg border border-rule bg-paper/95 p-2.5 text-ink shadow-md"
     >
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-          fontSize: 13,
-          fontWeight: 700,
-          marginBottom: 8,
-        }}
-      >
+      <div className="mb-2 flex items-center gap-2 text-[13px] font-bold">
         <Users size={16} />
         Members
       </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div className="flex flex-col gap-2">
         {members.map((member) => {
           const name = member.name ?? member.email ?? member.userId;
           const isOwner = member.role === 'owner';
@@ -57,47 +40,27 @@ export default function RoomMembersPanel() {
           return (
             <div
               key={member.userId}
-              style={{
-                display: 'grid',
-                gridTemplateColumns: '1fr auto',
-                alignItems: 'center',
-                gap: 8,
-                fontSize: 12,
-              }}
+              className="grid grid-cols-[1fr_auto] items-center gap-2 text-xs"
             >
-              <div style={{ minWidth: 0 }}>
-                <div
-                  title={name}
-                  style={{
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                    fontWeight: 600,
-                  }}
-                >
+              <div className="min-w-0">
+                <div title={name} className="truncate font-semibold">
                   {name}
                 </div>
                 {isOwner && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#516158' }}>
+                  <div className="flex items-center gap-1 text-muted">
                     <Shield size={12} />
                     Owner
                   </div>
                 )}
               </div>
               {isOwner ? (
-                <span style={{ color: '#516158', fontSize: 12 }}>{ROLE_LABELS.owner}</span>
+                <span className="text-xs text-muted">{ROLE_LABELS.owner}</span>
               ) : (
                 <select
                   aria-label={`Role for ${name}`}
                   value={member.role}
                   onChange={(event) => handleRoleChange(member.userId, event)}
-                  style={{
-                    height: 28,
-                    border: '1px solid #c8d2ca',
-                    borderRadius: 6,
-                    background: '#fff',
-                    fontSize: 12,
-                  }}
+                  className="h-7 rounded-md border border-field-border bg-paper text-xs text-ink"
                 >
                   <option value="editor">{ROLE_LABELS.editor}</option>
                   <option value="viewer">{ROLE_LABELS.viewer}</option>
@@ -107,9 +70,7 @@ export default function RoomMembersPanel() {
           );
         })}
       </div>
-      {errorMessage && (
-        <div style={{ marginTop: 8, color: '#b91c1c', fontSize: 12 }}>{errorMessage}</div>
-      )}
+      {errorMessage && <div className="mt-2 text-xs text-danger">{errorMessage}</div>}
     </section>
   );
 }

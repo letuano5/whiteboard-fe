@@ -11,15 +11,7 @@ export default function OnlineUsersPanel() {
   const selfName = role === 'owner' ? 'Owner' : LOCAL_PRESENCE.name;
 
   return (
-    <div
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 4,
-        maxHeight: 200,
-        overflowY: 'auto',
-      }}
-    >
+    <div className="flex max-h-[200px] flex-col gap-1 overflow-y-auto">
       {/* Local user — always shown first */}
       <UserBadge
         name={selfName}
@@ -59,43 +51,19 @@ function UserBadge({
   const baseRoleText = baseRole && baseRole !== role ? `Base: ${formatRole(baseRole)}` : null;
 
   return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 6,
-        backgroundColor: 'rgba(255,255,255,0.9)',
-        border: '1px solid rgba(0,0,0,0.08)',
-        borderRadius: 6,
-        padding: '3px 8px',
-        fontSize: 12,
-        whiteSpace: 'nowrap',
-      }}
-    >
+    <div className="flex items-center gap-1.5 whitespace-nowrap rounded-md border border-rule bg-paper/90 px-2 py-0.5 text-xs">
       <span
-        style={{
-          width: 10,
-          height: 10,
-          borderRadius: '50%',
-          backgroundColor: color,
-          flexShrink: 0,
-        }}
+        className="h-2.5 w-2.5 shrink-0 rounded-full"
+        style={{ backgroundColor: color }}
       />
-      <span style={{ color: '#333', fontWeight: isSelf ? 600 : 400 }}>
+      <span className={`text-ink ${isSelf ? 'font-semibold' : 'font-normal'}`}>
         {name}
-        {isSelf && <span style={{ color: '#999', fontWeight: 400, marginLeft: 4 }}>(you)</span>}
+        {isSelf && <span className="ml-1 font-normal text-muted">(you)</span>}
       </span>
       {roleText && roleText !== name && (
         <span
           title={baseRoleText ?? undefined}
-          style={{
-            border: '1px solid #d7dfd8',
-            borderRadius: 4,
-            padding: '1px 5px',
-            color: '#47564d',
-            fontSize: 11,
-            fontWeight: 700,
-          }}
+          className="rounded border border-rule px-1.5 py-px text-[11px] font-bold text-muted"
         >
           {roleText}
         </span>

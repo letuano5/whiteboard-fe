@@ -23,25 +23,6 @@ interface ContextMenuProps {
   onClose: () => void;
 }
 
-const BUTTON_STYLE: React.CSSProperties = {
-  display: 'block',
-  width: '100%',
-  textAlign: 'left',
-  padding: '6px 12px',
-  background: 'none',
-  border: 'none',
-  fontSize: '13px',
-  cursor: 'pointer',
-  borderRadius: '4px',
-  color: '#1a1a1a',
-};
-
-const DISABLED_STYLE: React.CSSProperties = {
-  ...BUTTON_STYLE,
-  color: '#aaa',
-  cursor: 'not-allowed',
-};
-
 interface MenuItemProps {
   label: string;
   disabled: boolean;
@@ -51,15 +32,11 @@ interface MenuItemProps {
 function MenuItem({ label, disabled, onClick }: MenuItemProps) {
   return (
     <button
-      style={disabled ? DISABLED_STYLE : BUTTON_STYLE}
+      className={`block w-full rounded px-3 py-1.5 text-left text-[13px] ${
+        disabled ? 'cursor-not-allowed text-muted' : 'cursor-pointer text-ink hover:bg-panel'
+      }`}
       disabled={disabled}
       onClick={onClick}
-      onMouseEnter={(e) => {
-        if (!disabled) (e.currentTarget as HTMLButtonElement).style.background = '#f3f4f6';
-      }}
-      onMouseLeave={(e) => {
-        (e.currentTarget as HTMLButtonElement).style.background = 'none';
-      }}
     >
       {label}
     </button>
@@ -132,28 +109,17 @@ export default function ContextMenu({
   return (
     <div
       ref={ref}
-      style={{
-        position: 'fixed',
-        left: pos.left,
-        top: pos.top,
-        visibility: pos.visibility,
-        background: '#fff',
-        border: '1px solid #e5e7eb',
-        borderRadius: '6px',
-        boxShadow: '0 4px 12px rgba(0,0,0,0.12)',
-        padding: '4px 0',
-        minWidth: '160px',
-        zIndex: 9999,
-      }}
+      className="fixed z-[9999] min-w-[160px] rounded-md border border-rule bg-paper py-1 shadow-lg"
+      style={{ left: pos.left, top: pos.top, visibility: pos.visibility }}
     >
       <MenuItem label="Bring to Front" disabled={disabled} onClick={() => handle(bringToFront)} />
       <MenuItem label="Forward" disabled={disabled} onClick={() => handle(bringForward)} />
       <MenuItem label="Backward" disabled={disabled} onClick={() => handle(sendBackward)} />
       <MenuItem label="Send to Back" disabled={disabled} onClick={() => handle(sendToBack)} />
-      <div style={{ borderTop: '1px solid #e5e7eb', margin: '4px 0' }} />
+      <div className="my-1 border-t border-rule" />
       <MenuItem label="Merge" disabled={mergeDisabled} onClick={handleMerge} />
       <MenuItem label="Unmerge" disabled={unmergeDisabled} onClick={handleUnmerge} />
-      <div style={{ borderTop: '1px solid #e5e7eb', margin: '4px 0' }} />
+      <div className="my-1 border-t border-rule" />
       <MenuItem label={lockLabel} disabled={lockDisabled} onClick={handleToggleLock} />
     </div>
   );

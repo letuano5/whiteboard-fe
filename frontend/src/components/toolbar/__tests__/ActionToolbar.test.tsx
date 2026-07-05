@@ -21,8 +21,8 @@ describe('ActionToolbar', () => {
     const root = container.firstElementChild as HTMLElement;
 
     expect(root).toHaveClass('toolbar-scroll');
-    expect(root.style.maxWidth).toBe('calc(100vw - 16px)');
-    expect(root.style.overflowX).toBe('auto');
+    expect(root).toHaveClass('max-w-[calc(100vw-16px)]');
+    expect(root).toHaveClass('overflow-x-auto');
     expect(root.style.scrollbarWidth).toBe('none');
     expect(root.style.bottom).toBe('calc(72px + env(safe-area-inset-bottom))');
   });

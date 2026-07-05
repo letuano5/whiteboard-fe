@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { FolderOpen, Loader2, Plus, Search } from 'lucide-react';
+import { FileText, FolderOpen, Loader2, Plus, Search } from 'lucide-react';
 import { AuthMenu } from '../auth/AuthMenu';
 import { useAuthStore, type AuthStoreState } from '../auth/auth.store';
 import {
@@ -15,7 +15,7 @@ import {
 } from './document-api';
 import { DocumentCard } from './DocumentCard';
 import { DocumentDashboardLogin } from './DocumentDashboardLogin';
-import { roomPath } from '../app/routing';
+import { homePath, roomPath } from '../app/routing';
 
 const EMPTY_DASHBOARD: DocumentDashboardResponse = {
   documents: [],
@@ -160,6 +160,11 @@ export function DocumentDashboard() {
     window.location.reload();
   }
 
+  function handleOpenLocalBoard() {
+    window.history.pushState({}, '', homePath());
+    window.location.reload();
+  }
+
   const isCheckingAuth = status === 'idle' || status === 'loading';
 
   if (!session) {
@@ -167,19 +172,27 @@ export function DocumentDashboard() {
   }
 
   return (
-    <main className="min-h-screen bg-white text-[#202124]">
-      <header className="sticky top-0 z-20 border-b border-[#e2e5e9] bg-white/95 backdrop-blur">
+    <main className="min-h-screen bg-paper text-ink">
+      <header className="sticky top-0 z-20 border-b border-rule bg-paper/95 backdrop-blur">
         <div className="mx-auto flex max-w-[1680px] flex-col gap-4 px-8 py-5">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
-              <p className="text-xs font-semibold uppercase text-[#6b6f76]">Workspace</p>
-              <h1 className="mt-1 text-2xl font-semibold">Recent documents</h1>
+              <p className="text-xs font-semibold uppercase text-muted">Workspace</p>
+              <h1 className="mt-1 text-2xl font-semibold text-ink">Recent documents</h1>
             </div>
             <div className="flex items-center gap-3">
               <button
                 type="button"
+                onClick={handleOpenLocalBoard}
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-ink bg-paper px-4 text-sm font-semibold text-ink hover:bg-panel"
+              >
+                <FileText className="h-4 w-4" />
+                Open local board
+              </button>
+              <button
+                type="button"
                 onClick={() => void handleCreateDocument()}
-                className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-[#173f35] px-4 text-sm font-semibold text-white hover:bg-[#0f2d26]"
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-semibold text-paper hover:opacity-90"
               >
                 <Plus className="h-4 w-4" />
                 New document
@@ -190,12 +203,12 @@ export function DocumentDashboard() {
 
           <div className="grid gap-3 md:grid-cols-[minmax(260px,520px)_auto] md:items-center">
             <label className="relative block">
-              <Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-[#6b6f76]" />
+              <Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-muted" />
               <input
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
                 placeholder="Search by name or owner"
-                className="h-10 w-full rounded-lg border border-[#d8dde2] bg-white pl-9 pr-3 text-sm outline-none focus:border-[#2457c5] focus:ring-2 focus:ring-[#2457c5]/20"
+                className="h-10 w-full rounded-lg border border-field-border bg-paper pl-9 pr-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary-soft"
               />
             </label>
             <div className="flex flex-wrap gap-2" aria-label="Document ownership filter">
@@ -206,8 +219,8 @@ export function DocumentDashboard() {
                   onClick={() => setScope(option.value)}
                   className={`h-10 rounded-lg border px-4 text-sm font-semibold ${
                     scope === option.value
-                      ? 'border-[#173f35] bg-[#173f35] text-white'
-                      : 'border-[#d8dde2] bg-white text-[#3d444d] hover:bg-[#f3f5f6]'
+                      ? 'border-primary bg-primary text-paper'
+                      : 'border-field-border bg-paper text-muted hover:bg-panel'
                   }`}
                 >
                   {option.label}
@@ -219,7 +232,7 @@ export function DocumentDashboard() {
       </header>
 
       <section className="mx-auto max-w-[1680px] px-8 py-8">
-        <div className="mb-6 flex items-center gap-2 text-sm text-[#6b6f76]">
+        <div className="mb-6 flex items-center gap-2 text-sm text-muted">
           <FolderOpen className="h-4 w-4" />
           {documents.length} loaded · sorted by recent activity
         </div>
@@ -227,14 +240,14 @@ export function DocumentDashboard() {
         {errorMessage ? (
           <p
             role="alert"
-            className="mb-5 rounded-lg border border-[#dfb86a] bg-[#fff8e8] px-3 py-2 text-sm text-[#795014]"
+            className="mb-5 rounded-lg border border-warning-border bg-warning-soft px-3 py-2 text-sm text-warning"
           >
             {errorMessage}
           </p>
         ) : null}
 
         {isInitialLoading ? (
-          <div className="grid min-h-[280px] place-items-center text-[#6b6f76]">
+          <div className="grid min-h-[280px] place-items-center text-muted">
             <Loader2 className="h-6 w-6 animate-spin" />
           </div>
         ) : documents.length ? (
@@ -251,18 +264,18 @@ export function DocumentDashboard() {
             ))}
           </div>
         ) : (
-          <div className="grid min-h-[280px] place-items-center rounded-lg border border-dashed border-[#cdd3d8] bg-[#f8f9fa] px-4 text-center">
+          <div className="grid min-h-[280px] place-items-center rounded-lg border border-dashed border-rule bg-panel px-4 text-center">
             <div>
-              <FolderOpen className="mx-auto h-8 w-8 text-[#6b6f76]" />
-              <p className="mt-3 text-sm font-semibold">No documents found</p>
-              <p className="mt-1 text-sm text-[#6b6f76]">Try a different search or filter.</p>
+              <FolderOpen className="mx-auto h-8 w-8 text-muted" />
+              <p className="mt-3 text-sm font-semibold text-ink">No documents found</p>
+              <p className="mt-1 text-sm text-muted">Try a different search or filter.</p>
             </div>
           </div>
         )}
 
         <div ref={loadMoreRef} className="h-10" />
         {isLoadingMore ? (
-          <div className="flex justify-center py-6 text-[#6b6f76]">
+          <div className="flex justify-center py-6 text-muted">
             <Loader2 className="h-5 w-5 animate-spin" />
           </div>
         ) : nextCursor ? (
@@ -270,7 +283,7 @@ export function DocumentDashboard() {
             <button
               type="button"
               onClick={() => void fetchDocuments('append', nextCursor)}
-              className="h-10 rounded-lg border border-[#d8dde2] bg-white px-4 text-sm font-semibold text-[#3d444d] hover:bg-[#f3f5f6]"
+              className="h-10 rounded-lg border border-field-border bg-paper px-4 text-sm font-semibold text-muted hover:bg-panel"
             >
               Load more
             </button>

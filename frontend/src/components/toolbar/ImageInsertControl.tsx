@@ -40,26 +40,9 @@ export default function ImageInsertControl({ resetInteraction }: ImageInsertCont
         title="Image"
         aria-label="Insert image"
         onClick={openDialog}
-        style={{
-          width: 36,
-          height: 36,
-          flexShrink: 0,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          borderRadius: 8,
-          border: 'none',
-          cursor: 'pointer',
-          background: open ? '#2563eb' : 'transparent',
-          color: open ? 'white' : '#374151',
-          transition: 'background 0.1s',
-        }}
-        onMouseEnter={(event) => {
-          if (!open) event.currentTarget.style.background = '#f3f4f6';
-        }}
-        onMouseLeave={(event) => {
-          if (!open) event.currentTarget.style.background = 'transparent';
-        }}
+        className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-colors ${
+          open ? 'bg-primary text-paper' : 'text-ink hover:bg-panel'
+        }`}
       >
         <ImageIcon size={18} />
       </button>
@@ -68,36 +51,16 @@ export default function ImageInsertControl({ resetInteraction }: ImageInsertCont
         <div
           role="dialog"
           aria-label="Insert image"
-          style={{
-            position: 'fixed',
-            left: '50%',
-            bottom: 72,
-            transform: 'translateX(-50%)',
-            zIndex: 1000,
-            width: 360,
-            maxWidth: 'calc(100vw - 24px)',
-            padding: 10,
-            borderRadius: 8,
-            border: '1px solid #d1d5db',
-            background: '#ffffff',
-            boxShadow: '0 12px 32px rgba(17,24,39,0.18)',
-          }}
+          className="fixed left-1/2 z-[1000] w-[360px] max-w-[calc(100vw-24px)] -translate-x-1/2 rounded-lg border border-field-border bg-paper p-2.5 shadow-lg"
+          style={{ bottom: 72 }}
         >
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div className="flex gap-2">
             <input
               aria-label="Image URL"
               value={url}
               onChange={(event) => setUrl(event.target.value)}
               placeholder="https://example.com/map.png"
-              style={{
-                minWidth: 0,
-                flex: 1,
-                height: 34,
-                borderRadius: 6,
-                border: '1px solid #d1d5db',
-                padding: '0 8px',
-                fontSize: 13,
-              }}
+              className="h-[34px] min-w-0 flex-1 rounded-md border border-field-border px-2 text-[13px] text-ink"
             />
             <button
               type="button"
@@ -105,15 +68,11 @@ export default function ImageInsertControl({ resetInteraction }: ImageInsertCont
               aria-label="Insert URL"
               onClick={insertFromUrl}
               disabled={url.trim().length === 0}
-              style={{
-                width: 34,
-                height: 34,
-                borderRadius: 6,
-                border: '1px solid #d1d5db',
-                background: url.trim().length === 0 ? '#f3f4f6' : '#ffffff',
-                color: url.trim().length === 0 ? '#9ca3af' : '#111827',
-                cursor: url.trim().length === 0 ? 'not-allowed' : 'pointer',
-              }}
+              className={`h-[34px] w-[34px] rounded-md border border-field-border ${
+                url.trim().length === 0
+                  ? 'cursor-not-allowed bg-panel text-muted'
+                  : 'cursor-pointer bg-paper text-ink hover:bg-panel'
+              }`}
             >
               <Link size={16} />
             </button>
@@ -122,15 +81,7 @@ export default function ImageInsertControl({ resetInteraction }: ImageInsertCont
               title="Upload image"
               aria-label="Upload image"
               onClick={() => fileInputRef.current?.click()}
-              style={{
-                width: 34,
-                height: 34,
-                borderRadius: 6,
-                border: '1px solid #d1d5db',
-                background: '#ffffff',
-                color: '#111827',
-                cursor: 'pointer',
-              }}
+              className="h-[34px] w-[34px] cursor-pointer rounded-md border border-field-border bg-paper text-ink hover:bg-panel"
             >
               <Upload size={16} />
             </button>
@@ -139,15 +90,7 @@ export default function ImageInsertControl({ resetInteraction }: ImageInsertCont
               title="Close"
               aria-label="Close"
               onClick={closeDialog}
-              style={{
-                width: 34,
-                height: 34,
-                borderRadius: 6,
-                border: '1px solid #d1d5db',
-                background: '#ffffff',
-                color: '#111827',
-                cursor: 'pointer',
-              }}
+              className="h-[34px] w-[34px] cursor-pointer rounded-md border border-field-border bg-paper text-ink hover:bg-panel"
             >
               <X size={16} />
             </button>
@@ -157,7 +100,7 @@ export default function ImageInsertControl({ resetInteraction }: ImageInsertCont
             aria-label="Image file"
             type="file"
             accept="image/*"
-            style={{ display: 'none' }}
+            className="hidden"
             onChange={(event) => {
               void insertFromFile(event.currentTarget.files?.[0]);
               event.currentTarget.value = '';

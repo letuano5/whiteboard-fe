@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
-import { KeyRound, Loader2, LogIn, LogOut, ShieldCheck, UserPlus } from 'lucide-react';
+import { Loader2, LogIn, LogOut, ShieldCheck, UserPlus } from 'lucide-react';
 import { useAuthStore, type AuthStoreState } from './auth.store';
 
 interface AuthPanelProps {
@@ -37,33 +37,24 @@ export function AuthPanel({ useStore = useAuthStore }: AuthPanelProps) {
   const isLoading = status === 'loading';
 
   return (
-    <section className="rounded-lg border border-[#b7c7b7] bg-[#fbfdf9]/95 p-5 shadow-[0_20px_60px_rgba(28,41,33,0.12)]">
-      <div className="mb-5 flex items-center justify-between gap-4">
-        <div>
-          <p className="text-xs font-semibold uppercase text-[#68766a]">Operator access</p>
-          <h2 className="mt-1 text-xl font-semibold text-[#18231d]">
-            {mode === 'sign-up' ? 'Create account' : 'Sign in'}
-          </h2>
-        </div>
-        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#173f35] text-white">
-          {isLoading ? (
-            <Loader2 className="h-5 w-5 animate-spin" />
-          ) : (
-            <KeyRound className="h-5 w-5" />
-          )}
-        </div>
+    <section className="rounded-lg border border-rule bg-paper p-5">
+      <div className="mb-5 flex items-center gap-2">
+        <h2 className="text-xl font-semibold text-ink">
+          {mode === 'sign-up' ? 'Create account' : 'Sign in'}
+        </h2>
+        {isLoading ? <Loader2 className="h-4 w-4 animate-spin text-muted" /> : null}
       </div>
 
       {session ? (
         <div className="space-y-4">
-          <div className="rounded-lg border border-[#cbd9cb] bg-white p-4">
+          <div className="rounded-lg border border-rule bg-panel p-4">
             <div className="flex items-center gap-3">
-              <ShieldCheck className="h-5 w-5 text-[#16735c]" />
+              <ShieldCheck className="h-5 w-5 text-notice" />
               <div className="min-w-0">
-                <p className="text-sm font-medium text-[#18231d]">
+                <p className="text-sm font-medium text-ink">
                   {session.user.name ?? session.user.email ?? 'Signed in'}
                 </p>
-                <p className="truncate text-xs text-[#68766a]">
+                <p className="truncate text-xs text-muted">
                   {session.user.email ?? session.user.id}
                 </p>
               </div>
@@ -73,7 +64,7 @@ export function AuthPanel({ useStore = useAuthStore }: AuthPanelProps) {
             type="button"
             onClick={() => void signOut()}
             disabled={isLoading}
-            className="flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-[#173f35] bg-white px-4 text-sm font-semibold text-[#173f35] transition-colors hover:bg-[#edf5ef] disabled:cursor-not-allowed disabled:opacity-60"
+            className="flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-ink bg-paper px-4 text-sm font-semibold text-ink transition-colors hover:bg-panel disabled:cursor-not-allowed disabled:opacity-60"
           >
             <LogOut className="h-4 w-4" />
             Sign out
@@ -81,12 +72,12 @@ export function AuthPanel({ useStore = useAuthStore }: AuthPanelProps) {
         </div>
       ) : (
         <form className="space-y-3" onSubmit={handleSubmit}>
-          <div className="grid h-10 grid-cols-2 rounded-lg border border-[#b7c7b7] bg-white p-1">
+          <div className="grid h-10 grid-cols-2 rounded-lg border border-rule bg-paper p-1">
             <button
               type="button"
               onClick={() => setMode('sign-in')}
               className={`rounded-md text-sm font-semibold transition-colors ${
-                mode === 'sign-in' ? 'bg-[#173f35] text-white' : 'text-[#314039] hover:bg-[#edf5ef]'
+                mode === 'sign-in' ? 'bg-primary text-paper' : 'text-muted hover:bg-panel'
               }`}
             >
               Sign in
@@ -95,38 +86,38 @@ export function AuthPanel({ useStore = useAuthStore }: AuthPanelProps) {
               type="button"
               onClick={() => setMode('sign-up')}
               className={`rounded-md text-sm font-semibold transition-colors ${
-                mode === 'sign-up' ? 'bg-[#173f35] text-white' : 'text-[#314039] hover:bg-[#edf5ef]'
+                mode === 'sign-up' ? 'bg-primary text-paper' : 'text-muted hover:bg-panel'
               }`}
             >
               Register
             </button>
           </div>
           <label className="block">
-            <span className="text-sm font-medium text-[#314039]">Email</span>
+            <span className="text-sm font-medium text-muted">Email</span>
             <input
               value={email}
               onChange={(event) => setEmail(event.target.value)}
               type="email"
               autoComplete="email"
               required
-              className="mt-1 h-11 w-full rounded-lg border border-[#b7c7b7] bg-white px-3 text-[#18231d] outline-none transition-colors focus:border-[#2457c5] focus:ring-2 focus:ring-[#2457c5]/20"
+              className="mt-1 h-11 w-full rounded-lg border border-field-border bg-paper px-3 text-ink outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary-soft"
             />
           </label>
           <label className="block">
-            <span className="text-sm font-medium text-[#314039]">Password</span>
+            <span className="text-sm font-medium text-muted">Password</span>
             <input
               value={password}
               onChange={(event) => setPassword(event.target.value)}
               type="password"
-              autoComplete="current-password"
+              autoComplete={mode === 'sign-up' ? 'new-password' : 'current-password'}
               required
-              className="mt-1 h-11 w-full rounded-lg border border-[#b7c7b7] bg-white px-3 text-[#18231d] outline-none transition-colors focus:border-[#2457c5] focus:ring-2 focus:ring-[#2457c5]/20"
+              className="mt-1 h-11 w-full rounded-lg border border-field-border bg-paper px-3 text-ink outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary-soft"
             />
           </label>
           <button
             type="submit"
             disabled={isLoading}
-            className="flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-[#173f35] px-4 text-sm font-semibold text-white transition-colors hover:bg-[#0f2d26] disabled:cursor-not-allowed disabled:opacity-60"
+            className="flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-semibold text-paper transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {isLoading ? (
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -143,7 +134,7 @@ export function AuthPanel({ useStore = useAuthStore }: AuthPanelProps) {
       {noticeMessage ? (
         <p
           role="status"
-          className="mt-4 rounded-lg border border-[#9dc9af] bg-[#eef8f1] px-3 py-2 text-sm text-[#1f5b41]"
+          className="mt-4 rounded-lg border border-notice-border bg-notice-soft px-3 py-2 text-sm text-notice"
         >
           {noticeMessage}
         </p>
@@ -152,7 +143,7 @@ export function AuthPanel({ useStore = useAuthStore }: AuthPanelProps) {
       {errorMessage ? (
         <p
           role="alert"
-          className="mt-4 rounded-lg border border-[#dfb86a] bg-[#fff8e8] px-3 py-2 text-sm text-[#795014]"
+          className="mt-4 rounded-lg border border-warning-border bg-warning-soft px-3 py-2 text-sm text-warning"
         >
           {errorMessage}
         </p>

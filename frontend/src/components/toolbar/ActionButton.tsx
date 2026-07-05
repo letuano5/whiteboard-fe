@@ -1,4 +1,3 @@
-const BUTTON_SIZE = 30;
 const ICON_SIZE = 16;
 
 interface ActionButtonProps {
@@ -16,26 +15,9 @@ export default function ActionButton({ title, disabled, onClick, Icon }: ActionB
       aria-label={title}
       disabled={disabled}
       onClick={onClick}
-      style={{
-        width: BUTTON_SIZE,
-        height: BUTTON_SIZE,
-        flexShrink: 0,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        borderRadius: 6,
-        border: 'none',
-        cursor: disabled ? 'not-allowed' : 'pointer',
-        background: disabled ? '#f3f4f6' : 'transparent',
-        color: disabled ? '#9ca3af' : '#374151',
-        transition: 'background 0.1s',
-      }}
-      onMouseEnter={(e) => {
-        if (!disabled) (e.currentTarget as HTMLButtonElement).style.background = '#f3f4f6';
-      }}
-      onMouseLeave={(e) => {
-        if (!disabled) (e.currentTarget as HTMLButtonElement).style.background = 'transparent';
-      }}
+      className={`flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-md transition-colors ${
+        disabled ? 'cursor-not-allowed bg-panel text-muted' : 'cursor-pointer text-ink hover:bg-panel'
+      }`}
     >
       <Icon size={ICON_SIZE} />
     </button>

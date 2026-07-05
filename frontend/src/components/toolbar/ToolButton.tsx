@@ -11,26 +11,9 @@ export default function ToolButton({ title, active, onClick, Icon }: ToolButtonP
       type="button"
       title={title}
       onClick={onClick}
-      style={{
-        width: 36,
-        height: 36,
-        flexShrink: 0,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        borderRadius: 8,
-        border: 'none',
-        cursor: 'pointer',
-        background: active ? '#2563eb' : 'transparent',
-        color: active ? 'white' : '#374151',
-        transition: 'background 0.1s',
-      }}
-      onMouseEnter={(e) => {
-        if (!active) (e.currentTarget as HTMLButtonElement).style.background = '#f3f4f6';
-      }}
-      onMouseLeave={(e) => {
-        if (!active) (e.currentTarget as HTMLButtonElement).style.background = 'transparent';
-      }}
+      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-colors ${
+        active ? 'bg-primary text-paper' : 'text-ink hover:bg-panel'
+      }`}
     >
       <Icon size={18} />
     </button>
