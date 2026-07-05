@@ -3,7 +3,14 @@ import type { ElementProps } from '../types/shared';
 
 export type DefaultStyle = Pick<
   ElementProps,
-  'strokeColor' | 'fillColor' | 'strokeWidth' | 'strokeStyle' | 'opacity'
+  | 'strokeColor'
+  | 'fillColor'
+  | 'strokeWidth'
+  | 'strokeStyle'
+  | 'opacity'
+  | 'fontSize'
+  | 'fontFamily'
+  | 'textAlign'
 >;
 
 export const DEFAULT_STYLE_INITIAL: DefaultStyle = {
@@ -12,6 +19,9 @@ export const DEFAULT_STYLE_INITIAL: DefaultStyle = {
   strokeWidth: 2,
   strokeStyle: 'solid',
   opacity: 1,
+  fontSize: 16,
+  fontFamily: 'sans-serif',
+  textAlign: 'left',
 };
 
 interface DefaultStyleActions {

@@ -23,13 +23,6 @@ export function isShapeTool(tool: ToolId): tool is ShapeToolType {
   return (SHAPE_TOOLS as readonly string[]).includes(tool);
 }
 
-const TEXT_EXTRA: Partial<ElementProps> = {
-  text: 'Text',
-  fontSize: 16,
-  fontFamily: 'sans-serif',
-  textAlign: 'left',
-};
-
 function getDefaultProps(type: ShapeToolType): ElementProps {
   const style = useDefaultStyleStore.getState();
   const base: ElementProps = {
@@ -39,7 +32,15 @@ function getDefaultProps(type: ShapeToolType): ElementProps {
     strokeStyle: style.strokeStyle,
     opacity: style.opacity,
   };
-  if (type === 'text') return { ...base, ...TEXT_EXTRA };
+  if (type === 'text') {
+    return {
+      ...base,
+      text: 'Text',
+      fontSize: style.fontSize,
+      fontFamily: style.fontFamily,
+      textAlign: style.textAlign,
+    };
+  }
   return base;
 }
 

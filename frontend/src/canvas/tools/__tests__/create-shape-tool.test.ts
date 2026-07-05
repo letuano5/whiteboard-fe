@@ -107,6 +107,21 @@ describe('buildDraftFromPoints — text', () => {
     const result = buildDraftFromPoints('text', pt(200, 50), pt(0, 0));
     expect(result).toMatchObject({ x: 0, y: 0, width: 200, height: 50 });
   });
+
+  it('picks up a customized default font size/family/align', () => {
+    useDefaultStyleStore.getState().setDefaultStyle({
+      fontSize: 32,
+      fontFamily: 'monospace',
+      textAlign: 'center',
+    });
+
+    const result = buildDraftFromPoints('text', pt(0, 0), pt(200, 50));
+    expect(result.props.fontSize).toBe(32);
+    expect(result.props.fontFamily).toBe('monospace');
+    expect(result.props.textAlign).toBe('center');
+
+    useDefaultStyleStore.setState({ ...DEFAULT_STYLE_INITIAL });
+  });
 });
 
 // @covers AC-19

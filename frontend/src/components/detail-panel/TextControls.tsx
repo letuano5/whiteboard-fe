@@ -53,10 +53,10 @@ export function TextControls({
               style={{
                 width: 28,
                 height: 24,
-                background: props.textAlign === align ? '#3b82f6' : '#2a2a2a',
-                border: '1px solid #444',
+                background: props.textAlign === align ? '#3b82f6' : '#f9fafb',
+                border: props.textAlign === align ? '1px solid #3b82f6' : '1px solid #d1d5db',
                 borderRadius: 4,
-                color: 'inherit',
+                color: props.textAlign === align ? '#ffffff' : '#111827',
                 fontSize: 12,
                 cursor: 'pointer',
                 display: 'flex',

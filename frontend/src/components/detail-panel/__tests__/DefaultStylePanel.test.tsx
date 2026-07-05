@@ -69,3 +69,35 @@ describe('DefaultStylePanel editing', () => {
     expect(screen.queryByLabelText(/fill color/i)).not.toBeInTheDocument();
   });
 });
+
+describe('DefaultStylePanel — text tool', () => {
+  it('shows font size, font family, and align controls for the text tool', () => {
+    useInteractionStore.getState().setTool('text');
+    render(<DefaultStylePanel />);
+
+    expect(screen.getByText(/font size/i)).toBeInTheDocument();
+    expect(screen.getByText(/font family/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'center' })).toBeInTheDocument();
+  });
+
+  it('does not show text controls for a non-text draw tool', () => {
+    useInteractionStore.getState().setTool('rectangle');
+    render(<DefaultStylePanel />);
+
+    expect(screen.queryByText(/font size/i)).not.toBeInTheDocument();
+  });
+
+  it('updates default font size/family/align in the store', () => {
+    useInteractionStore.getState().setTool('text');
+    render(<DefaultStylePanel />);
+
+    fireEvent.change(screen.getByLabelText(/font size/i), { target: { value: '24' } });
+    expect(useDefaultStyleStore.getState().fontSize).toBe(24);
+
+    fireEvent.change(screen.getByLabelText(/font family/i), { target: { value: 'serif' } });
+    expect(useDefaultStyleStore.getState().fontFamily).toBe('serif');
+
+    fireEvent.click(screen.getByRole('button', { name: 'right' }));
+    expect(useDefaultStyleStore.getState().textAlign).toBe('right');
+  });
+});
