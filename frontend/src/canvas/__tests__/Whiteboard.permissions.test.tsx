@@ -83,6 +83,33 @@ describe('Whiteboard role permissions', () => {
     expect(screen.getByRole('button', { name: /login/i })).toBeInTheDocument();
   });
 
+  it('@covers AC-4 (049-mobile-responsive-pan-zoom): edge controls use safe-area-aware offsets', () => {
+    useRoomAccessStore.getState().setRoomAccess({
+      roomId: 'room-1',
+      role: 'owner',
+      baseRole: 'owner',
+      effectiveRole: 'owner',
+      visibility: 'private',
+      shareRevokedAt: null,
+      members: [],
+      invitations: [],
+    });
+
+    render(<Whiteboard mode="saved" />);
+
+    const dashboardButton = screen.getByRole('button', { name: /open dashboard/i });
+    const topRightCluster = screen.getByRole('button', { name: /share/i }).parentElement
+      ?.parentElement as HTMLElement;
+    const selectHint = screen.getByText('Click chuột giữa để scroll canvas');
+
+    expect(dashboardButton.style.top).toBe('calc(12px + env(safe-area-inset-top))');
+    expect(dashboardButton.style.left).toBe('calc(12px + env(safe-area-inset-left))');
+    expect(topRightCluster.style.top).toBe('calc(12px + env(safe-area-inset-top))');
+    expect(topRightCluster.style.right).toBe('calc(12px + env(safe-area-inset-right))');
+    expect(selectHint.style.bottom).toBe('calc(12px + env(safe-area-inset-bottom))');
+    expect(selectHint.style.left).toBe('calc(12px + env(safe-area-inset-left))');
+  });
+
   it('shows dashboard navigation on saved boards', async () => {
     const pushStateSpy = vi.spyOn(window.history, 'pushState').mockImplementation(() => {});
     const reload = vi.fn();

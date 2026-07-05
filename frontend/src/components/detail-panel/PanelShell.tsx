@@ -20,6 +20,7 @@ export function PanelShell({ children }: PanelShellProps) {
         borderRadius: 16,
         padding: '12px 16px',
         minWidth: 220,
+        maxWidth: 'min(320px, calc(100vw - 32px))',
         maxHeight: '60vh',
         overflowY: 'auto',
         display: 'flex',

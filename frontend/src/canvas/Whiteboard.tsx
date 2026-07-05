@@ -96,6 +96,10 @@ export default function Whiteboard({ mode = 'saved' }: WhiteboardProps) {
           void openDashboard(isLocalBoard);
         }}
         className="absolute left-3 top-3 z-50 flex h-10 w-10 items-center justify-center rounded-lg border border-[#cbd9cb] bg-white text-[#173f35] shadow-[0_8px_24px_rgba(23,63,53,0.12)] hover:bg-[#edf5ef] focus:outline-none focus:ring-2 focus:ring-[#2457c5] focus:ring-offset-2"
+        style={{
+          top: 'calc(12px + env(safe-area-inset-top))',
+          left: 'calc(12px + env(safe-area-inset-left))',
+        }}
         aria-label="Open dashboard"
         title="Open dashboard"
       >
@@ -124,8 +128,8 @@ export default function Whiteboard({ mode = 'saved' }: WhiteboardProps) {
       <div
         style={{
           position: 'absolute',
-          top: '12px',
-          right: '12px',
+          top: 'calc(12px + env(safe-area-inset-top))',
+          right: 'calc(12px + env(safe-area-inset-right))',
           zIndex: 50,
           display: 'flex',
           flexDirection: 'column',
@@ -154,8 +158,8 @@ export default function Whiteboard({ mode = 'saved' }: WhiteboardProps) {
         <div
           style={{
             position: 'absolute',
-            bottom: '12px',
-            left: '12px',
+            bottom: 'calc(12px + env(safe-area-inset-bottom))',
+            left: 'calc(12px + env(safe-area-inset-left))',
             fontSize: '12px',
             color: '#aaa',
             pointerEvents: 'none',

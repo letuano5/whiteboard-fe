@@ -14,6 +14,7 @@ export default function ZoomControl() {
       style={{
         minWidth: 40,
         height: 30,
+        flexShrink: 0,
         padding: '0 8px',
         display: 'flex',
         alignItems: 'center',

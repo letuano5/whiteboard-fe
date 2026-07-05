@@ -19,6 +19,7 @@ export default function SvgLayer({
   onPointerMove,
   onPointerUp,
   onPointerLeave,
+  onPointerCancel,
   onDoubleClick,
   onContextMenu,
   onHandlePointerDown,
@@ -49,6 +50,7 @@ export default function SvgLayer({
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerLeave={onPointerLeave}
+      onPointerCancel={onPointerCancel}
       onDoubleClick={onDoubleClick}
       onContextMenu={onContextMenu}
     >

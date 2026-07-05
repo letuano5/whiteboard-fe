@@ -32,17 +32,22 @@ export default function MoreToolsMenu({ tool, chooseTool }: MoreToolsMenuProps) 
       />
       {open && (
         <div
+          className="toolbar-scroll"
           role="menu"
           aria-label="More tools"
           style={{
             position: 'fixed',
             left: '50%',
-            bottom: 72,
+            bottom: 'calc(72px + env(safe-area-inset-bottom))',
             transform: 'translateX(-50%)',
             zIndex: 1000,
             display: 'flex',
             gap: 4,
             padding: '6px',
+            maxWidth: 'calc(100vw - 16px)',
+            overflowX: 'auto',
+            scrollbarWidth: 'none',
+            WebkitOverflowScrolling: 'touch',
             background: 'white',
             borderRadius: 12,
             boxShadow: '0 2px 12px rgba(0,0,0,0.12)',

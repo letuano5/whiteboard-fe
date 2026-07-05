@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { useElementsStore } from '../../../store/elements.store';
 import { useInteractionStore } from '../../../store/interaction.store';
 
@@ -66,6 +66,33 @@ describe('ContextMenu — z-order button labels', () => {
     expect(screen.getByText(/forward/i)).toBeDefined();
     expect(screen.getByText(/backward/i)).toBeDefined();
     expect(screen.getByText(/send to back/i)).toBeDefined();
+  });
+});
+
+describe('ContextMenu — mobile viewport clamping', () => {
+  it('@covers AC-3 (049-mobile-responsive-pan-zoom): clamps the menu inside the viewport after measuring its rendered size', async () => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 320 });
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 600 });
+    const rectSpy = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
+      x: 0,
+      y: 0,
+      top: 0,
+      left: 0,
+      right: 160,
+      bottom: 220,
+      width: 160,
+      height: 220,
+      toJSON: () => ({}),
+    });
+
+    render(<ContextMenu x={310} y={500} selectedId="el-1" selectedCount={1} onClose={vi.fn()} />);
+
+    const menu = screen.getByText(/bring to front/i).parentElement as HTMLElement;
+    await waitFor(() => expect(menu.style.visibility).toBe('visible'));
+
+    expect(menu.style.left).toBe('152px');
+    expect(menu.style.top).toBe('372px');
+    rectSpy.mockRestore();
   });
 });
 

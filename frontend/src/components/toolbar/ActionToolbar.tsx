@@ -19,15 +19,20 @@ export default function ActionToolbar() {
   return (
     <>
       <div
+        className="toolbar-scroll"
         style={{
           position: 'absolute',
-          bottom: 72,
+          bottom: 'calc(72px + env(safe-area-inset-bottom))',
           left: '50%',
           transform: 'translateX(-50%)',
           display: 'flex',
           alignItems: 'center',
           gap: 2,
           padding: '4px',
+          maxWidth: 'calc(100vw - 16px)',
+          overflowX: 'auto',
+          scrollbarWidth: 'none',
+          WebkitOverflowScrolling: 'touch',
           background: 'white',
           borderRadius: 10,
           boxShadow: '0 2px 12px rgba(0,0,0,0.12)',

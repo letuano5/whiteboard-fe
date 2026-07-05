@@ -16,6 +16,17 @@ beforeEach(() => {
 });
 
 describe('ActionToolbar', () => {
+  it('@covers AC-1 (049-mobile-responsive-pan-zoom): action row is viewport-clamped and horizontally scrollable', () => {
+    const { container } = render(<ActionToolbar />);
+    const root = container.firstElementChild as HTMLElement;
+
+    expect(root).toHaveClass('toolbar-scroll');
+    expect(root.style.maxWidth).toBe('calc(100vw - 16px)');
+    expect(root.style.overflowX).toBe('auto');
+    expect(root.style.scrollbarWidth).toBe('none');
+    expect(root.style.bottom).toBe('calc(72px + env(safe-area-inset-bottom))');
+  });
+
   it('renders Undo, Redo, Duplicate, Delete, and Reset zoom controls', () => {
     render(<ActionToolbar />);
     ['Undo', 'Redo', 'Duplicate', 'Delete', 'Reset zoom'].forEach((title) => {

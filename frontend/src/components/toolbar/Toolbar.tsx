@@ -36,14 +36,19 @@ export default function Toolbar() {
 
   return (
     <div
+      className="toolbar-scroll"
       style={{
         position: 'absolute',
-        bottom: 16,
+        bottom: 'calc(16px + env(safe-area-inset-bottom))',
         left: '50%',
         transform: 'translateX(-50%)',
         display: 'flex',
         gap: 4,
         padding: '6px',
+        maxWidth: 'calc(100vw - 16px)',
+        overflowX: 'auto',
+        scrollbarWidth: 'none',
+        WebkitOverflowScrolling: 'touch',
         background: 'white',
         borderRadius: 12,
         boxShadow: '0 2px 12px rgba(0,0,0,0.12)',
@@ -52,7 +57,13 @@ export default function Toolbar() {
       }}
     >
       {FIXED_TOOLS.map(({ id, label, Icon }) => (
-        <ToolButton key={id} title={label} active={tool === id} onClick={() => chooseTool(id)} Icon={Icon} />
+        <ToolButton
+          key={id}
+          title={label}
+          active={tool === id}
+          onClick={() => chooseTool(id)}
+          Icon={Icon}
+        />
       ))}
       <ImageInsertControl resetInteraction={resetInteraction} />
       <MoreToolsMenu tool={tool} chooseTool={chooseTool} />

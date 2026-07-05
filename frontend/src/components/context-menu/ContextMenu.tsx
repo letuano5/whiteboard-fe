@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import { bringToFront, sendToBack, bringForward, sendBackward } from '../../store/zorder';
 import { useElementsStore } from '../../store/elements.store';
 import { useInteractionStore } from '../../store/interaction.store';
@@ -74,6 +74,11 @@ export default function ContextMenu({
   onClose,
 }: ContextMenuProps) {
   const ref = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState({
+    left: x,
+    top: y,
+    visibility: 'hidden' as CSSProperties['visibility'],
+  });
   const disabled = selectedCount !== 1 || !selectedId;
   const elements = useElementsStore((state) => state.elements);
   const selectedIds = useInteractionStore((state) => state.selectedIds);
@@ -83,6 +88,22 @@ export default function ContextMenu({
   const lockLabel = isSelectionLocked(elements, selectedIds) ? 'Unlock' : 'Lock';
 
   useDismissOnOutsideClick(ref, onClose);
+
+  useLayoutEffect(() => {
+    const element = ref.current;
+    if (!element) return;
+
+    const rect = element.getBoundingClientRect();
+    const margin = 8;
+    const left = Math.min(x, window.innerWidth - rect.width - margin);
+    const top = Math.min(y, window.innerHeight - rect.height - margin);
+
+    setPos({
+      left: Math.max(margin, left),
+      top: Math.max(margin, top),
+      visibility: 'visible',
+    });
+  }, [x, y]);
 
   function handle(fn: (id: string) => void) {
     if (disabled || !selectedId) return;
@@ -113,8 +134,9 @@ export default function ContextMenu({
       ref={ref}
       style={{
         position: 'fixed',
-        left: x,
-        top: y,
+        left: pos.left,
+        top: pos.top,
+        visibility: pos.visibility,
         background: '#fff',
         border: '1px solid #e5e7eb',
         borderRadius: '6px',

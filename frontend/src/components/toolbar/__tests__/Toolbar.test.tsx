@@ -47,6 +47,17 @@ describe('Toolbar tool selection', () => {
 // @covers AC-8 (005-detail-panel-toolbar)
 // @covers AC-1
 describe('AC-8 (005): toolbar shows tool buttons including laser', () => {
+  it('@covers AC-1 (049-mobile-responsive-pan-zoom): toolbar row is viewport-clamped and horizontally scrollable', () => {
+    const { container } = render(<Toolbar />);
+    const root = container.firstElementChild as HTMLElement;
+
+    expect(root).toHaveClass('toolbar-scroll');
+    expect(root.style.maxWidth).toBe('calc(100vw - 16px)');
+    expect(root.style.overflowX).toBe('auto');
+    expect(root.style.scrollbarWidth).toBe('none');
+    expect(root.style.bottom).toBe('calc(16px + env(safe-area-inset-bottom))');
+  });
+
   it('renders the fixed tools, Image, and the More tools trigger', () => {
     render(<Toolbar />);
     const expectedTitles = [

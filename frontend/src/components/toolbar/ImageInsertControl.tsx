@@ -43,6 +43,7 @@ export default function ImageInsertControl({ resetInteraction }: ImageInsertCont
         style={{
           width: 36,
           height: 36,
+          flexShrink: 0,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',

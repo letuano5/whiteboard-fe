@@ -19,6 +19,7 @@ export default function ActionButton({ title, disabled, onClick, Icon }: ActionB
       style={{
         width: BUTTON_SIZE,
         height: BUTTON_SIZE,
+        flexShrink: 0,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',

@@ -33,6 +33,8 @@ project roadmap, phase order, and product scope remain canonical in `docs/SPECS.
 - Repo roadmap ID `P3C-02` maps to GSD Phase `3.32`.
 - Repo roadmap ID `P3C-03` maps to GSD Phase `3.33`.
 - Repo roadmap ID `P3C-04` maps to GSD Phase `3.34`.
+- Operational polish slice `049-mobile-responsive-pan-zoom` maps to GSD Phase `1.12`
+  and traces to `docs/SPECS.md` P1A-06/P1A-07/P1A-08/P1A-11.
 - The source of truth is `docs/SPECS.md` feature sections.
 
 - [x] **Phase 2.51: P2.5-01 Image / background map** - Users can insert images from URL or upload, render them in the SVG layer, move/resize them, and place them as background maps.
@@ -59,6 +61,7 @@ project roadmap, phase order, and product scope remain canonical in `docs/SPECS.
 - [x] **Phase 5.10: P5-10 Export adapters use materialized server truth** - Saved-room native export reads a materialized server snapshot and shared import/export normalization reports unsupported objects without partial mutation.
 - [x] **Phase 5.11: P5-11 Frontend reconciliation** - Saved-room frontend mutations use bounded P5 command queues, slot-aware reconciliation, reconnect-safe pending replay, and ephemeral presence/draft preview.
 - [x] **Phase 2.57: P2.5-07 Merge items + bind text vào container** - Users can merge multiple elements into a group via `groupId`, and merging exactly one text with one container shape binds the text as a centered, wrapping, container-following label.
+- [ ] **Phase 1.12: Mobile responsive pan/zoom polish** - Mobile users can reach toolbar controls on narrow screens and use two fingers to pan/pinch-zoom the SVG whiteboard without switching tools.
 
 ## Phase Details
 

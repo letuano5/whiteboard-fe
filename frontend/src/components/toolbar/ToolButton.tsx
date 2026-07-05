@@ -14,6 +14,7 @@ export default function ToolButton({ title, active, onClick, Icon }: ToolButtonP
       style={{
         width: 36,
         height: 36,
+        flexShrink: 0,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
