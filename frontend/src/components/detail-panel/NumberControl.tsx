@@ -22,8 +22,8 @@ export function NumberControl({ label, max, min, step, value, onChange }: Number
         onChange={(e) => onChange(Number(e.target.value))}
         style={{
           width: 56,
-          background: '#2a2a2a',
-          border: '1px solid #444',
+          background: '#f9fafb',
+          border: '1px solid #d1d5db',
           borderRadius: 4,
           padding: '2px 6px',
           color: 'inherit',

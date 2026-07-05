@@ -8,6 +8,7 @@ import {
   type MutationEvent,
 } from '../../../store/mutation-pipeline';
 import { MAX_POINTS_PER_FREEHAND_STROKE, splitFreehandStrokeAtCap } from '../../freehand-points';
+import { useDefaultStyleStore, DEFAULT_STYLE_INITIAL } from '../../../store/default-style.store';
 import {
   cancelFreehandDraw,
   cancelHighlighterDraw,
@@ -22,6 +23,7 @@ import {
 beforeEach(() => {
   useElementsStore.setState({ elements: [] });
   useInteractionStore.getState().reset();
+  useDefaultStyleStore.setState({ ...DEFAULT_STYLE_INITIAL });
   cancelFreehandDraw();
   cancelHighlighterDraw();
   vi.restoreAllMocks();
@@ -86,6 +88,18 @@ describe('freehand tool', () => {
   });
 
   // @covers AC-3
+  it('picks up a customized default style from the default style store', () => {
+    useDefaultStyleStore.getState().setDefaultStyle({ strokeColor: '#00ffcc', strokeWidth: 8 });
+
+    onFreehandPointerDown({ x: 0, y: 0 });
+    onFreehandPointerMove({ x: 10, y: 20 });
+    onFreehandPointerUp({ x: 20, y: 0 });
+
+    const [element] = useElementsStore.getState().elements;
+    expect(element.props.strokeColor).toBe('#00ffcc');
+    expect(element.props.strokeWidth).toBe(8);
+  });
+
   it('splits a long drag into multiple freehand elements at the point cap', () => {
     onFreehandPointerDown(point(0));
     for (let index = 1; index <= MAX_POINTS_PER_FREEHAND_STROKE; index += 1) {
@@ -171,6 +185,26 @@ describe('highlighter tool', () => {
       strokeWidth: 14,
     });
     expect(element.props.strokeWidth).toBeGreaterThan(3);
+  });
+
+  // @covers AC-2
+  it('ignores default style customization — styling stays fixed', () => {
+    useDefaultStyleStore.getState().setDefaultStyle({
+      strokeColor: '#00ffcc',
+      strokeWidth: 8,
+      opacity: 1,
+    });
+
+    onHighlighterPointerDown({ x: 0, y: 0 });
+    onHighlighterPointerMove({ x: 10, y: 20 });
+    onHighlighterPointerUp({ x: 20, y: 0 });
+
+    const [element] = useElementsStore.getState().elements;
+    expect(element.props).toMatchObject({
+      strokeColor: '#facc15',
+      strokeWidth: 14,
+      opacity: 0.35,
+    });
   });
 
   // @covers AC-3

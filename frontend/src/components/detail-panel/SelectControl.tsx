@@ -20,8 +20,8 @@ export function SelectControl({ label, options, value, onChange }: SelectControl
         value={value}
         onChange={(e) => onChange(e.target.value)}
         style={{
-          background: '#2a2a2a',
-          border: '1px solid #444',
+          background: '#f9fafb',
+          border: '1px solid #d1d5db',
           borderRadius: 4,
           padding: '2px 4px',
           color: 'inherit',

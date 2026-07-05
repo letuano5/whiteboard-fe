@@ -1,6 +1,10 @@
 import { useAuthStore } from '../auth/auth.store';
 import { loadCamera, startCameraPersistence } from '../sync/camera-persistence';
 import { initLocalStoragePersistence, startLocalStoragePersistence } from '../sync/local-storage';
+import {
+  initDefaultStylePersistence,
+  startDefaultStylePersistence,
+} from '../sync/default-style-persistence';
 import { initBroadcastChannel } from '../sync/broadcast-channel';
 import { initHistoryCapture } from '../sync/history-capture';
 import { initSocketClient } from '../sync/socket-client';
@@ -16,6 +20,8 @@ export async function bootstrapApp(roomId: string, options: BootstrapOptions = {
   }
 
   initHistoryCapture();
+  initDefaultStylePersistence();
+  startDefaultStylePersistence();
   await useAuthStore.getState().initAuth();
 
   if (!roomId) {

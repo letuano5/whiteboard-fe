@@ -11,7 +11,7 @@ export function SectionTitle({ children, withSpacing = false }: SectionTitleProp
       style={{
         fontWeight: 600,
         fontSize: 12,
-        color: '#aaa',
+        color: '#6b7280',
         textTransform: 'uppercase',
         letterSpacing: 1,
         marginTop: withSpacing ? 4 : undefined,

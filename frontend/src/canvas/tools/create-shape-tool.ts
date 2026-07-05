@@ -2,6 +2,7 @@ import type { ArrowEndpointBinding, Element, ElementProps } from '../../types/sh
 import type { Point } from '../../types/geometry';
 import type { ToolId } from '../../types/interaction';
 import { useInteractionStore } from '../../store/interaction.store';
+import { useDefaultStyleStore } from '../../store/default-style.store';
 import { createElement, type ElementDraft } from '../../store/mutation-pipeline';
 import { useElementsStore } from '../../store/elements.store';
 import { findNearestSnap, pointKeyToAnchorRatio } from '../shapes/arrow-binding';
@@ -22,18 +23,7 @@ export function isShapeTool(tool: ToolId): tool is ShapeToolType {
   return (SHAPE_TOOLS as readonly string[]).includes(tool);
 }
 
-const DEFAULT_PROPS: ElementProps = {
-  strokeColor: '#1a1a1a',
-  fillColor: 'transparent',
-  strokeWidth: 2,
-  strokeStyle: 'solid',
-  opacity: 1,
-};
-
 const TEXT_EXTRA: Partial<ElementProps> = {
-  strokeColor: '#1a1a1a',
-  fillColor: 'transparent',
-  strokeWidth: 1,
   text: 'Text',
   fontSize: 16,
   fontFamily: 'sans-serif',
@@ -41,8 +31,16 @@ const TEXT_EXTRA: Partial<ElementProps> = {
 };
 
 function getDefaultProps(type: ShapeToolType): ElementProps {
-  if (type === 'text') return { ...DEFAULT_PROPS, ...TEXT_EXTRA };
-  return { ...DEFAULT_PROPS };
+  const style = useDefaultStyleStore.getState();
+  const base: ElementProps = {
+    strokeColor: style.strokeColor,
+    fillColor: style.fillColor,
+    strokeWidth: style.strokeWidth,
+    strokeStyle: style.strokeStyle,
+    opacity: style.opacity,
+  };
+  if (type === 'text') return { ...base, ...TEXT_EXTRA };
+  return base;
 }
 
 export function buildDraftFromPoints(

@@ -8,6 +8,7 @@ import CursorOverlay from './layers/CursorOverlay';
 import Toolbar from '../components/toolbar/Toolbar';
 import ActionToolbar from '../components/toolbar/ActionToolbar';
 import DetailPanel from '../components/detail-panel/DetailPanel';
+import DefaultStylePanel from '../components/detail-panel/DefaultStylePanel';
 import BackToContent from '../components/back-to-content/BackToContent';
 import ShareLinkButton from '../components/ShareLinkButton';
 import OnlineUsersPanel from '../components/ui/OnlineUsersPanel';
@@ -117,6 +118,7 @@ export default function Whiteboard({ mode = 'saved' }: WhiteboardProps) {
       {canEdit && <ActionToolbar />}
       {canEdit && <Toolbar />}
       {canEdit && <DetailPanel />}
+      {canEdit && <DefaultStylePanel />}
       <BackToContent containerRef={containerRef} />
       {/* T021: Online users panel + share button stacked in top-right */}
       <div

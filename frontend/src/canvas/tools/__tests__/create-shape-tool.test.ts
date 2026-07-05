@@ -7,6 +7,7 @@ import {
   onShapePointerUp,
 } from '../create-shape-tool';
 import { useInteractionStore } from '../../../store/interaction.store';
+import { useDefaultStyleStore, DEFAULT_STYLE_INITIAL } from '../../../store/default-style.store';
 import * as pipeline from '../../../store/mutation-pipeline';
 import type { Point } from '../../../types/geometry';
 
@@ -44,6 +45,18 @@ describe('buildDraftFromPoints — rectangle', () => {
     expect(result.props.strokeWidth).toBe(2);
     expect(result.props.strokeStyle).toBe('solid');
     expect(result.props.opacity).toBe(1);
+  });
+
+  it('picks up a customized default style from the default style store', () => {
+    useDefaultStyleStore.getState().setDefaultStyle({ strokeColor: '#ff00ff', strokeWidth: 9 });
+
+    const result = buildDraftFromPoints('rectangle', pt(0, 0), pt(100, 100));
+    expect(result.props.strokeColor).toBe('#ff00ff');
+    expect(result.props.strokeWidth).toBe(9);
+  });
+
+  afterEach(() => {
+    useDefaultStyleStore.setState({ ...DEFAULT_STYLE_INITIAL });
   });
 });
 
