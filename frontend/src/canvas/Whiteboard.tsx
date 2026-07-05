@@ -6,7 +6,9 @@ import TextEditor from './tools/text-editor';
 import SvgLayer from './layers/SvgLayer';
 import CursorOverlay from './layers/CursorOverlay';
 import Toolbar from '../components/toolbar/Toolbar';
+import ActionToolbar from '../components/toolbar/ActionToolbar';
 import DetailPanel from '../components/detail-panel/DetailPanel';
+import DefaultStylePanel from '../components/detail-panel/DefaultStylePanel';
 import BackToContent from '../components/back-to-content/BackToContent';
 import ShareLinkButton from '../components/ShareLinkButton';
 import OnlineUsersPanel from '../components/ui/OnlineUsersPanel';
@@ -79,14 +81,25 @@ export default function Whiteboard({ mode = 'saved' }: WhiteboardProps) {
   return (
     <div
       ref={containerRef}
-      style={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden', cursor }}
+      style={{
+        position: 'relative',
+        width: '100%',
+        height: '100%',
+        overflow: 'hidden',
+        cursor,
+        touchAction: 'none',
+      }}
     >
       <button
         type="button"
         onClick={() => {
           void openDashboard(isLocalBoard);
         }}
-        className="absolute left-3 top-3 z-50 flex h-10 w-10 items-center justify-center rounded-lg border border-[#cbd9cb] bg-white text-[#173f35] shadow-[0_8px_24px_rgba(23,63,53,0.12)] hover:bg-[#edf5ef] focus:outline-none focus:ring-2 focus:ring-[#2457c5] focus:ring-offset-2"
+        className="absolute left-3 top-3 z-50 flex h-10 w-10 items-center justify-center rounded-lg border border-rule bg-paper text-ink shadow-md hover:bg-panel focus:outline-none focus:ring-2 focus:ring-primary-soft focus:ring-offset-2"
+        style={{
+          top: 'calc(12px + env(safe-area-inset-top))',
+          left: 'calc(12px + env(safe-area-inset-left))',
+        }}
         aria-label="Open dashboard"
         title="Open dashboard"
       >
@@ -106,15 +119,17 @@ export default function Whiteboard({ mode = 'saved' }: WhiteboardProps) {
         />
       )}
       {canEdit && editingElement && <TextEditor element={editingElement} camera={camera} />}
+      {canEdit && <ActionToolbar />}
       {canEdit && <Toolbar />}
       {canEdit && <DetailPanel />}
+      {canEdit && <DefaultStylePanel />}
       <BackToContent containerRef={containerRef} />
       {/* T021: Online users panel + share button stacked in top-right */}
       <div
         style={{
           position: 'absolute',
-          top: '12px',
-          right: '12px',
+          top: 'calc(12px + env(safe-area-inset-top))',
+          right: 'calc(12px + env(safe-area-inset-right))',
           zIndex: 50,
           display: 'flex',
           flexDirection: 'column',
@@ -141,14 +156,11 @@ export default function Whiteboard({ mode = 'saved' }: WhiteboardProps) {
       </div>
       {activeTool === 'select' && (
         <div
+          className="absolute select-none text-xs text-muted"
           style={{
-            position: 'absolute',
-            bottom: '12px',
-            left: '12px',
-            fontSize: '12px',
-            color: '#aaa',
+            bottom: 'calc(12px + env(safe-area-inset-bottom))',
+            left: 'calc(12px + env(safe-area-inset-left))',
             pointerEvents: 'none',
-            userSelect: 'none',
           }}
         >
           Click chuột giữa để scroll canvas

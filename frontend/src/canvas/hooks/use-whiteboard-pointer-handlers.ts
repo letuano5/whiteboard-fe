@@ -5,15 +5,12 @@ import type { HandleId, ToolId } from '../../types/interaction';
 import { useCameraStore, useInteractionStore } from '../../store';
 import { emitCursorMove } from '../../sync/socket-client';
 import {
-  cancelShapeDraw,
   isShapeTool,
   onShapePointerDown,
   onShapePointerMove,
   onShapePointerUp,
 } from '../tools/create-shape-tool';
 import {
-  cancelFreehandDraw,
-  cancelHighlighterDraw,
   onFreehandPointerDown,
   onFreehandPointerMove,
   onFreehandPointerUp,
@@ -21,31 +18,19 @@ import {
   onHighlighterPointerMove,
   onHighlighterPointerUp,
 } from '../tools/freehand-tool';
+import { onEraserPointerDown, onEraserPointerMove, onEraserPointerUp } from '../tools/eraser-tool';
+import { onLaserPointerMove } from '../tools/laser-tool';
+import { onSelectPointerDown, onSelectPointerMove, onSelectPointerUp } from '../tools/select-tool';
+import { svgWorldPoint } from '../pointer-coordinates';
+import { useMultiTouchGesture } from './use-multi-touch-gesture';
+import { resolveContextMenuState, type ContextMenuState } from './whiteboard-context-menu';
+import { handleWhiteboardDoubleClick } from './whiteboard-double-click';
+import { handleWhiteboardHandlePointerDown } from './whiteboard-handle-pointer';
 import {
-  cancelEraserDrag,
-  onEraserPointerDown,
-  onEraserPointerMove,
-  onEraserPointerUp,
-} from '../tools/eraser-tool';
-import { onLaserPointerLeave, onLaserPointerMove } from '../tools/laser-tool';
-import {
-  onRotateHandlePointerDown,
-  onSelectHandlePointerDown,
-  onSelectPointerDown,
-  onSelectPointerMove,
-  onSelectPointerUp,
-} from '../tools/select-tool';
-import { onCanvasDoubleClick } from '../tools/text-editor';
-import { CONTAINER_TYPES, resolveGroupBinding, resolveGroupMembers } from '../tools/select/group';
-import { createBoundTextForContainer } from '../tools/select/bind-text-on-container';
-import { hitTestElementAtWorldPoint } from '../shapes/hit-test';
-import { svgElementWorldPoint, svgWorldPoint } from '../pointer-coordinates';
-
-interface ContextMenuState {
-  x: number;
-  y: number;
-  id: string;
-}
+  cancelCurrentSinglePointerAction,
+  cancelPointerOnLeave,
+  cancelPointerWithoutCommit,
+} from './whiteboard-pointer-cancel';
 
 interface UseWhiteboardPointerHandlersParams {
   canEdit?: boolean;
@@ -73,7 +58,21 @@ export function useWhiteboardPointerHandlers({
     return tool === 'hand' || event.button === 1 || spaceDown;
   }
 
+  const multiTouchGesture = useMultiTouchGesture({
+    onGestureStart: (event) =>
+      cancelCurrentSinglePointerAction(event, {
+        camera,
+        canEdit,
+        panStart,
+        setIsPanning,
+        tool,
+      }),
+    setIsPanning,
+  });
+
   function handlePointerDown(event: React.PointerEvent<SVGSVGElement>) {
+    if (multiTouchGesture.handlePointerDown(event)) return;
+
     if (isPanTrigger(event)) {
       panStart.current = { x: event.clientX, y: event.clientY };
       setIsPanning(true);
@@ -128,6 +127,8 @@ export function useWhiteboardPointerHandlers({
   }
 
   function handlePointerMove(event: React.PointerEvent<SVGSVGElement>) {
+    if (multiTouchGesture.handlePointerMove(event)) return;
+
     const now = Date.now();
     if (now - lastCursorSent.current >= 33) {
       emitCursorMove(svgWorldPoint(event, camera));
@@ -151,7 +152,7 @@ export function useWhiteboardPointerHandlers({
 
     if (tool === 'select') {
       if (!canEdit) return;
-      onSelectPointerMove(svgWorldPoint(event, camera));
+      onSelectPointerMove(svgWorldPoint(event, camera), event.shiftKey);
       return;
     }
 
@@ -177,6 +178,8 @@ export function useWhiteboardPointerHandlers({
   }
 
   function handlePointerUp(event: React.PointerEvent<SVGSVGElement>) {
+    if (multiTouchGesture.handlePointerEnd(event)) return;
+
     if (panStart.current) {
       panStart.current = null;
       setIsPanning(false);
@@ -211,37 +214,16 @@ export function useWhiteboardPointerHandlers({
     onShapePointerUp(tool, svgWorldPoint(event, camera));
   }
 
-  function handlePointerLeave() {
-    if (panStart.current) {
-      panStart.current = null;
-      setIsPanning(false);
-      return;
-    }
+  function handlePointerLeave(event: React.PointerEvent<SVGSVGElement>) {
+    if (multiTouchGesture.handlePointerEnd(event)) return;
 
-    if (!canEdit) return;
+    cancelPointerOnLeave({ camera, canEdit, panStart, setIsPanning, tool });
+  }
 
-    if (tool === 'laser') {
-      onLaserPointerLeave();
-      return;
-    }
+  function handlePointerCancel(event: React.PointerEvent<SVGSVGElement>) {
+    if (multiTouchGesture.handlePointerEnd(event)) return;
 
-    if (tool === 'freehand') {
-      cancelFreehandDraw();
-      return;
-    }
-
-    if (tool === 'highlighter') {
-      cancelHighlighterDraw();
-      return;
-    }
-
-    if (tool === 'eraser') {
-      cancelEraserDrag();
-      return;
-    }
-
-    if (!isShapeTool(tool)) return;
-    cancelShapeDraw();
+    cancelPointerWithoutCommit({ camera, canEdit, panStart, setIsPanning, tool });
   }
 
   function handleContextMenu(event: React.MouseEvent<SVGSVGElement>) {
@@ -251,91 +233,15 @@ export function useWhiteboardPointerHandlers({
       return;
     }
 
-    const worldPoint = svgWorldPoint(event, camera);
-    const visible = elements
-      .filter((element) => !element.isDeleted)
-      .sort((a, b) => b.zIndex - a.zIndex);
-
-    for (const element of visible) {
-      if (hitTestElementAtWorldPoint(element, worldPoint)) {
-        setContextMenu({ x: event.clientX, y: event.clientY, id: element.id });
-        return;
-      }
-    }
-
-    setContextMenu(null);
+    setContextMenu(resolveContextMenuState(event, camera, elements));
   }
 
   function handleDoubleClick(event: React.MouseEvent<SVGSVGElement>) {
-    if (!canEdit) return;
-    if (tool !== 'select') return;
-    if (editingId) return;
-
-    const {
-      draggingId,
-      isRotating,
-      resizeSession,
-      groupResizeSession,
-      setSelectedIds,
-      setEditingId,
-    } = useInteractionStore.getState();
-    if (draggingId || isRotating || resizeSession || groupResizeSession) return;
-
-    const worldPoint = svgWorldPoint(event, camera);
-    const hit = elements
-      .filter((element) => !element.isDeleted)
-      .sort((a, b) => b.zIndex - a.zIndex)
-      .find((element) => hitTestElementAtWorldPoint(element, worldPoint));
-
-    if (hit && CONTAINER_TYPES.has(hit.type)) {
-      const binding = hit.groupId ? resolveGroupBinding(hit.groupId, elements) : null;
-      if (binding && binding.containerId === hit.id) {
-        // Container already has a bound label — edit it directly instead of just selecting it.
-        setSelectedIds([binding.textId]);
-        setEditingId(binding.textId);
-        return;
-      }
-      const isMergedWithOthers =
-        !!hit.groupId && resolveGroupMembers(hit.groupId, elements).length > 1;
-      if (isMergedWithOthers) {
-        // Part of a multi-shape merge without a qualifying 1-text+1-container binding —
-        // bind-text-on-double-click only applies to standalone containers. Just select it.
-        setSelectedIds([hit.id]);
-        return;
-      }
-      // Standalone container, no label yet — create one centered in it and start editing right away.
-      const text = createBoundTextForContainer(hit);
-      setSelectedIds([text.id]);
-      setEditingId(text.id);
-      return;
-    }
-
-    if (
-      hit?.groupId &&
-      hit.type !== 'text' &&
-      resolveGroupMembers(hit.groupId, elements).length > 1
-    ) {
-      setSelectedIds([hit.id]);
-      return;
-    }
-
-    onCanvasDoubleClick(worldPoint);
+    handleWhiteboardDoubleClick({ canEdit, camera, editingId, elements, event, tool });
   }
 
   function handleHandlePointerDown(handle: HandleId, event: React.PointerEvent<SVGCircleElement>) {
-    if (!canEdit) return;
-
-    const svgElement = event.currentTarget.closest('svg') as SVGSVGElement | null;
-    if (!svgElement) return;
-
-    const worldPoint = svgElementWorldPoint(svgElement, event, camera);
-    if (handle === 'rotate') {
-      svgElement.setPointerCapture(event.pointerId);
-      onRotateHandlePointerDown(worldPoint);
-      return;
-    }
-
-    onSelectHandlePointerDown(handle, worldPoint);
+    handleWhiteboardHandlePointerDown({ camera, canEdit, event, handle });
   }
 
   return {
@@ -347,6 +253,7 @@ export function useWhiteboardPointerHandlers({
       onPointerMove: handlePointerMove,
       onPointerUp: handlePointerUp,
       onPointerLeave: handlePointerLeave,
+      onPointerCancel: handlePointerCancel,
       onDoubleClick: handleDoubleClick,
       onContextMenu: handleContextMenu,
       onHandlePointerDown: handleHandlePointerDown,

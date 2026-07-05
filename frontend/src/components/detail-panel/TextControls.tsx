@@ -42,27 +42,19 @@ export function TextControls({
         onChange={onFontFamilyChange}
       />
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div className="flex items-center justify-between">
         <span>Align</span>
-        <div style={{ display: 'flex', gap: 4 }}>
+        <div className="flex gap-1">
           {TEXT_ALIGNMENTS.map((align) => (
             <button
               key={align}
               aria-label={align}
               onClick={() => onPatchProps({ textAlign: align })}
-              style={{
-                width: 28,
-                height: 24,
-                background: props.textAlign === align ? '#3b82f6' : '#2a2a2a',
-                border: '1px solid #444',
-                borderRadius: 4,
-                color: 'inherit',
-                fontSize: 12,
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
+              className={`flex h-6 w-7 items-center justify-center rounded text-xs ${
+                props.textAlign === align
+                  ? 'border border-primary bg-primary text-paper'
+                  : 'border border-field-border bg-panel text-ink'
+              }`}
             >
               {align === 'left' ? 'L' : align === 'center' ? 'C' : 'R'}
             </button>

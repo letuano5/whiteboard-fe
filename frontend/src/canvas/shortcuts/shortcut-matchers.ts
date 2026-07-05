@@ -33,6 +33,20 @@ export function isDeleteShortcut(event: KeyboardShortcutInput): boolean {
   return event.key === 'Delete' || event.key === 'Backspace';
 }
 
+export function isSelectAllShortcut(event: KeyboardShortcutInput): boolean {
+  return isModifierPressed(event) && event.key === 'a';
+}
+
+export function isCutShortcut(event: KeyboardShortcutInput): boolean {
+  return isModifierPressed(event) && event.key === 'x';
+}
+
+const ARROW_KEYS = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']);
+
+export function isArrowMoveShortcut(event: KeyboardShortcutInput): boolean {
+  return ARROW_KEYS.has(event.key) && !isModifierPressed(event);
+}
+
 export function isUndoShortcut(event: KeyboardShortcutInput): boolean {
   return isModifierPressed(event) && event.key === 'z' && !event.shiftKey;
 }

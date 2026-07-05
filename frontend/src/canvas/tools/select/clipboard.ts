@@ -3,6 +3,7 @@ import { useInteractionStore } from '../../../store/interaction.store';
 import { createElements, type ElementDraft } from '../../../store/mutation-pipeline';
 import type { Element } from '../../../types/shared';
 import { generateId } from '../../../utils/id';
+import { onDeleteSelected } from './delete';
 
 function buildGroupIdRemap(elements: Element[]): Map<string, string> {
   const remap = new Map<string, string>();
@@ -61,6 +62,13 @@ export function onCopySelected(): void {
 
   setClipboard(originals.map((el) => ({ ...el, props: { ...el.props } })));
   setPasteOffset(0);
+}
+
+export function onCutSelected(): void {
+  const { selectedIds } = useInteractionStore.getState();
+  if (selectedIds.length === 0) return;
+  onCopySelected();
+  onDeleteSelected();
 }
 
 // @covers AC-15, AC-16, AC-17

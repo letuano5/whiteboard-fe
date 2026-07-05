@@ -1,1 +1,50 @@
 @import 'tailwindcss';
+
+@theme {
+  /* Neutrals */
+  --color-paper: #ffffff;
+  --color-panel: #fafafa;
+  --color-ink: #17181a;
+  --color-muted: #6b6b6f;
+  --color-rule: #e8e7e4;
+  --color-field-border: #dcdbd7;
+  --color-dot: #d7d5cc;
+
+  /* Primary — the single action color: solid buttons, active states, focus rings */
+  --color-primary: #4f56d3;
+  --color-primary-soft: #e7e8fb;
+
+  /* Status */
+  --color-notice: #1f7a4d;
+  --color-notice-soft: #e8f5ee;
+  --color-notice-border: #a8d9bc;
+  --color-warning: #92400e;
+  --color-warning-soft: #fef3e2;
+  --color-warning-border: #e8c27a;
+  --color-danger: #a13d2e;
+  --color-danger-soft: #fbe9e7;
+  --color-danger-border: #e8b4ab;
+}
+
+.toolbar-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+/* Infinite-canvas dot grid used behind the landing/login pitch panel. */
+@keyframes canvas-grid-drift {
+  to {
+    background-position: 44px 44px;
+  }
+}
+
+.canvas-grid {
+  background-image: radial-gradient(var(--color-dot) 1.2px, transparent 1.6px);
+  background-size: 22px 22px;
+  animation: canvas-grid-drift 10s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .canvas-grid {
+    animation: none;
+  }
+}

@@ -7,6 +7,7 @@ import {
   onShapePointerUp,
 } from '../create-shape-tool';
 import { useInteractionStore } from '../../../store/interaction.store';
+import { useDefaultStyleStore, DEFAULT_STYLE_INITIAL } from '../../../store/default-style.store';
 import * as pipeline from '../../../store/mutation-pipeline';
 import type { Point } from '../../../types/geometry';
 
@@ -44,6 +45,18 @@ describe('buildDraftFromPoints — rectangle', () => {
     expect(result.props.strokeWidth).toBe(2);
     expect(result.props.strokeStyle).toBe('solid');
     expect(result.props.opacity).toBe(1);
+  });
+
+  it('picks up a customized default style from the default style store', () => {
+    useDefaultStyleStore.getState().setDefaultStyle({ strokeColor: '#ff00ff', strokeWidth: 9 });
+
+    const result = buildDraftFromPoints('rectangle', pt(0, 0), pt(100, 100));
+    expect(result.props.strokeColor).toBe('#ff00ff');
+    expect(result.props.strokeWidth).toBe(9);
+  });
+
+  afterEach(() => {
+    useDefaultStyleStore.setState({ ...DEFAULT_STYLE_INITIAL });
   });
 });
 
@@ -93,6 +106,21 @@ describe('buildDraftFromPoints — text', () => {
   it('normalizes bounds like rectangle', () => {
     const result = buildDraftFromPoints('text', pt(200, 50), pt(0, 0));
     expect(result).toMatchObject({ x: 0, y: 0, width: 200, height: 50 });
+  });
+
+  it('picks up a customized default font size/family/align', () => {
+    useDefaultStyleStore.getState().setDefaultStyle({
+      fontSize: 32,
+      fontFamily: 'monospace',
+      textAlign: 'center',
+    });
+
+    const result = buildDraftFromPoints('text', pt(0, 0), pt(200, 50));
+    expect(result.props.fontSize).toBe(32);
+    expect(result.props.fontFamily).toBe('monospace');
+    expect(result.props.textAlign).toBe('center');
+
+    useDefaultStyleStore.setState({ ...DEFAULT_STYLE_INITIAL });
   });
 });
 
@@ -198,7 +226,7 @@ describe('onShapePointerUp — text auto-enters edit mode', () => {
     expect(useInteractionStore.getState().editingId).toBeNull();
   });
 
-  it('switches tool to select after text creation', () => {
+  it('keeps the active tool unchanged after text creation (no auto-switch to select)', () => {
     vi.spyOn(pipeline, 'createElement').mockReturnValue(
       { id: 'new-text-3' } as ReturnType<typeof pipeline.createElement>,
     );
@@ -207,7 +235,19 @@ describe('onShapePointerUp — text auto-enters edit mode', () => {
 
     onShapePointerUp('text', { x: 50, y: 50 });
 
-    expect(useInteractionStore.getState().tool).toBe('select');
+    expect(useInteractionStore.getState().tool).toBe('text');
+  });
+
+  it('keeps the active tool unchanged after a non-text shape is drag-created', () => {
+    vi.spyOn(pipeline, 'createElement').mockReturnValue(
+      { id: 'rect-1' } as ReturnType<typeof pipeline.createElement>,
+    );
+    useInteractionStore.getState().setDragStart({ x: 0, y: 0 });
+    useInteractionStore.getState().setTool('rectangle');
+
+    onShapePointerUp('rectangle', { x: 100, y: 100 });
+
+    expect(useInteractionStore.getState().tool).toBe('rectangle');
   });
 });
 

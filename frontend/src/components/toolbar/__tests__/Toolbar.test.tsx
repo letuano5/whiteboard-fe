@@ -47,22 +47,47 @@ describe('Toolbar tool selection', () => {
 // @covers AC-8 (005-detail-panel-toolbar)
 // @covers AC-1
 describe('AC-8 (005): toolbar shows tool buttons including laser', () => {
-  it('renders Select, Hand, Rectangle, Ellipse, Line, Text, Freehand, Highlighter, Eraser, Laser buttons', () => {
+  it('@covers AC-1 (049-mobile-responsive-pan-zoom): toolbar row is viewport-clamped and horizontally scrollable', () => {
+    const { container } = render(<Toolbar />);
+    const root = container.firstElementChild as HTMLElement;
+
+    expect(root).toHaveClass('toolbar-scroll');
+    expect(root).toHaveClass('max-w-[calc(100vw-16px)]');
+    expect(root).toHaveClass('overflow-x-auto');
+    expect(root.style.scrollbarWidth).toBe('none');
+    expect(root.style.bottom).toBe('calc(16px + env(safe-area-inset-bottom))');
+  });
+
+  it('renders the fixed tools, Image, and the More tools trigger', () => {
     render(<Toolbar />);
     const expectedTitles = [
       'Select',
-      'Hand',
       'Rectangle',
       'Ellipse',
       'Line',
       'Text',
-      'Image',
-      'Freehand',
-      'Highlighter',
       'Eraser',
-      'Laser',
+      'Image',
+      'More tools',
     ];
     expectedTitles.forEach((title) => {
+      expect(screen.getByTitle(title)).toBeInTheDocument();
+    });
+  });
+
+  it('renders overflow tools (Hand, Diamond, Triangle, Polygon, Freehand, Highlighter, Laser) inside the More tools menu', () => {
+    render(<Toolbar />);
+    fireEvent.click(screen.getByTitle('More tools'));
+    const overflowTitles = [
+      'Hand',
+      'Diamond',
+      'Triangle',
+      'Polygon',
+      'Freehand',
+      'Highlighter',
+      'Laser',
+    ];
+    overflowTitles.forEach((title) => {
       expect(screen.getByTitle(title)).toBeInTheDocument();
     });
   });
@@ -124,6 +149,7 @@ describe('image insertion control', () => {
 describe('freehand tool button', () => {
   it('clicking Freehand sets tool to freehand', () => {
     render(<Toolbar />);
+    fireEvent.click(screen.getByTitle('More tools'));
     fireEvent.click(screen.getByTitle('Freehand'));
     expect(useInteractionStore.getState().tool).toBe('freehand');
   });
@@ -133,6 +159,7 @@ describe('freehand tool button', () => {
 describe('highlighter tool button', () => {
   it('clicking Highlighter sets tool to highlighter', () => {
     render(<Toolbar />);
+    fireEvent.click(screen.getByTitle('More tools'));
     fireEvent.click(screen.getByTitle('Highlighter'));
     expect(useInteractionStore.getState().tool).toBe('highlighter');
   });
@@ -164,6 +191,7 @@ describe('eraser tool button', () => {
 describe('AC-4: laser tool button activates laser tool', () => {
   it('clicking Laser button sets tool to laser', () => {
     render(<Toolbar />);
+    fireEvent.click(screen.getByTitle('More tools'));
     fireEvent.click(screen.getByTitle('Laser'));
     expect(useInteractionStore.getState().tool).toBe('laser');
   });
@@ -184,6 +212,30 @@ describe('AC-5: switching away from laser clears trail immediately', () => {
   });
 });
 
+describe('More tools trigger active state', () => {
+  it('shows the active highlight when the active tool is inside the overflow menu', () => {
+    useInteractionStore.setState({ tool: 'laser' } as Parameters<
+      typeof useInteractionStore.setState
+    >[0]);
+    render(<Toolbar />);
+    const moreBtn = screen.getByTitle('More tools') as HTMLButtonElement;
+    const selectBtn = screen.getByTitle('Select') as HTMLButtonElement;
+    expect(moreBtn).toHaveClass('bg-primary');
+    expect(selectBtn).not.toHaveClass('bg-primary');
+  });
+
+  it('does not show the active highlight when the active tool is a fixed tool', () => {
+    useInteractionStore.setState({ tool: 'select' } as Parameters<
+      typeof useInteractionStore.setState
+    >[0]);
+    render(<Toolbar />);
+    const moreBtn = screen.getByTitle('More tools') as HTMLButtonElement;
+    const inactiveBtn = screen.getByTitle('Rectangle') as HTMLButtonElement;
+    expect(moreBtn).not.toHaveClass('bg-primary');
+    expect(inactiveBtn).not.toHaveClass('bg-primary');
+  });
+});
+
 // @covers AC-9 (005-detail-panel-toolbar)
 describe('AC-9 (005): active tool is visually distinguished', () => {
   it('active tool button has different background from inactive tools', () => {
@@ -193,6 +245,7 @@ describe('AC-9 (005): active tool is visually distinguished', () => {
     render(<Toolbar />);
     const activeBtn = screen.getByTitle('Rectangle') as HTMLButtonElement;
     const inactiveBtn = screen.getByTitle('Select') as HTMLButtonElement;
-    expect(activeBtn.style.background).not.toBe(inactiveBtn.style.background);
+    expect(activeBtn).toHaveClass('bg-primary');
+    expect(inactiveBtn).not.toHaveClass('bg-primary');
   });
 });

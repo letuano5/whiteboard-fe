@@ -8,14 +8,7 @@ interface SectionTitleProps {
 export function SectionTitle({ children, withSpacing = false }: SectionTitleProps) {
   return (
     <div
-      style={{
-        fontWeight: 600,
-        fontSize: 12,
-        color: '#aaa',
-        textTransform: 'uppercase',
-        letterSpacing: 1,
-        marginTop: withSpacing ? 4 : undefined,
-      }}
+      className={`text-[12px] font-semibold uppercase tracking-wide text-muted ${withSpacing ? 'mt-1' : ''}`}
     >
       {children}
     </div>

@@ -12,11 +12,11 @@ export function AuthMenu() {
 
   if (!session) {
     return (
-      <div style={{ position: 'relative' }}>
+      <div className="relative">
         <button
           type="button"
           onClick={() => setIsOpen(true)}
-          className="flex h-9 items-center gap-1.5 rounded-md border border-[#173f35] bg-white px-3 text-sm font-semibold text-[#173f35] shadow-sm transition-colors hover:bg-[#edf5ef]"
+          className="flex h-9 items-center gap-1.5 rounded-md border border-ink bg-paper px-3 text-sm font-semibold text-ink shadow-sm transition-colors hover:bg-panel"
         >
           <LogIn className="h-4 w-4" />
           Login
@@ -30,12 +30,12 @@ export function AuthMenu() {
   const initials = getInitials(label);
 
   return (
-    <div style={{ position: 'relative' }}>
+    <div className="relative">
       <button
         type="button"
         aria-label="Account menu"
         onClick={() => setIsOpen((current) => !current)}
-        className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-full border border-[#173f35] bg-[#173f35] text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[#0f2d26]"
+        className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-full border border-primary bg-primary text-sm font-semibold text-paper shadow-sm transition-opacity hover:opacity-90"
       >
         {session.user.avatarUrl ? (
           <img src={session.user.avatarUrl} alt="" className="h-full w-full object-cover" />
@@ -44,9 +44,9 @@ export function AuthMenu() {
         )}
       </button>
       {isOpen ? (
-        <div className="absolute right-0 top-11 z-[80] w-64 rounded-lg border border-[#b7c7b7] bg-[#fbfdf9] p-3 text-[#18231d] shadow-[0_20px_60px_rgba(28,41,33,0.18)]">
-          <div className="mb-3 flex items-center gap-3 rounded-md border border-[#cbd9cb] bg-white p-3">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#173f35] text-sm font-semibold text-white">
+        <div className="absolute right-0 top-11 z-[80] w-64 rounded-lg border border-rule bg-paper p-3 text-ink shadow-lg">
+          <div className="mb-3 flex items-center gap-3 rounded-md border border-rule bg-panel p-3">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary text-sm font-semibold text-paper">
               {session.user.avatarUrl ? (
                 <img src={session.user.avatarUrl} alt="" className="h-full w-full object-cover" />
               ) : (
@@ -54,8 +54,8 @@ export function AuthMenu() {
               )}
             </div>
             <div className="min-w-0">
-              <p className="truncate text-sm font-semibold">{label}</p>
-              <p className="truncate text-xs text-[#68766a]">
+              <p className="truncate text-sm font-semibold text-ink">{label}</p>
+              <p className="truncate text-xs text-muted">
                 {session.user.email ?? session.user.id}
               </p>
             </div>
@@ -64,7 +64,7 @@ export function AuthMenu() {
             type="button"
             onClick={() => void signOut()}
             disabled={isLoading}
-            className="flex h-10 w-full items-center justify-center gap-2 rounded-md border border-[#173f35] bg-white px-3 text-sm font-semibold text-[#173f35] transition-colors hover:bg-[#edf5ef] disabled:cursor-not-allowed disabled:opacity-60"
+            className="flex h-10 w-full items-center justify-center gap-2 rounded-md border border-ink bg-paper px-3 text-sm font-semibold text-ink transition-colors hover:bg-panel disabled:cursor-not-allowed disabled:opacity-60"
           >
             <LogOut className="h-4 w-4" />
             Sign out
@@ -77,16 +77,13 @@ export function AuthMenu() {
 
 function AuthPopover({ onClose }: { onClose: () => void }) {
   return (
-    <div className="absolute right-0 top-11 z-[80] w-[min(360px,calc(100vw-24px))] rounded-lg border border-[#b7c7b7] bg-[#fbfdf9] p-4 text-[#18231d] shadow-[0_20px_60px_rgba(28,41,33,0.18)]">
+    <div className="absolute right-0 top-11 z-[80] w-[min(360px,calc(100vw-24px))] rounded-lg border border-rule bg-paper p-4 text-ink shadow-lg">
       <div className="mb-3 flex items-start justify-between gap-3">
-        <div>
-          <p className="text-xs font-semibold uppercase text-[#68766a]">Account</p>
-          <h2 className="mt-1 text-lg font-semibold">Login</h2>
-        </div>
+        <h2 className="text-lg font-semibold text-ink">Login</h2>
         <button
           type="button"
           onClick={onClose}
-          className="flex h-8 w-8 items-center justify-center rounded-lg border border-[#cbd9cb] bg-white text-[#314039] hover:bg-[#edf5ef]"
+          className="flex h-8 w-8 items-center justify-center rounded-lg border border-rule bg-paper text-muted hover:bg-panel"
           aria-label="Close"
         >
           <X className="h-4 w-4" />

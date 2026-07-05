@@ -1,47 +1,11 @@
-import {
-  MousePointer2,
-  Hand,
-  Square,
-  Circle,
-  Diamond,
-  Triangle,
-  Hexagon,
-  Minus,
-  ArrowRight,
-  Type,
-  Zap,
-  Pencil,
-  Highlighter,
-  Eraser,
-} from 'lucide-react';
 import { useInteractionStore } from '../../store/interaction.store';
 import { clearLaserTrail } from '../../canvas/tools/laser-tool';
 import { cancelFreehandDraw, cancelHighlighterDraw } from '../../canvas/tools/freehand-tool';
 import type { ToolId } from '../../types/interaction';
+import { FIXED_TOOLS } from './tool-list';
+import ToolButton from './ToolButton';
+import MoreToolsMenu from './more-tools/MoreToolsMenu';
 import ImageInsertControl from './ImageInsertControl';
-
-interface ToolButton {
-  id: ToolId;
-  label: string;
-  Icon: React.ComponentType<{ size?: number }>;
-}
-
-const TOOLS: ToolButton[] = [
-  { id: 'select', label: 'Select', Icon: MousePointer2 },
-  { id: 'hand', label: 'Hand', Icon: Hand },
-  { id: 'rectangle', label: 'Rectangle', Icon: Square },
-  { id: 'ellipse', label: 'Ellipse', Icon: Circle },
-  { id: 'diamond', label: 'Diamond', Icon: Diamond },
-  { id: 'triangle', label: 'Triangle', Icon: Triangle },
-  { id: 'polygon', label: 'Polygon', Icon: Hexagon },
-  { id: 'line', label: 'Line', Icon: Minus },
-  { id: 'arrow', label: 'Arrow', Icon: ArrowRight },
-  { id: 'text', label: 'Text', Icon: Type },
-  { id: 'freehand', label: 'Freehand', Icon: Pencil },
-  { id: 'highlighter', label: 'Highlighter', Icon: Highlighter },
-  { id: 'eraser', label: 'Eraser', Icon: Eraser },
-  { id: 'laser', label: 'Laser', Icon: Zap },
-];
 
 export default function Toolbar() {
   const tool = useInteractionStore((s) => s.tool);
@@ -72,51 +36,24 @@ export default function Toolbar() {
 
   return (
     <div
+      className="toolbar-scroll absolute left-1/2 z-10 flex max-w-[calc(100vw-16px)] -translate-x-1/2 gap-1 overflow-x-auto rounded-xl border border-rule bg-paper p-1.5 shadow-md"
       style={{
-        position: 'absolute',
-        bottom: 16,
-        left: '50%',
-        transform: 'translateX(-50%)',
-        display: 'flex',
-        gap: 4,
-        padding: '6px',
-        background: 'white',
-        borderRadius: 12,
-        boxShadow: '0 2px 12px rgba(0,0,0,0.12)',
-        border: '1px solid #e5e7eb',
-        zIndex: 10,
+        bottom: 'calc(16px + env(safe-area-inset-bottom))',
+        scrollbarWidth: 'none',
+        WebkitOverflowScrolling: 'touch',
       }}
     >
-      {TOOLS.map(({ id, label, Icon }) => (
-        <button
+      {FIXED_TOOLS.map(({ id, label, Icon }) => (
+        <ToolButton
           key={id}
           title={label}
+          active={tool === id}
           onClick={() => chooseTool(id)}
-          style={{
-            width: 36,
-            height: 36,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            borderRadius: 8,
-            border: 'none',
-            cursor: 'pointer',
-            background: tool === id ? '#2563eb' : 'transparent',
-            color: tool === id ? 'white' : '#374151',
-            transition: 'background 0.1s',
-          }}
-          onMouseEnter={(e) => {
-            if (tool !== id) (e.currentTarget as HTMLButtonElement).style.background = '#f3f4f6';
-          }}
-          onMouseLeave={(e) => {
-            if (tool !== id)
-              (e.currentTarget as HTMLButtonElement).style.background = 'transparent';
-          }}
-        >
-          <Icon size={18} />
-        </button>
+          Icon={Icon}
+        />
       ))}
       <ImageInsertControl resetInteraction={resetInteraction} />
+      <MoreToolsMenu tool={tool} chooseTool={chooseTool} />
     </div>
   );
 }

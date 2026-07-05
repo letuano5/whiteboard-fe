@@ -23,18 +23,18 @@ export function DocumentCard({
       <button
         type="button"
         onClick={() => void onOpen(document.id)}
-        className="block w-full rounded-lg bg-[#f3f5f6] p-3 text-left transition-colors hover:bg-[#e9edef] focus:outline-none focus:ring-2 focus:ring-[#2457c5] focus:ring-offset-2"
+        className="block w-full rounded-lg bg-panel p-3 text-left transition-colors hover:bg-rule focus:outline-none focus:ring-2 focus:ring-primary-soft focus:ring-offset-2"
         aria-label={`Open ${document.name}`}
       >
         <DocumentPreview elements={document.previewElements} title={document.name} />
       </button>
       <div className="mt-3 flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <h2 className="truncate text-base font-semibold text-[#202124]">{document.name}</h2>
-          <p className="mt-1 truncate text-sm text-[#6b6f76]">
+          <h2 className="truncate text-base font-semibold text-ink">{document.name}</h2>
+          <p className="mt-1 truncate text-sm text-muted">
             {document.ownerName ?? 'Unknown owner'} · {document.role}
           </p>
-          <p className="mt-1 flex items-center gap-1 text-sm text-[#6b6f76]">
+          <p className="mt-1 flex items-center gap-1 text-sm text-muted">
             <Clock3 className="h-3.5 w-3.5" />
             {formatRecentTime(document.lastOpenedAt ?? document.updatedAt)}
           </p>
@@ -78,14 +78,14 @@ function IconButton({
 }) {
   const toneClass =
     tone === 'danger'
-      ? 'border-[#e2c1a5] text-[#8a3b12] hover:bg-[#fff4ec]'
-      : 'border-[#d7dce1] text-[#3d444d] hover:bg-[#eef2f4]';
+      ? 'border-danger-border text-danger hover:bg-danger-soft'
+      : 'border-field-border text-muted hover:bg-panel';
 
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`flex h-8 w-8 items-center justify-center rounded-lg border bg-white ${toneClass}`}
+      className={`flex h-8 w-8 items-center justify-center rounded-lg border bg-paper ${toneClass}`}
       aria-label={label}
       title={label}
     >

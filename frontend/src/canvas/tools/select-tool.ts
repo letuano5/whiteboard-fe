@@ -1,4 +1,11 @@
-export { onCopySelected, onDuplicateSelected, onPasteSelected } from './select/clipboard';
+export {
+  onCopySelected,
+  onCutSelected,
+  onDuplicateSelected,
+  onPasteSelected,
+} from './select/clipboard';
+export { onMoveSelected } from './select/move';
+export { onSelectAll } from './select/select-all';
 export { onSelectKeyDown } from './select/keyboard';
 export { onSelectPointerMove } from './select/pointer-move';
 export {

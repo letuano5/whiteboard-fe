@@ -1,7 +1,8 @@
-import { useEffect, useRef } from 'react';
+import { useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import { bringToFront, sendToBack, bringForward, sendBackward } from '../../store/zorder';
 import { useElementsStore } from '../../store/elements.store';
 import { useInteractionStore } from '../../store/interaction.store';
+import { useDismissOnOutsideClick } from '../../hooks/use-dismiss-on-outside-click';
 import {
   canMergeSelection,
   canUnmergeSelection,
@@ -22,25 +23,6 @@ interface ContextMenuProps {
   onClose: () => void;
 }
 
-const BUTTON_STYLE: React.CSSProperties = {
-  display: 'block',
-  width: '100%',
-  textAlign: 'left',
-  padding: '6px 12px',
-  background: 'none',
-  border: 'none',
-  fontSize: '13px',
-  cursor: 'pointer',
-  borderRadius: '4px',
-  color: '#1a1a1a',
-};
-
-const DISABLED_STYLE: React.CSSProperties = {
-  ...BUTTON_STYLE,
-  color: '#aaa',
-  cursor: 'not-allowed',
-};
-
 interface MenuItemProps {
   label: string;
   disabled: boolean;
@@ -50,15 +32,11 @@ interface MenuItemProps {
 function MenuItem({ label, disabled, onClick }: MenuItemProps) {
   return (
     <button
-      style={disabled ? DISABLED_STYLE : BUTTON_STYLE}
+      className={`block w-full rounded px-3 py-1.5 text-left text-[13px] ${
+        disabled ? 'cursor-not-allowed text-muted' : 'cursor-pointer text-ink hover:bg-panel'
+      }`}
       disabled={disabled}
       onClick={onClick}
-      onMouseEnter={(e) => {
-        if (!disabled) (e.currentTarget as HTMLButtonElement).style.background = '#f3f4f6';
-      }}
-      onMouseLeave={(e) => {
-        (e.currentTarget as HTMLButtonElement).style.background = 'none';
-      }}
     >
       {label}
     </button>
@@ -73,6 +51,11 @@ export default function ContextMenu({
   onClose,
 }: ContextMenuProps) {
   const ref = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState({
+    left: x,
+    top: y,
+    visibility: 'hidden' as CSSProperties['visibility'],
+  });
   const disabled = selectedCount !== 1 || !selectedId;
   const elements = useElementsStore((state) => state.elements);
   const selectedIds = useInteractionStore((state) => state.selectedIds);
@@ -81,23 +64,23 @@ export default function ContextMenu({
   const lockDisabled = !canToggleLockSelection(elements, selectedIds);
   const lockLabel = isSelectionLocked(elements, selectedIds) ? 'Unlock' : 'Lock';
 
-  // Dismiss on click-outside or Escape
-  useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        onClose();
-      }
-    }
-    function handleKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') onClose();
-    }
-    document.addEventListener('mousedown', handleClick);
-    document.addEventListener('keydown', handleKey);
-    return () => {
-      document.removeEventListener('mousedown', handleClick);
-      document.removeEventListener('keydown', handleKey);
-    };
-  }, [onClose]);
+  useDismissOnOutsideClick(ref, onClose);
+
+  useLayoutEffect(() => {
+    const element = ref.current;
+    if (!element) return;
+
+    const rect = element.getBoundingClientRect();
+    const margin = 8;
+    const left = Math.min(x, window.innerWidth - rect.width - margin);
+    const top = Math.min(y, window.innerHeight - rect.height - margin);
+
+    setPos({
+      left: Math.max(margin, left),
+      top: Math.max(margin, top),
+      visibility: 'visible',
+    });
+  }, [x, y]);
 
   function handle(fn: (id: string) => void) {
     if (disabled || !selectedId) return;
@@ -126,27 +109,17 @@ export default function ContextMenu({
   return (
     <div
       ref={ref}
-      style={{
-        position: 'fixed',
-        left: x,
-        top: y,
-        background: '#fff',
-        border: '1px solid #e5e7eb',
-        borderRadius: '6px',
-        boxShadow: '0 4px 12px rgba(0,0,0,0.12)',
-        padding: '4px 0',
-        minWidth: '160px',
-        zIndex: 9999,
-      }}
+      className="fixed z-[9999] min-w-[160px] rounded-md border border-rule bg-paper py-1 shadow-lg"
+      style={{ left: pos.left, top: pos.top, visibility: pos.visibility }}
     >
       <MenuItem label="Bring to Front" disabled={disabled} onClick={() => handle(bringToFront)} />
       <MenuItem label="Forward" disabled={disabled} onClick={() => handle(bringForward)} />
       <MenuItem label="Backward" disabled={disabled} onClick={() => handle(sendBackward)} />
       <MenuItem label="Send to Back" disabled={disabled} onClick={() => handle(sendToBack)} />
-      <div style={{ borderTop: '1px solid #e5e7eb', margin: '4px 0' }} />
+      <div className="my-1 border-t border-rule" />
       <MenuItem label="Merge" disabled={mergeDisabled} onClick={handleMerge} />
       <MenuItem label="Unmerge" disabled={unmergeDisabled} onClick={handleUnmerge} />
-      <div style={{ borderTop: '1px solid #e5e7eb', margin: '4px 0' }} />
+      <div className="my-1 border-t border-rule" />
       <MenuItem label={lockLabel} disabled={lockDisabled} onClick={handleToggleLock} />
     </div>
   );

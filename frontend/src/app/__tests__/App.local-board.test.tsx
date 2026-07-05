@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import App from '../App';
+import indexHtml from '../../../index.html?raw';
 
 vi.mock('../../canvas/Whiteboard', () => ({
   default: ({ mode }: { mode: 'local' | 'saved' }) => (
@@ -36,6 +37,15 @@ describe('App local-board routing', () => {
     render(<App />);
 
     expect(screen.getByTestId('whiteboard')).toHaveAttribute('data-mode', 'local');
+  });
+
+  it('@covers AC-4 (049-mobile-responsive-pan-zoom): app root uses dynamic viewport height and viewport-fit is enabled', () => {
+    setLocation('/', '');
+
+    render(<App />);
+
+    expect(screen.getByTestId('whiteboard').parentElement?.style.height).toBe('100dvh');
+    expect(indexHtml).toContain('viewport-fit=cover');
   });
 
   it('renders ?room=<uuid> as a saved-document whiteboard', () => {

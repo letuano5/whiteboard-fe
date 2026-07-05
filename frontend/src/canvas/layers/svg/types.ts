@@ -10,6 +10,7 @@ export interface SvgLayerProps {
   onPointerMove?: (e: React.PointerEvent<SVGSVGElement>) => void;
   onPointerUp?: (e: React.PointerEvent<SVGSVGElement>) => void;
   onPointerLeave?: (e: React.PointerEvent<SVGSVGElement>) => void;
+  onPointerCancel?: (e: React.PointerEvent<SVGSVGElement>) => void;
   onDoubleClick?: (e: React.MouseEvent<SVGSVGElement>) => void;
   onContextMenu?: (e: React.MouseEvent<SVGSVGElement>) => void;
   onHandlePointerDown?: (handle: HandleId, e: React.PointerEvent<SVGCircleElement>) => void;

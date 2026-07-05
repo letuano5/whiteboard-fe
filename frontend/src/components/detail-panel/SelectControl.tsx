@@ -12,21 +12,12 @@ interface SelectControlProps {
 
 export function SelectControl({ label, options, value, onChange }: SelectControlProps) {
   return (
-    <label
-      style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}
-    >
+    <label className="flex items-center justify-between gap-2">
       <span>{label}</span>
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        style={{
-          background: '#2a2a2a',
-          border: '1px solid #444',
-          borderRadius: 4,
-          padding: '2px 4px',
-          color: 'inherit',
-          fontSize: 13,
-        }}
+        className="rounded border border-field-border bg-panel px-1 py-0.5 text-[13px] text-inherit"
       >
         {options.map((option) => (
           <option key={option.value} value={option.value}>

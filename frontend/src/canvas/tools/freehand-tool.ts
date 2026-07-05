@@ -1,6 +1,7 @@
 import type { Element, ElementProps } from '../../types/shared';
 import type { Point } from '../../types/geometry';
 import { useInteractionStore } from '../../store/interaction.store';
+import { useDefaultStyleStore } from '../../store/default-style.store';
 import { createElement, type ElementDraft } from '../../store/mutation-pipeline';
 import {
   appendDistinctFreehandPoint,
@@ -14,22 +15,27 @@ import {
 
 type InkToolType = 'freehand' | 'highlighter';
 
-const INK_PROPS: Record<InkToolType, ElementProps> = {
-  freehand: {
-    strokeColor: '#1a1a1a',
-    fillColor: 'transparent',
-    strokeWidth: 3,
-    strokeStyle: 'solid',
-    opacity: 1,
-  },
-  highlighter: {
-    strokeColor: '#facc15',
-    fillColor: 'transparent',
-    strokeWidth: 14,
-    strokeStyle: 'solid',
-    opacity: 0.35,
-  },
+// Highlighter styling is intentionally fixed (not user-configurable) — see P3C-03 decision.
+const HIGHLIGHTER_PROPS: ElementProps = {
+  strokeColor: '#facc15',
+  fillColor: 'transparent',
+  strokeWidth: 14,
+  strokeStyle: 'solid',
+  opacity: 0.35,
 };
+
+function getInkProps(type: InkToolType): ElementProps {
+  if (type === 'highlighter') return HIGHLIGHTER_PROPS;
+
+  const style = useDefaultStyleStore.getState();
+  return {
+    strokeColor: style.strokeColor,
+    fillColor: style.fillColor,
+    strokeWidth: style.strokeWidth,
+    strokeStyle: style.strokeStyle,
+    opacity: style.opacity,
+  };
+}
 
 let activeRawPoints: FreehandPoint[] = [];
 let activeInkTool: InkToolType = 'freehand';
@@ -47,7 +53,7 @@ function buildInkDraft(
     ...boundsForFreehandPoints(points),
     angle: 0,
     props: {
-      ...INK_PROPS[type],
+      ...getInkProps(type),
       points,
     },
     groupId: null,
