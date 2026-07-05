@@ -63,11 +63,11 @@ describe('ManageAccessModal', () => {
     render(<ManageAccessModal roomId="room-1" onClose={vi.fn()} />);
 
     expect(screen.getByRole('dialog', { name: /share/i })).toBeInTheDocument();
-    expect(screen.getByText('Member')).toBeInTheDocument();
+    expect(screen.getByText('member@example.com')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Private' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Public viewer' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Public editor' })).toBeInTheDocument();
-    expect(screen.getByRole('region', { name: 'Capacity' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Can view' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Can edit' })).toBeInTheDocument();
+    expect(screen.getByText('Set participant limits')).toBeInTheDocument();
     expect(screen.getByLabelText('Max participants')).toBeInTheDocument();
     expect(screen.getByLabelText('Max editors')).toBeInTheDocument();
   });
@@ -80,10 +80,12 @@ describe('ManageAccessModal', () => {
       target: { value: 'new@example.com' },
     });
     fireEvent.change(screen.getByLabelText('Invite role'), { target: { value: 'editor' } });
-    fireEvent.submit(screen.getByRole('button', { name: 'Add' }).closest('form')!);
-    fireEvent.change(screen.getByLabelText('Role for Member'), { target: { value: 'viewer' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Public editor' }));
+    fireEvent.submit(screen.getByRole('button', { name: 'Invite' }).closest('form')!);
+    fireEvent.change(screen.getByLabelText('Role for member@example.com'), {
+      target: { value: 'viewer' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Remove member@example.com' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Can edit' }));
 
     await waitFor(() => {
       expect(inviteRoomUser).toHaveBeenCalledWith('room-1', 'new@example.com', 'editor');

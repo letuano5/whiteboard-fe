@@ -15,7 +15,7 @@ export default function ShareLinkButton() {
       <button
         type="button"
         onClick={() => setModalOpen(true)}
-        className="flex h-9 items-center gap-1.5 rounded-md border border-emerald-700 bg-emerald-600 px-3.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-emerald-700"
+        className="flex h-10 items-center gap-1.5 rounded-lg bg-primary px-3.5 text-sm font-semibold text-paper shadow-md transition-opacity hover:opacity-90"
       >
         <Share2 size={16} />
         Share

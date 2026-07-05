@@ -7,7 +7,13 @@ interface ColorControlProps {
 export function ColorControl({ label, value, onChange }: ColorControlProps) {
   return (
     <label
-      style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}
+      style={{
+        display: 'flex',
+        flex: 1,
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        gap: 8,
+      }}
     >
       <span>{label}</span>
       <input

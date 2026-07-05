@@ -41,10 +41,15 @@ describe('ShareLinkButton — AC-7', () => {
     expect(screen.queryByLabelText('Share link mode')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /share/i }));
 
-    expect(screen.getByRole('dialog', { name: /share/i })).toBeInTheDocument();
+    const dialog = screen.getByRole('dialog', { name: /share/i });
+    const overlay = dialog.parentElement;
+    expect(dialog).toBeInTheDocument();
+    expect(overlay?.parentElement).toBe(document.body);
+    expect(overlay).toHaveClass('z-[10000]');
+    expect(overlay).toHaveClass('bg-black/70');
     expect(screen.getByRole('button', { name: 'Private' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Public viewer' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Public editor' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Can view' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Can edit' })).toBeInTheDocument();
   });
 });
 
@@ -53,7 +58,7 @@ describe('ShareLinkButton — AC-8', () => {
   it('shows "Copied!" feedback after click, reverts after 2 seconds', async () => {
     render(<ShareLinkButton />);
     fireEvent.click(screen.getByRole('button', { name: /share/i }));
-    const btn = screen.getByRole('button', { name: /copy link/i });
+    const btn = screen.getByRole('button', { name: /^copy$/i });
 
     expect(btn.textContent).not.toMatch(/copied/i);
 

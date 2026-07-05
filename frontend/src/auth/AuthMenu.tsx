@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { LogIn, LogOut, X } from 'lucide-react';
 import { AuthPanel } from './AuthPanel';
 import { useAuthStore, type AuthStoreState } from './auth.store';
+import { getInitials } from '../utils/initials';
 
 export function AuthMenu() {
   const session = useAuthStore((state: AuthStoreState) => state.session);
@@ -92,12 +93,4 @@ function AuthPopover({ onClose }: { onClose: () => void }) {
       <AuthPanel />
     </div>
   );
-}
-
-function getInitials(label: string): string {
-  const parts = label
-    .split(/[\s@._-]+/)
-    .map((part) => part.trim())
-    .filter(Boolean);
-  return (parts[0]?.[0] ?? 'U').toUpperCase() + (parts[1]?.[0] ?? '').toUpperCase();
 }

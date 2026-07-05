@@ -63,6 +63,16 @@ describe('DefaultStylePanel editing', () => {
     expect(useDefaultStyleStore.getState().strokeWidth).toBe(7);
   });
 
+  it('updates the default fill to transparent from the no-fill control', () => {
+    useDefaultStyleStore.getState().setDefaultStyle({ fillColor: '#ff0000' });
+    useInteractionStore.getState().setTool('rectangle');
+    render(<DefaultStylePanel />);
+
+    fireEvent.click(screen.getByRole('button', { name: /transparent fill/i }));
+
+    expect(useDefaultStyleStore.getState().fillColor).toBe('transparent');
+  });
+
   it('hides fill color for the line tool', () => {
     useInteractionStore.getState().setTool('line');
     render(<DefaultStylePanel />);

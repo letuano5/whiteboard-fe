@@ -1,6 +1,7 @@
 import type { FormEvent } from 'react';
 import { useState } from 'react';
-import { Copy, Link2, X } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { ChevronRight, X } from 'lucide-react';
 import type { RoomAccessMode, RoomRole } from '../types/shared';
 import {
   inviteRoomUser,
@@ -9,6 +10,8 @@ import {
   updateRoomMemberRole,
 } from './room-access-api';
 import { CapacitySettings } from './CapacitySettings';
+import { LinkAccessPanel } from './LinkAccessPanel';
+import { MemberRow } from './MemberRow';
 import { useRoomAccessStore } from './room-access.store';
 
 type EditableRole = Extract<RoomRole, 'editor' | 'viewer'>;
@@ -18,14 +21,6 @@ interface ManageAccessModalProps {
   onClose: () => void;
 }
 
-const ACCESS_MODES: Array<{ value: RoomAccessMode; label: string }> = [
-  { value: 'private', label: 'Private' },
-  { value: 'link_view', label: 'Public viewer' },
-  { value: 'link_edit', label: 'Public editor' },
-];
-
-const fieldClass = 'h-[34px] min-w-0 rounded-md border border-field-border px-2.5 text-ink';
-
 export function ManageAccessModal({ roomId, onClose }: ManageAccessModalProps) {
   const members = useRoomAccessStore((state) => state.members);
   const visibility = useRoomAccessStore((state) => state.visibility);
@@ -33,7 +28,6 @@ export function ManageAccessModal({ roomId, onClose }: ManageAccessModalProps) {
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<EditableRole>('viewer');
   const [error, setError] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
 
   async function apply(action: Promise<Parameters<typeof setRoomAccess>[0]>) {
     try {
@@ -55,147 +49,98 @@ export function ManageAccessModal({ roomId, onClose }: ManageAccessModalProps) {
     void apply(setRoomShareMode(roomId, mode));
   }
 
-  function handleCopy() {
-    navigator.clipboard.writeText(window.location.href).then(
-      () => {
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
-      },
-      () => {
-        window.prompt('Copy this link:', window.location.href);
-      },
-    );
-  }
-
-  return (
-    <div
-      role="presentation"
-      className="fixed inset-0 z-[100] grid place-items-center bg-black/60"
-    >
+  return createPortal(
+    <div role="presentation" className="fixed inset-0 z-[10000] grid place-items-center bg-black/70">
       <section
         role="dialog"
         aria-modal="true"
         aria-label="Share"
-        className="max-h-[calc(100vh-48px)] w-[min(520px,calc(100vw-32px))] overflow-auto rounded-lg bg-paper p-[18px] text-ink shadow-lg"
+        className="max-h-[calc(100vh-48px)] w-[min(460px,calc(100vw-32px))] overflow-auto rounded-[14px] bg-paper p-[18px] text-ink shadow-lg"
       >
-        <div className="flex items-center justify-between">
-          <h2 className="m-0 text-lg font-semibold">Share</h2>
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="m-0 text-[17px] font-semibold tracking-tight">Share board</h2>
           <button
             type="button"
             aria-label="Close"
             onClick={onClose}
-            className="grid h-[34px] w-[34px] place-items-center rounded-lg border border-rule bg-paper hover:bg-panel"
+            className="flex h-[30px] w-[30px] items-center justify-center rounded-lg text-muted hover:bg-panel hover:text-ink"
           >
-            <X size={18} />
+            <X size={16} />
           </button>
         </div>
 
-        <form onSubmit={handleInvite} className="mt-4 grid grid-cols-[minmax(0,1fr)_auto_auto] gap-2">
+        <LinkAccessPanel visibility={visibility} onChange={handleModeChange} />
+
+        <hr className="my-4 border-rule" />
+
+        <p className="m-0 mb-2 text-[11px] font-bold uppercase tracking-wide text-muted">
+          People with access
+        </p>
+        <form
+          onSubmit={handleInvite}
+          className="flex h-9 items-stretch overflow-hidden rounded-lg border border-field-border bg-paper"
+        >
           <input
             aria-label="Add email"
+            type="email"
             value={email}
             onChange={(event) => setEmail(event.target.value)}
             placeholder="teammate@example.com"
-            className={fieldClass}
+            className="min-w-0 flex-1 border-0 bg-transparent px-2.5 text-[13px] text-ink outline-none placeholder:text-muted"
           />
           <select
             aria-label="Invite role"
             value={role}
             onChange={(event) => setRole(event.target.value === 'editor' ? 'editor' : 'viewer')}
-            className="h-[34px] rounded-md border border-field-border bg-paper text-ink"
+            className="shrink-0 border-l border-field-border bg-transparent px-2 text-[12.5px] font-semibold text-ink outline-none"
           >
-            <option value="viewer">Viewer</option>
-            <option value="editor">Editor</option>
+            <option value="viewer">Can view</option>
+            <option value="editor">Can edit</option>
           </select>
           <button
             type="submit"
-            className="h-[34px] rounded-md bg-primary px-3 text-paper hover:opacity-90"
+            className="shrink-0 border-l border-primary bg-primary px-3 text-[13px] font-semibold text-paper hover:opacity-90"
           >
-            Add
+            Invite
           </button>
         </form>
 
-        <div className="mt-4 grid gap-2.5">
+        <div className="mt-3.5 grid grid-cols-[28px_minmax(0,1fr)_92px_32px] gap-x-2.5 gap-y-2.5">
           {members.map((member) => {
-            const name = member.name ?? member.email ?? member.userId;
-            const isOwner = member.role === 'owner';
+            const identity = member.email ?? member.name ?? member.userId;
             return (
-              <div
+              <MemberRow
                 key={member.userId}
-                className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2 text-[13px]"
-              >
-                <span className="min-w-0 overflow-hidden text-ellipsis">{name}</span>
-                {isOwner ? (
-                  <span className="text-muted">Owner</span>
-                ) : (
-                  <>
-                    <select
-                      aria-label={`Role for ${name}`}
-                      value={member.role}
-                      onChange={(event) => {
-                        const nextRole = event.target.value === 'editor' ? 'editor' : 'viewer';
-                        void apply(updateRoomMemberRole(roomId, member.userId, nextRole));
-                      }}
-                      className="h-[34px] rounded-md border border-field-border bg-paper text-ink"
-                    >
-                      <option value="viewer">Viewer</option>
-                      <option value="editor">Editor</option>
-                    </select>
-                    <button
-                      type="button"
-                      onClick={() => void apply(removeRoomMember(roomId, member.userId))}
-                      className="h-8 rounded-md border border-field-border bg-paper px-2.5 text-ink hover:bg-panel"
-                    >
-                      Remove
-                    </button>
-                  </>
-                )}
-              </div>
+                identity={identity}
+                role={member.role}
+                onRoleChange={(nextRole) =>
+                  void apply(updateRoomMemberRole(roomId, member.userId, nextRole))
+                }
+                onRemove={() => void apply(removeRoomMember(roomId, member.userId))}
+              />
             );
           })}
         </div>
 
-        <CapacitySettings roomId={roomId} />
+        <hr className="my-4 border-rule" />
 
-        <section
-          className="mt-[18px] grid gap-2.5 border-t border-rule pt-4"
-          aria-label="Link access"
-        >
-          <div className="flex items-center gap-2 text-[13px] font-bold text-ink">
-            <Link2 size={16} />
-            Link access
-          </div>
-          <div className="grid grid-cols-3 gap-1.5">
-            {ACCESS_MODES.map((mode) => (
-              <button
-                key={mode.value}
-                type="button"
-                aria-pressed={visibility === mode.value}
-                onClick={() => handleModeChange(mode.value)}
-                className={`min-h-[34px] rounded-md border px-2 text-xs font-semibold ${
-                  visibility === mode.value
-                    ? 'border-primary bg-primary text-paper'
-                    : 'border-field-border bg-paper text-ink hover:bg-panel'
-                }`}
-              >
-                {mode.label}
-              </button>
-            ))}
-          </div>
-          <button
-            type="button"
-            onClick={handleCopy}
-            className="inline-flex h-[34px] items-center justify-self-start gap-1.5 rounded-md border border-field-border bg-paper px-2.5 text-[13px] font-semibold text-ink hover:bg-panel"
-          >
-            <Copy size={15} />
-            {copied ? 'Copied' : 'Copy link'}
-          </button>
-        </section>
+        <details className="group">
+          <summary className="flex cursor-pointer list-none items-center gap-1.5 py-1 text-[12.5px] font-semibold text-muted hover:text-ink [&::-webkit-details-marker]:hidden">
+            <ChevronRight size={12} className="transition-transform group-open:rotate-90" />
+            Set participant limits
+          </summary>
+          <CapacitySettings roomId={roomId} />
+        </details>
 
         <div className="mt-2.5 min-h-[18px]">
-          {error && <div className="text-[13px] text-danger">{error}</div>}
+          {error && (
+            <div className="rounded-lg border border-danger-border bg-danger-soft px-2.5 py-2 text-[12.5px] text-danger">
+              {error}
+            </div>
+          )}
         </div>
       </section>
-    </div>
+    </div>,
+    document.body,
   );
 }
