@@ -120,6 +120,34 @@ describe('AC-4: fill color change updates element; hidden for line', () => {
     });
   });
 
+  it('sets fillColor to transparent from the no-fill control', () => {
+    const el = makeElement({ id: 'el-1' });
+    useElementsStore.setState({ elements: [el] });
+    useInteractionStore.getState().setSelectedIds(['el-1']);
+    render(<DetailPanel />);
+
+    fireEvent.click(screen.getByRole('button', { name: /transparent fill/i }));
+
+    expect(patchSpy).toHaveBeenCalledWith('el-1', {
+      props: { ...el.props, fillColor: 'transparent' },
+    });
+  });
+
+  it('shows the no-fill control as active when fillColor is transparent', () => {
+    const el = makeElement({
+      id: 'el-1',
+      props: { ...makeElement().props, fillColor: 'transparent' },
+    });
+    useElementsStore.setState({ elements: [el] });
+    useInteractionStore.getState().setSelectedIds(['el-1']);
+    render(<DetailPanel />);
+
+    expect(screen.getByRole('button', { name: /transparent fill/i })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+  });
+
   it('does not show fill color control for line element', () => {
     const el = makeElement({ id: 'el-1', type: 'line' });
     useElementsStore.setState({ elements: [el] });

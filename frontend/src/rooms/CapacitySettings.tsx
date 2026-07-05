@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { Users } from 'lucide-react';
 import { ROOM_CAPACITY_LIMITS } from '../types/shared';
 import { updateRoomCapacitySettings } from './room-access-api';
 import { useRoomAccessStore } from './room-access.store';
@@ -50,11 +49,7 @@ export function CapacitySettings({ roomId }: CapacitySettingsProps) {
   }
 
   return (
-    <section className="mt-[18px] grid gap-2.5 border-t border-rule pt-4" aria-label="Capacity">
-      <div className="flex items-center gap-2 text-[13px] font-bold text-ink">
-        <Users size={16} />
-        Capacity
-      </div>
+    <div className="grid gap-2.5 pt-2.5">
       <div className="grid grid-cols-2 gap-2">
         <label className="grid min-w-0 gap-1 text-xs font-bold text-muted">
           Participants
@@ -84,7 +79,7 @@ export function CapacitySettings({ roomId }: CapacitySettingsProps) {
       <div className="min-h-[18px]">
         {error && <div className="text-[13px] text-danger">{error}</div>}
       </div>
-    </section>
+    </div>
   );
 }
 

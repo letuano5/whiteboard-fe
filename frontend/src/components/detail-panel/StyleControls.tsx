@@ -1,4 +1,5 @@
 import type { ElementProps } from '../../types/shared';
+import { Ban } from 'lucide-react';
 import { ColorControl } from './ColorControl';
 import { NumberControl } from './NumberControl';
 import { RangeControl } from './RangeControl';
@@ -23,6 +24,10 @@ function colorInputValue(color: string) {
   return color === 'none' || color === 'transparent' ? '#ffffff' : color;
 }
 
+function isTransparentFill(fillColor: string) {
+  return fillColor === 'none' || fillColor === 'transparent';
+}
+
 export function StyleControls({
   canFill,
   isText = false,
@@ -41,11 +46,27 @@ export function StyleControls({
       />
 
       {canFill && (
-        <ColorControl
-          label={isText ? 'Border color' : 'Fill color'}
-          value={colorInputValue(props.fillColor)}
-          onChange={(fillColor) => onPatchProps({ fillColor })}
-        />
+        <div className="flex items-center justify-between gap-2">
+          <ColorControl
+            label={isText ? 'Border color' : 'Fill color'}
+            value={colorInputValue(props.fillColor)}
+            onChange={(fillColor) => onPatchProps({ fillColor })}
+          />
+          <button
+            type="button"
+            title={isText ? 'Transparent border' : 'Transparent fill'}
+            aria-label={isText ? 'Transparent border' : 'Transparent fill'}
+            aria-pressed={isTransparentFill(props.fillColor)}
+            onClick={() => onPatchProps({ fillColor: 'transparent' })}
+            className={`grid h-7 w-7 shrink-0 place-items-center rounded-md border border-field-border transition-colors ${
+              isTransparentFill(props.fillColor)
+                ? 'bg-primary text-paper'
+                : 'bg-paper text-ink hover:bg-panel'
+            }`}
+          >
+            <Ban size={14} />
+          </button>
+        </div>
       )}
 
       <NumberControl

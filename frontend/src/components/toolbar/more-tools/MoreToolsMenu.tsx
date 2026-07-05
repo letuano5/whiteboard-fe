@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { MoreHorizontal } from 'lucide-react';
 import type { ToolId } from '../../../types/interaction';
 import { OVERFLOW_TOOLS } from '../tool-list';
@@ -13,9 +14,10 @@ interface MoreToolsMenuProps {
 export default function MoreToolsMenu({ tool, chooseTool }: MoreToolsMenuProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const isOverflowToolActive = OVERFLOW_TOOLS.some((t) => t.id === tool);
 
-  useDismissOnOutsideClick(ref, () => setOpen(false));
+  useDismissOnOutsideClick([ref, menuRef], () => setOpen(false));
 
   function handleSelect(id: ToolId) {
     chooseTool(id);
@@ -30,28 +32,31 @@ export default function MoreToolsMenu({ tool, chooseTool }: MoreToolsMenuProps) 
         onClick={() => setOpen((o) => !o)}
         Icon={MoreHorizontal}
       />
-      {open && (
-        <div
-          className="toolbar-scroll fixed left-1/2 z-[1000] flex max-w-[calc(100vw-16px)] -translate-x-1/2 gap-1 overflow-x-auto rounded-xl border border-rule bg-paper p-1.5 shadow-md"
-          role="menu"
-          aria-label="More tools"
-          style={{
-            bottom: 'calc(72px + env(safe-area-inset-bottom))',
-            scrollbarWidth: 'none',
-            WebkitOverflowScrolling: 'touch',
-          }}
-        >
-          {OVERFLOW_TOOLS.map(({ id, label, Icon }) => (
-            <ToolButton
-              key={id}
-              title={label}
-              active={tool === id}
-              onClick={() => handleSelect(id)}
-              Icon={Icon}
-            />
-          ))}
-        </div>
-      )}
+      {open &&
+        createPortal(
+          <div
+            ref={menuRef}
+            className="toolbar-scroll fixed left-1/2 z-[1000] flex max-w-[calc(100vw-16px)] -translate-x-1/2 gap-1 overflow-x-auto rounded-xl border border-rule bg-paper p-1.5 shadow-md"
+            role="menu"
+            aria-label="More tools"
+            style={{
+              bottom: 'calc(72px + env(safe-area-inset-bottom))',
+              scrollbarWidth: 'none',
+              WebkitOverflowScrolling: 'touch',
+            }}
+          >
+            {OVERFLOW_TOOLS.map(({ id, label, Icon }) => (
+              <ToolButton
+                key={id}
+                title={label}
+                active={tool === id}
+                onClick={() => handleSelect(id)}
+                Icon={Icon}
+              />
+            ))}
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

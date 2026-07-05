@@ -76,8 +76,12 @@ describe('AC-8 (005): toolbar shows tool buttons including laser', () => {
   });
 
   it('renders overflow tools (Hand, Diamond, Triangle, Polygon, Freehand, Highlighter, Laser) inside the More tools menu', () => {
-    render(<Toolbar />);
+    const { container } = render(<Toolbar />);
     fireEvent.click(screen.getByTitle('More tools'));
+    expect(screen.getByRole('menu', { name: 'More tools' }).parentElement).toBe(document.body);
+    expect(
+      container.firstElementChild?.contains(screen.getByRole('menu', { name: 'More tools' })),
+    ).toBe(false);
     const overflowTitles = [
       'Hand',
       'Diamond',
@@ -94,6 +98,26 @@ describe('AC-8 (005): toolbar shows tool buttons including laser', () => {
 });
 
 describe('image insertion control', () => {
+  it('renders the image dialog in a body portal so the toolbar cannot clip it', () => {
+    const { container } = render(<Toolbar />);
+
+    fireEvent.click(screen.getByTitle('Image'));
+
+    const dialog = screen.getByRole('dialog', { name: 'Insert image' });
+    expect(dialog.parentElement).toBe(document.body);
+    expect(container.firstElementChild?.contains(dialog)).toBe(false);
+  });
+
+  it('switches back to select when opening the image dialog', () => {
+    useInteractionStore.getState().setTool('rectangle');
+    render(<Toolbar />);
+
+    fireEvent.click(screen.getByTitle('Image'));
+
+    expect(useInteractionStore.getState().tool).toBe('select');
+    expect(screen.getByTitle('Image')).toHaveClass('bg-primary');
+  });
+
   // @covers AC-1 (046-image-background)
   // @covers AC-4 (046-image-background)
   it('inserts a URL image element below existing visible elements', () => {

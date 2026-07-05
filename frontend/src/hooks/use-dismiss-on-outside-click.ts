@@ -1,12 +1,16 @@
 import { useEffect, type RefObject } from 'react';
 
 export function useDismissOnOutsideClick<T extends HTMLElement>(
-  ref: RefObject<T | null>,
+  ref: RefObject<T | null> | ReadonlyArray<RefObject<HTMLElement | null>>,
   onDismiss: () => void,
 ) {
   useEffect(() => {
+    const refs = Array.isArray(ref) ? ref : [ref];
+
     function handleClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
+      const target = e.target as Node;
+      const clickedInside = refs.some((candidate) => candidate.current?.contains(target));
+      if (!clickedInside) {
         onDismiss();
       }
     }
