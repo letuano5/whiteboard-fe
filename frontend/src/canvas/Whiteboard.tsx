@@ -6,6 +6,7 @@ import TextEditor from './tools/text-editor';
 import SvgLayer from './layers/SvgLayer';
 import CursorOverlay from './layers/CursorOverlay';
 import Toolbar from '../components/toolbar/Toolbar';
+import ActionToolbar from '../components/toolbar/ActionToolbar';
 import DetailPanel from '../components/detail-panel/DetailPanel';
 import BackToContent from '../components/back-to-content/BackToContent';
 import ShareLinkButton from '../components/ShareLinkButton';
@@ -79,7 +80,14 @@ export default function Whiteboard({ mode = 'saved' }: WhiteboardProps) {
   return (
     <div
       ref={containerRef}
-      style={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden', cursor }}
+      style={{
+        position: 'relative',
+        width: '100%',
+        height: '100%',
+        overflow: 'hidden',
+        cursor,
+        touchAction: 'none',
+      }}
     >
       <button
         type="button"
@@ -106,6 +114,7 @@ export default function Whiteboard({ mode = 'saved' }: WhiteboardProps) {
         />
       )}
       {canEdit && editingElement && <TextEditor element={editingElement} camera={camera} />}
+      {canEdit && <ActionToolbar />}
       {canEdit && <Toolbar />}
       {canEdit && <DetailPanel />}
       <BackToContent containerRef={containerRef} />

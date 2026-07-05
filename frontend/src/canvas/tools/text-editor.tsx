@@ -135,6 +135,8 @@ export default function TextEditor({ element, camera }: TextEditorProps) {
         transformOrigin: `${screenW / 2}px ${screenH / 2}px`,
         transform: `rotate(${angleDeg}deg)`,
         whiteSpace: boundLayout ? 'pre-wrap' : 'pre',
+        overflowWrap: 'break-word',
+        wordBreak: 'break-word',
         outline: 'none',
         background: 'transparent',
         border: 'none',

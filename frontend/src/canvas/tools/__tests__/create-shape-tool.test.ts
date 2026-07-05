@@ -198,7 +198,7 @@ describe('onShapePointerUp — text auto-enters edit mode', () => {
     expect(useInteractionStore.getState().editingId).toBeNull();
   });
 
-  it('switches tool to select after text creation', () => {
+  it('keeps the active tool unchanged after text creation (no auto-switch to select)', () => {
     vi.spyOn(pipeline, 'createElement').mockReturnValue(
       { id: 'new-text-3' } as ReturnType<typeof pipeline.createElement>,
     );
@@ -207,7 +207,19 @@ describe('onShapePointerUp — text auto-enters edit mode', () => {
 
     onShapePointerUp('text', { x: 50, y: 50 });
 
-    expect(useInteractionStore.getState().tool).toBe('select');
+    expect(useInteractionStore.getState().tool).toBe('text');
+  });
+
+  it('keeps the active tool unchanged after a non-text shape is drag-created', () => {
+    vi.spyOn(pipeline, 'createElement').mockReturnValue(
+      { id: 'rect-1' } as ReturnType<typeof pipeline.createElement>,
+    );
+    useInteractionStore.getState().setDragStart({ x: 0, y: 0 });
+    useInteractionStore.getState().setTool('rectangle');
+
+    onShapePointerUp('rectangle', { x: 100, y: 100 });
+
+    expect(useInteractionStore.getState().tool).toBe('rectangle');
   });
 });
 

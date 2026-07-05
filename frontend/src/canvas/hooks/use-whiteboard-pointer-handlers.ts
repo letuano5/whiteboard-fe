@@ -151,7 +151,7 @@ export function useWhiteboardPointerHandlers({
 
     if (tool === 'select') {
       if (!canEdit) return;
-      onSelectPointerMove(svgWorldPoint(event, camera));
+      onSelectPointerMove(svgWorldPoint(event, camera), event.shiftKey);
       return;
     }
 

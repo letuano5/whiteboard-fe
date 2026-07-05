@@ -15,7 +15,7 @@ import {
   resizeBoundsFromAnchorAndPointer,
 } from './resize';
 
-export function onSelectPointerMove(worldPt: Point): void {
+export function onSelectPointerMove(worldPt: Point, shiftKey = false): void {
   const {
     draggingId,
     dragStart,
@@ -42,12 +42,15 @@ export function onSelectPointerMove(worldPt: Point): void {
   const groupMemberIds = resolveSelectionGroupIds(selectedIds, elements);
 
   if (groupResizeSession) {
-    const { flippedX, flippedY, activeHandle, ...newBounds } = resizeBoundsFromAnchorAndPointer(
+    const { flippedX, flippedY, activeHandle, ...rawBounds } = resizeBoundsFromAnchorAndPointer(
       groupResizeSession,
       worldPt,
     );
     void flippedX;
     void flippedY;
+    const newBounds = shiftKey
+      ? fitBoundsToAspectRatio(groupResizeSession, rawBounds, activeHandle)
+      : rawBounds;
     setDraftElements(
       computeGroupResizeDrafts(
         groupResizeSession.memberIds,
@@ -130,7 +133,9 @@ export function onSelectPointerMove(worldPt: Point): void {
         ? fitBoundsToAspectRatio(resizeSession, rawBounds, activeHandle)
         : el.type === 'text'
           ? fitTextBoundsToFontScale(resizeSession, rawBounds, activeHandle)
-          : rawBounds;
+          : shiftKey
+            ? fitBoundsToAspectRatio(resizeSession, rawBounds, activeHandle)
+            : rawBounds;
 
       // 4. The session.anchor may be at any corner/edge of the new box.
       //    Compute its fraction within the new box (0=min edge, 1=max edge).
@@ -168,7 +173,9 @@ export function onSelectPointerMove(worldPt: Point): void {
           ? fitBoundsToAspectRatio(resizeSession, rawBounds, activeHandle)
           : el.type === 'text'
             ? fitTextBoundsToFontScale(resizeSession, rawBounds, activeHandle)
-            : rawBounds;
+            : shiftKey
+              ? fitBoundsToAspectRatio(resizeSession, rawBounds, activeHandle)
+              : rawBounds;
       const draftEl = {
         ...el,
         ...bounds,

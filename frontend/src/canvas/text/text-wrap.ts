@@ -36,14 +36,50 @@ export function measureTextWidth(text: string, font: string, measure?: MeasureFn
   return text.length * getFontSize(font) * 0.6;
 }
 
+function splitLongWord(
+  word: string,
+  maxWidth: number,
+  font: string,
+  measure?: MeasureFn,
+): string[] {
+  const chunks: string[] = [];
+  let current = '';
+  for (const char of word) {
+    const candidate = current + char;
+    if (current.length > 0 && measureTextWidth(candidate, font, measure) > maxWidth) {
+      chunks.push(current);
+      current = char;
+    } else {
+      current = candidate;
+    }
+  }
+  if (current.length > 0) chunks.push(current);
+  return chunks;
+}
+
 function wrapParagraph(paragraph: string, maxWidth: number, font: string, measure?: MeasureFn) {
   if (paragraph.length === 0) return [''];
   const words = paragraph.split(/\s+/).filter(Boolean);
   if (words.length === 0) return [''];
 
   const lines: string[] = [];
-  let current = words[0];
-  for (const word of words.slice(1)) {
+  let current = '';
+  for (const word of words) {
+    if (measureTextWidth(word, font, measure) > maxWidth) {
+      // Word alone overflows the wrap width — force-break it like CSS overflow-wrap: break-word.
+      if (current.length > 0) {
+        lines.push(current);
+        current = '';
+      }
+      const chunks = splitLongWord(word, maxWidth, font, measure);
+      lines.push(...chunks.slice(0, -1));
+      current = chunks[chunks.length - 1] ?? '';
+      continue;
+    }
+    if (current.length === 0) {
+      current = word;
+      continue;
+    }
     const candidate = `${current} ${word}`;
     if (measureTextWidth(candidate, font, measure) <= maxWidth) {
       current = candidate;

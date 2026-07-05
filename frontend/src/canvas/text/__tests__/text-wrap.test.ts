@@ -17,7 +17,31 @@ describe('text wrapping for bound labels', () => {
       'Charlie',
     ]);
     expect(wrapText('Alpha\nBravo', 80, '16px sans-serif', measure)).toEqual(['Alpha', 'Bravo']);
-    expect(wrapText('Longword', 10, '16px sans-serif', measure)).toEqual(['Longword']);
+  });
+
+  it('@covers AC-4 force-breaks a single word wider than the wrap width', () => {
+    expect(wrapText('Longword', 10, '16px sans-serif', measure)).toEqual([
+      'L',
+      'o',
+      'n',
+      'g',
+      'w',
+      'o',
+      'r',
+      'd',
+    ]);
+    expect(wrapText('Hi Longwordthatoverflows there', 30, '16px sans-serif', measure)).toEqual([
+      'Hi',
+      'Lon',
+      'gwo',
+      'rdt',
+      'hat',
+      'ove',
+      'rfl',
+      'ows',
+      'the',
+      're',
+    ]);
   });
 
   it('@covers AC-4 centers layout inside the container with padding and line-height', () => {

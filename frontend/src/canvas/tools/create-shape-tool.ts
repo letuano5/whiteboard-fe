@@ -125,7 +125,7 @@ export function onShapePointerUp(
   worldPt: Point,
   createdBy: string = '',
 ): void {
-  const { dragStart, setDragStart, setDraftElement, setTool, setEditingId, setSelectedIds } =
+  const { dragStart, setDragStart, setDraftElement, setEditingId, setSelectedIds } =
     useInteractionStore.getState();
 
   if (dragStart && isValidSize(type, dragStart, worldPt)) {
@@ -174,7 +174,6 @@ export function onShapePointerUp(
       createdBy,
     };
     const el = createElement(draft);
-    setTool('select');
     if (type === 'text') {
       setSelectedIds([el.id]);
       setEditingId(el.id);
@@ -195,7 +194,6 @@ export function onShapePointerUp(
       createdBy,
     };
     const el = createElement(draft);
-    setTool('select');
     setSelectedIds([el.id]);
     setEditingId(el.id);
   }

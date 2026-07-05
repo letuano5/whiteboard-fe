@@ -42,6 +42,8 @@ export default function SvgLayer({
         overflow: 'hidden',
         userSelect: 'none',
         WebkitUserSelect: 'none',
+        touchAction: 'none',
+        WebkitTouchCallout: 'none',
       }}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
