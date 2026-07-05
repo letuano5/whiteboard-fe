@@ -69,7 +69,6 @@ function wrapParagraph(paragraph: string, maxWidth: number, font: string, measur
       // Word alone overflows the wrap width — force-break it like CSS overflow-wrap: break-word.
       if (current.length > 0) {
         lines.push(current);
-        current = '';
       }
       const chunks = splitLongWord(word, maxWidth, font, measure);
       lines.push(...chunks.slice(0, -1));
