@@ -1,7 +1,8 @@
-import { useEffect, useRef } from 'react';
+import { useRef } from 'react';
 import { bringToFront, sendToBack, bringForward, sendBackward } from '../../store/zorder';
 import { useElementsStore } from '../../store/elements.store';
 import { useInteractionStore } from '../../store/interaction.store';
+import { useDismissOnOutsideClick } from '../../hooks/use-dismiss-on-outside-click';
 import {
   canMergeSelection,
   canUnmergeSelection,
@@ -81,23 +82,7 @@ export default function ContextMenu({
   const lockDisabled = !canToggleLockSelection(elements, selectedIds);
   const lockLabel = isSelectionLocked(elements, selectedIds) ? 'Unlock' : 'Lock';
 
-  // Dismiss on click-outside or Escape
-  useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        onClose();
-      }
-    }
-    function handleKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') onClose();
-    }
-    document.addEventListener('mousedown', handleClick);
-    document.addEventListener('keydown', handleKey);
-    return () => {
-      document.removeEventListener('mousedown', handleClick);
-      document.removeEventListener('keydown', handleKey);
-    };
-  }, [onClose]);
+  useDismissOnOutsideClick(ref, onClose);
 
   function handle(fn: (id: string) => void) {
     if (disabled || !selectedId) return;
