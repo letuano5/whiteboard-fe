@@ -22,6 +22,14 @@ vi.mock('../presence', () => ({
   }),
 }));
 
+vi.mock('../socket/p5-durable-outbox', () => ({
+  clearDurablePendingSyncCommands: vi.fn(),
+  consumeHydratedDurableRequestIds: vi.fn(() => new Set<string>()),
+  dropDurablePendingSyncCommands: vi.fn(),
+  hydratePendingSyncCommandsFromOutbox: vi.fn(() => Promise.resolve()),
+  syncQueuedDurableSnapshot: vi.fn(),
+}));
+
 // Mock socket.io-client before importing socket-client
 const mockEmit = vi.fn();
 const mockOn = vi.fn();
@@ -50,7 +58,8 @@ beforeEach(() => {
 
   mockOn.mockImplementation((event: string, handler: (data: unknown) => void) => {
     _handlers[event] = handler;
-    // P3A-03: auto-fire 'connect' when registered so JOIN_ROOM is emitted synchronously in tests.
+    // P3A-03: auto-fire 'connect' when registered so tests simulate Socket.IO
+    // connecting immediately. JOIN_ROOM itself may wait for durable outbox hydration.
     // This simulates Socket.IO firing 'connect' immediately on a successful connection.
     if (event === 'connect') {
       handler(undefined as unknown);
@@ -75,12 +84,19 @@ describe('socket-client — 014/AC-1 (join-room payload)', () => {
   it('emits join-room with roomId and session identity on init', async () => {
     const { initSocketClient } = await import('../socket-client');
     initSocketClient('room-abc');
+    await flushAsyncWork();
     expect(mockEmit).toHaveBeenCalledWith(
       WS_EVENTS.JOIN_ROOM,
       expect.objectContaining({ roomId: 'room-abc' }),
     );
   });
 });
+
+async function flushAsyncWork(): Promise<void> {
+  for (let index = 0; index < 5; index += 1) {
+    await Promise.resolve();
+  }
+}
 
 describe('socket-client — P3B-01d token attachment', () => {
   it('passes auth.accessToken when the auth store has a session', async () => {

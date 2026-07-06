@@ -14,6 +14,10 @@ import { WS_EVENTS } from '../../types/shared';
 import { useElementsStore } from '../../store/elements.store';
 import { useHistoryStore } from '../../store/history.store';
 import { applyChangeSetToElements, applySlotPatch, slotValueFromElement } from './p5-change-set';
+import {
+  clearDurablePendingSyncCommands,
+  consumeHydratedDurableRequestIds,
+} from './p5-durable-outbox';
 import { clearPendingQueue } from './pending-queue';
 import {
   clearPendingSyncCommands,
@@ -120,9 +124,7 @@ export function applyRoomSnapshot(snapshot: RoomSnapshot): void {
   removeKnownTombstones(snapshot.elements.map((element) => element.id));
   setRoomEpoch(snapshot.roomEpoch);
   setLastServerClock(snapshot.serverClock);
-  if (snapshot.pendingRequests) {
-    reconcilePendingRequests(snapshot.pendingRequests);
-  }
+  reconcilePendingRequests(pendingStatusesOrUnknown(snapshot.pendingRequests));
   rematerializeOptimisticStore();
 }
 
@@ -130,6 +132,7 @@ export function applyRoomReplaced(payload: RoomReplacedPayload): void {
   const state = getSocketState();
   markPendingRequestsStale();
   clearPendingQueue();
+  clearDurablePendingSyncCommands(payload.roomId);
   clearPendingSyncCommands();
   state.bufferedSyncEvents = [];
   state.serverElements = payload.elements;
@@ -189,9 +192,7 @@ export function applyRoomDiff(diff: RoomDiff): void {
   applyKnownSlotClocks(diff.slotClocks);
   setRoomEpoch(diff.roomEpoch);
   setLastServerClock(diff.serverClock);
-  if (diff.pendingRequests) {
-    reconcilePendingRequests(diff.pendingRequests);
-  }
+  reconcilePendingRequests(pendingStatusesOrUnknown(diff.pendingRequests));
   rematerializeOptimisticStore();
 }
 
@@ -314,4 +315,18 @@ function reconcilePendingRequests(pendingRequests: PendingRequestStatus[]): void
         break;
     }
   }
+}
+
+function pendingStatusesOrUnknown(
+  pendingRequests: PendingRequestStatus[] | undefined,
+): PendingRequestStatus[] {
+  const hydratedRequestIds = consumeHydratedDurableRequestIds();
+  if (pendingRequests) return pendingRequests;
+  if (hydratedRequestIds.size === 0) return [];
+  return getSocketState()
+    .pendingSyncRequests.filter((request) => hydratedRequestIds.has(request.requestId))
+    .map((request) => ({
+      requestId: request.requestId,
+      status: 'unknown',
+    }));
 }

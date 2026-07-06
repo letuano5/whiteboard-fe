@@ -24,8 +24,11 @@ import {
   PRESENCE_PREVIEW_THROTTLE_MS,
   settleSyncCommandRequest,
 } from './p5-command-queue';
+import { clearMemoryDurableOutboxForTests } from './durable-outbox';
+import { hydratePendingSyncCommandsFromOutbox } from './p5-durable-outbox';
 import {
   applyRoomDiff,
+  applyRoomReplaced,
   applyRoomSnapshot,
   processSyncAck,
   processSyncBroadcast,
@@ -42,6 +45,7 @@ import {
 beforeEach(() => {
   vi.useFakeTimers();
   vi.setSystemTime(0);
+  clearMemoryDurableOutboxForTests();
   resetReconnectState();
   useElementsStore.setState({ elements: [] });
   useInteractionStore.getState().reset();
@@ -51,6 +55,7 @@ beforeEach(() => {
 afterEach(() => {
   clearSocketSubscriptions();
   clearPendingSyncCommands();
+  clearMemoryDurableOutboxForTests();
   vi.useRealTimers();
 });
 
@@ -636,6 +641,353 @@ describe('P5 command queue drag flushing and backpressure', () => {
   });
 });
 
+describe('P5 durable sync outbox', () => {
+  it('hydrates a durable offline command after reload and resends it when still relevant', async () => {
+    const emit = vi.fn();
+    const initial = makeElement({ id: 'shape-1', x: 0 });
+    applyRoomSnapshot({
+      protocolVersion: SYNC_PROTOCOL_VERSION,
+      schemaVersion: SYNC_SCHEMA_VERSION,
+      roomId: 'room-1',
+      serverClock: 0,
+      roomEpoch: 0,
+      elements: [initial],
+      slotClocks: [{ elementId: 'shape-1', slot: 'transform.position', clock: 0 }],
+    });
+    getSocketState().socket = { emit, connected: false } as never;
+    getSocketState().roomId = 'room-1';
+
+    enqueueMutationSyncCommands(
+      {
+        type: 'patch',
+        before: [initial],
+        elements: [makeElement({ id: 'shape-1', x: 40 })],
+      },
+      'room-1',
+      { final: true, now: 0 },
+    );
+    await flushAsyncWork();
+    const requestId = getSocketState().queuedSyncCommands[0]?.command.requestId;
+    expect(requestId).toBeDefined();
+
+    resetReconnectState();
+    useElementsStore.setState({ elements: [] });
+    getSocketState().roomId = 'room-1';
+    getSocketState().socket = { emit, connected: true } as never;
+
+    await hydratePendingSyncCommandsFromOutbox('room-1');
+
+    expect(getSocketState().inFlightSyncCommands.map((queued) => queued.command.requestId)).toEqual(
+      [requestId],
+    );
+    expect(getSocketState().pendingSyncRequests).toEqual([
+      { requestId, actorId: null, clientClock: 0 },
+    ]);
+
+    applyRoomSnapshot({
+      protocolVersion: SYNC_PROTOCOL_VERSION,
+      schemaVersion: SYNC_SCHEMA_VERSION,
+      roomId: 'room-1',
+      serverClock: 0,
+      roomEpoch: 0,
+      elements: [initial],
+      slotClocks: [{ elementId: 'shape-1', slot: 'transform.position', clock: 0 }],
+      pendingRequests: [{ requestId: requestId!, status: 'unknown' }],
+    });
+    flushPendingSyncCommands(true);
+
+    expect(emit).toHaveBeenCalledWith(
+      WS_EVENTS.SYNC_COMMAND,
+      expect.objectContaining({ requestId }),
+    );
+  });
+
+  it('resends a hydrated durable command after a first-join snapshot without pending statuses', async () => {
+    const emit = vi.fn();
+    const initial = makeElement({ id: 'shape-1', x: 0 });
+    applyRoomSnapshot({
+      protocolVersion: SYNC_PROTOCOL_VERSION,
+      schemaVersion: SYNC_SCHEMA_VERSION,
+      roomId: 'room-1',
+      serverClock: 0,
+      roomEpoch: 0,
+      elements: [initial],
+      slotClocks: [{ elementId: 'shape-1', slot: 'transform.position', clock: 0 }],
+    });
+    getSocketState().socket = { emit, connected: false } as never;
+    getSocketState().roomId = 'room-1';
+
+    enqueueMutationSyncCommands(
+      {
+        type: 'patch',
+        before: [initial],
+        elements: [makeElement({ id: 'shape-1', x: 40 })],
+      },
+      'room-1',
+      { final: true, now: 0 },
+    );
+    await flushAsyncWork();
+    const requestId = getSocketState().queuedSyncCommands[0]?.command.requestId;
+    expect(requestId).toBeDefined();
+
+    resetReconnectState();
+    getSocketState().roomId = 'room-1';
+    getSocketState().socket = { emit, connected: true } as never;
+    await hydratePendingSyncCommandsFromOutbox('room-1');
+
+    applyRoomSnapshot({
+      protocolVersion: SYNC_PROTOCOL_VERSION,
+      schemaVersion: SYNC_SCHEMA_VERSION,
+      roomId: 'room-1',
+      serverClock: 0,
+      roomEpoch: 0,
+      elements: [initial],
+      slotClocks: [{ elementId: 'shape-1', slot: 'transform.position', clock: 0 }],
+    });
+    flushPendingSyncCommands(true);
+
+    expect(emit).toHaveBeenCalledWith(
+      WS_EVENTS.SYNC_COMMAND,
+      expect.objectContaining({ requestId }),
+    );
+  });
+
+  it('resends a hydrated durable move after another tab changed a different slot', async () => {
+    const emit = vi.fn();
+    const initial = makeElement({ id: 'shape-1', x: 0 });
+    applyRoomSnapshot({
+      protocolVersion: SYNC_PROTOCOL_VERSION,
+      schemaVersion: SYNC_SCHEMA_VERSION,
+      roomId: 'room-1',
+      serverClock: 0,
+      roomEpoch: 0,
+      elements: [initial],
+      slotClocks: [
+        { elementId: 'shape-1', slot: 'transform.position', clock: 0 },
+        { elementId: 'shape-1', slot: 'style.fillColor', clock: 0 },
+      ],
+    });
+    getSocketState().socket = { emit, connected: false } as never;
+    getSocketState().roomId = 'room-1';
+
+    enqueueMutationSyncCommands(
+      {
+        type: 'patch',
+        before: [initial],
+        elements: [makeElement({ id: 'shape-1', x: 40 })],
+      },
+      'room-1',
+      { final: true, now: 0 },
+    );
+    await flushAsyncWork();
+    const requestId = getSocketState().queuedSyncCommands[0]?.command.requestId;
+    expect(requestId).toBeDefined();
+
+    resetReconnectState();
+    getSocketState().roomId = 'room-1';
+    getSocketState().socket = { emit, connected: true } as never;
+    await hydratePendingSyncCommandsFromOutbox('room-1');
+
+    applyRoomSnapshot({
+      protocolVersion: SYNC_PROTOCOL_VERSION,
+      schemaVersion: SYNC_SCHEMA_VERSION,
+      roomId: 'room-1',
+      serverClock: 1,
+      roomEpoch: 0,
+      elements: [
+        makeElement({
+          id: 'shape-1',
+          x: 0,
+          props: { ...makeElement().props, fillColor: '#ff0000' },
+        }),
+      ],
+      slotClocks: [
+        { elementId: 'shape-1', slot: 'transform.position', clock: 0 },
+        { elementId: 'shape-1', slot: 'style.fillColor', clock: 1 },
+      ],
+    });
+    flushPendingSyncCommands(true);
+
+    expect(emit).toHaveBeenCalledWith(
+      WS_EVENTS.SYNC_COMMAND,
+      expect.objectContaining({ requestId }),
+    );
+    expect(useElementsStore.getState().elements[0]).toMatchObject({
+      x: 40,
+      props: expect.objectContaining({ fillColor: '#ff0000' }),
+    });
+  });
+
+  it('drops a hydrated durable command when server truth changed its slot clock', async () => {
+    const emit = vi.fn();
+    const initial = makeElement({ id: 'shape-1', x: 0 });
+    applyRoomSnapshot({
+      protocolVersion: SYNC_PROTOCOL_VERSION,
+      schemaVersion: SYNC_SCHEMA_VERSION,
+      roomId: 'room-1',
+      serverClock: 0,
+      roomEpoch: 0,
+      elements: [initial],
+      slotClocks: [{ elementId: 'shape-1', slot: 'transform.position', clock: 0 }],
+    });
+    getSocketState().socket = { emit, connected: false } as never;
+    getSocketState().roomId = 'room-1';
+
+    enqueueMutationSyncCommands(
+      {
+        type: 'patch',
+        before: [initial],
+        elements: [makeElement({ id: 'shape-1', x: 40 })],
+      },
+      'room-1',
+      { final: true, now: 0 },
+    );
+    await flushAsyncWork();
+    const requestId = getSocketState().queuedSyncCommands[0]?.command.requestId;
+    expect(requestId).toBeDefined();
+
+    resetReconnectState();
+    getSocketState().roomId = 'room-1';
+    getSocketState().socket = { emit, connected: true } as never;
+    await hydratePendingSyncCommandsFromOutbox('room-1');
+
+    applyRoomSnapshot({
+      protocolVersion: SYNC_PROTOCOL_VERSION,
+      schemaVersion: SYNC_SCHEMA_VERSION,
+      roomId: 'room-1',
+      serverClock: 1,
+      roomEpoch: 0,
+      elements: [makeElement({ id: 'shape-1', x: 10 })],
+      slotClocks: [{ elementId: 'shape-1', slot: 'transform.position', clock: 1 }],
+      pendingRequests: [{ requestId: requestId!, status: 'unknown' }],
+    });
+    flushPendingSyncCommands(true);
+    await flushAsyncWork();
+
+    expect(getSocketState().inFlightSyncCommands).toEqual([]);
+    expect(getSocketState().queuedSyncCommands).toEqual([]);
+    expect(getSocketState().pendingSyncRequests).toEqual([]);
+    expect(emit).not.toHaveBeenCalledWith(
+      WS_EVENTS.SYNC_COMMAND,
+      expect.objectContaining({ requestId }),
+    );
+
+    resetReconnectState();
+    getSocketState().roomId = 'room-1';
+    await hydratePendingSyncCommandsFromOutbox('room-1');
+    expect(getSocketState().inFlightSyncCommands).toEqual([]);
+  });
+
+  it('does not requeue live in-flight commands when an unrelated diff omits pending statuses', () => {
+    const emit = vi.fn();
+    const initial = makeElement({ id: 'shape-1', x: 0, props: { ...makeElement().props } });
+    applyRoomSnapshot({
+      protocolVersion: SYNC_PROTOCOL_VERSION,
+      schemaVersion: SYNC_SCHEMA_VERSION,
+      roomId: 'room-1',
+      serverClock: 0,
+      roomEpoch: 0,
+      elements: [initial],
+      slotClocks: [
+        { elementId: 'shape-1', slot: 'transform.position', clock: 0 },
+        { elementId: 'shape-1', slot: 'style.fillColor', clock: 0 },
+      ],
+    });
+    getSocketState().socket = { emit, connected: true } as never;
+    getSocketState().roomId = 'room-1';
+
+    enqueueMutationSyncCommands(
+      {
+        type: 'patch',
+        before: [initial],
+        elements: [makeElement({ id: 'shape-1', x: 40 })],
+      },
+      'room-1',
+      { final: true, now: 0 },
+    );
+    const requestId = getSocketState().inFlightSyncCommands[0]?.command.requestId;
+    expect(requestId).toBeDefined();
+    emit.mockClear();
+
+    applyRoomDiff({
+      protocolVersion: SYNC_PROTOCOL_VERSION,
+      schemaVersion: SYNC_SCHEMA_VERSION,
+      roomId: 'room-1',
+      fromClock: 0,
+      toClock: 1,
+      serverClock: 1,
+      roomEpoch: 0,
+      changed: [
+        makeElement({
+          id: 'shape-1',
+          x: 0,
+          props: { ...makeElement().props, fillColor: '#ff0000' },
+        }),
+      ],
+      deleted: [],
+      slotClocks: [{ elementId: 'shape-1', slot: 'style.fillColor', clock: 1 }],
+      hasMore: false,
+    });
+    flushPendingSyncCommands(true);
+
+    expect(getSocketState().inFlightSyncCommands.map((queued) => queued.command.requestId)).toEqual(
+      [requestId],
+    );
+    expect(getSocketState().queuedSyncCommands).toEqual([]);
+    expect(emit).not.toHaveBeenCalledWith(
+      WS_EVENTS.SYNC_COMMAND,
+      expect.objectContaining({ requestId }),
+    );
+    expect(useElementsStore.getState().elements[0]).toMatchObject({
+      x: 40,
+      props: expect.objectContaining({ fillColor: '#ff0000' }),
+    });
+  });
+
+  it('clears durable commands when the room is replaced by server truth', async () => {
+    const initial = makeElement({ id: 'shape-1', x: 0 });
+    applyRoomSnapshot({
+      protocolVersion: SYNC_PROTOCOL_VERSION,
+      schemaVersion: SYNC_SCHEMA_VERSION,
+      roomId: 'room-1',
+      serverClock: 0,
+      roomEpoch: 0,
+      elements: [initial],
+      slotClocks: [{ elementId: 'shape-1', slot: 'transform.position', clock: 0 }],
+    });
+    getSocketState().socket = { emit: vi.fn(), connected: false } as never;
+    getSocketState().roomId = 'room-1';
+
+    enqueueMutationSyncCommands(
+      {
+        type: 'patch',
+        before: [initial],
+        elements: [makeElement({ id: 'shape-1', x: 40 })],
+      },
+      'room-1',
+      { final: true, now: 0 },
+    );
+    await flushAsyncWork();
+    expect(getSocketState().queuedSyncCommands).toHaveLength(1);
+
+    applyRoomReplaced({
+      protocolVersion: SYNC_PROTOCOL_VERSION,
+      schemaVersion: SYNC_SCHEMA_VERSION,
+      roomId: 'room-1',
+      serverClock: 1,
+      roomEpoch: 1,
+      elements: [makeElement({ id: 'replacement' })],
+      slotClocks: [{ elementId: 'replacement', slot: 'transform.position', clock: 1 }],
+    });
+    await flushAsyncWork();
+
+    resetReconnectState();
+    getSocketState().roomId = 'room-1';
+    await hydratePendingSyncCommandsFromOutbox('room-1');
+    expect(getSocketState().inFlightSyncCommands).toEqual([]);
+  });
+});
+
 function emittedCommand(emit: ReturnType<typeof vi.fn>, index: number): SyncCommand {
   const command = emit.mock.calls[index]?.[1] as SyncCommand | undefined;
   if (!command) throw new Error(`Missing emitted command at ${index}.`);
@@ -685,6 +1037,12 @@ function makeElement(overrides: Partial<Element> = {}): Element {
     },
     ...overrides,
   };
+}
+
+async function flushAsyncWork(): Promise<void> {
+  for (let index = 0; index < 5; index += 1) {
+    await Promise.resolve();
+  }
 }
 
 function ackBase(requestId: string, serverClock: number): Omit<SyncAck, 'status'> {
