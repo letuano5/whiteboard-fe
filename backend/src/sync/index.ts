@@ -2,7 +2,14 @@ export { executeReplaceDocument, executeSyncCommand } from './execute-sync-comma
 export { RoomActor, RoomActorRegistry } from './room-actor.js';
 export { createSyncAck, createSyncRejectAck } from './sync-room-ack.js';
 export { SyncRoom } from './sync-room.js';
-export { getOrCreateSyncRoom } from './sync-room-registry.js';
+export {
+  deleteSyncRoom,
+  evictIdleSyncRooms,
+  getOrCreateSyncRoom,
+  getSyncRoomRegistryMetrics,
+  startSyncRoomRegistryGc,
+  withSyncRoom,
+} from './sync-room-registry.js';
 export { SyncRoomCommandError } from './sync-room-errors.js';
 export {
   SyncRoomPersistenceError,

@@ -4,6 +4,7 @@ import { createRuntimeAuthDeps } from './auth/index.js';
 import { createAutosaveManager } from './persistence/autosave.js';
 import { prisma } from './persistence/prisma.js';
 import { saveRoomElements } from './persistence/room-repository.js';
+import { startHotRoomGc } from './realtime/room-cache-gc.js';
 import { createRoomState } from './realtime/room-state.js';
 import { createWhiteboardServer } from './realtime/whiteboard-server.js';
 import type { SyncRoom } from './sync/index.js';
@@ -34,5 +35,6 @@ const autosave = createAutosaveManager({
 
 createWhiteboardServer(io, { ...roomState, autosave, ...authDeps, syncRooms });
 startProcessedRequestGc(prisma);
+startHotRoomGc({ ...roomState, autosave, syncRooms });
 
 httpServer.listen(PORT, () => console.log(`Server running on :${PORT}`));

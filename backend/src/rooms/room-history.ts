@@ -9,7 +9,8 @@ import {
   type AppUserRepository,
   type AuthenticatedRequest,
 } from '../auth/index.js';
-import { executeReplaceDocument, type SyncRoom } from '../sync/index.js';
+import { deleteSyncRoom, executeReplaceDocument, type SyncRoom } from '../sync/index.js';
+import { forgetRoomCache } from '../realtime/room-cache-gc.js';
 import { loadRoomForOwnerAction, resolveRoomAccess, RoomAccessError } from './room-roles.js';
 import {
   captureRoomSnapshot,
@@ -184,9 +185,10 @@ export async function restoreRoomSnapshot(
     },
   );
 
-  deps.syncRooms?.delete(input.roomId);
+  deleteSyncRoom(deps.syncRooms, input.roomId);
   deps.roomElements?.delete(input.roomId);
   deps.roomClocks?.delete(input.roomId);
+  forgetRoomCache(deps.roomElements, input.roomId);
   deps.ioServer?.to(input.roomId).emit(WS_EVENTS.ROOM_REPLACED, result.replacePayload);
 
   return {

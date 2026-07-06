@@ -10,7 +10,7 @@ import { loadRoomElements } from '../persistence/room-repository.js';
 import { captureIntervalSnapshotForCommit } from '../rooms/room-snapshots.js';
 import { RoomActorRegistry } from './room-actor.js';
 import { SyncRoom } from './sync-room.js';
-import { getOrCreateSyncRoom } from './sync-room-registry.js';
+import { withSyncRoom } from './sync-room-registry.js';
 import { createPrismaSyncRoomPersistence } from './sync-room-persistence.js';
 import type {
   NativeFileImportCommand,
@@ -74,7 +74,21 @@ async function executeReplaceDocumentInRoom(
   input: ExecuteReplaceDocumentInput,
   actorContext: SyncActorContext,
 ): Promise<ReplaceDocumentResult> {
-  const room = await resolveReplaceTargetRoom(input.roomId, actorContext);
+  if (actorContext.syncRooms) {
+    return withSyncRoom(actorContext.db, actorContext.syncRooms, input.roomId, (room) =>
+      executeReplaceDocumentWithRoom(input, actorContext, room),
+    );
+  }
+
+  const room = await createThrowawayReplaceTargetRoom(input.roomId, actorContext);
+  return executeReplaceDocumentWithRoom(input, actorContext, room);
+}
+
+async function executeReplaceDocumentWithRoom(
+  input: ExecuteReplaceDocumentInput,
+  actorContext: SyncActorContext,
+  room: SyncRoom,
+): Promise<ReplaceDocumentResult> {
   const { documentClock, roomEpoch } = room.getStateSnapshot();
   const command: ReplaceDocumentCommand = {
     protocolVersion: SYNC_PROTOCOL_VERSION,
@@ -103,16 +117,10 @@ async function executeReplaceDocumentInRoom(
   };
 }
 
-async function resolveReplaceTargetRoom(
+async function createThrowawayReplaceTargetRoom(
   roomId: string,
   actorContext: SyncActorContext,
 ): Promise<SyncRoom> {
-  // Prefer the shared hot room so replace serializes on the same actor as socket
-  // commands; only fall back to a throwaway room when no registry is wired in.
-  if (actorContext.syncRooms) {
-    return getOrCreateSyncRoom(actorContext.db, actorContext.syncRooms, roomId);
-  }
-
   const loaded = await loadRoomElements(actorContext.db, roomId);
   return new SyncRoom({
     roomId,

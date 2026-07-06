@@ -4,12 +4,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { RoomAccessPayload } from '@vdt/shared';
 import type { AppUser } from '../auth/index.js';
 import { makeElement } from '../test/element-fixtures.js';
-import { getOrCreateSyncRoom, type SyncRoom } from '../sync/index.js';
+import { withSyncRoom, type SyncRoom } from '../sync/index.js';
 import { resolveRoomAccess } from './room-roles.js';
 import { exportNativeFileFromRoom, sendKnownExportError } from './native-file-export.js';
 
 vi.mock('../sync/index.js', () => ({
-  getOrCreateSyncRoom: vi.fn(),
+  withSyncRoom: vi.fn(),
 }));
 
 vi.mock('./room-roles.js', async (importOriginal) => {
@@ -33,7 +33,7 @@ const user: AppUser = {
 
 beforeEach(() => {
   vi.mocked(resolveRoomAccess).mockReset();
-  vi.mocked(getOrCreateSyncRoom).mockReset();
+  vi.mocked(withSyncRoom).mockReset();
 });
 
 describe('native file export', () => {
@@ -42,13 +42,15 @@ describe('native file export', () => {
     vi.mocked(resolveRoomAccess).mockResolvedValue(makeAccessPayload('viewer'));
     const serverElement = makeElement({ id: 'server-truth', zIndex: 7 });
     const syncRoom = makeSyncRoom(serverElement, 12);
-    vi.mocked(getOrCreateSyncRoom).mockResolvedValue(syncRoom);
+    vi.mocked(withSyncRoom).mockImplementation(async (_db, _syncRooms, _roomId, task) =>
+      task(syncRoom),
+    );
     const db = makeDb('Server Board');
     const syncRooms = new Map();
 
     const result = await exportNativeFileFromRoom(db, syncRooms, 'room-1', user);
 
-    expect(getOrCreateSyncRoom).toHaveBeenCalledWith(db, syncRooms, 'room-1');
+    expect(withSyncRoom).toHaveBeenCalledWith(db, syncRooms, 'room-1', expect.any(Function));
     expect(result.document.elements).toEqual([serverElement]);
     expect(result.document.room).toMatchObject({
       id: 'room-1',
@@ -62,7 +64,9 @@ describe('native file export', () => {
     // @covers AC-2
     vi.mocked(resolveRoomAccess).mockResolvedValue(makeAccessPayload('editor'));
     const syncRoom = makeSyncRoom(makeElement({ id: 'latest-commit' }), 21);
-    vi.mocked(getOrCreateSyncRoom).mockResolvedValue(syncRoom);
+    vi.mocked(withSyncRoom).mockImplementation(async (_db, _syncRooms, _roomId, task) =>
+      task(syncRoom),
+    );
     const db = makeDb('Read Only Board');
 
     const result = await exportNativeFileFromRoom(db, undefined, 'room-1', user);

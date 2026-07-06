@@ -13,6 +13,7 @@ import {
 } from './native-file-import.js';
 
 vi.mock('../sync/index.js', () => ({
+  deleteSyncRoom: vi.fn(),
   executeSyncCommand: vi.fn().mockResolvedValue({
     kind: 'native-file-import',
     roomId: 'room-1',

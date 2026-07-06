@@ -16,7 +16,8 @@ import {
   type AppUserRepository,
   type AuthenticatedRequest,
 } from '../auth/index.js';
-import { executeSyncCommand, type SyncRoom } from '../sync/index.js';
+import { deleteSyncRoom, executeSyncCommand, type SyncRoom } from '../sync/index.js';
+import { forgetRoomCache } from '../realtime/room-cache-gc.js';
 import { canMutateRoom, resolveRoomAccess, RoomAccessError } from './room-roles.js';
 import { captureRoomSnapshot } from './room-snapshots.js';
 
@@ -149,9 +150,10 @@ async function executeNativeFileReplace(
 
   // Evict every in-memory mirror of the room so the next join/command reloads the
   // freshly replaced document (and bumped roomEpoch) from Postgres.
-  opts.syncRooms?.delete(roomId);
+  deleteSyncRoom(opts.syncRooms, roomId);
   opts.roomElements?.delete(roomId);
   opts.roomClocks?.delete(roomId);
+  forgetRoomCache(opts.roomElements, roomId);
   if (opts.ioServer) {
     opts.ioServer.to(roomId).emit(WS_EVENTS.ROOM_REPLACED, result.replacePayload);
   }
@@ -261,7 +263,12 @@ export function sendKnownImportError(
   }
 
   console.error('[native-file-import] Unexpected error:', error);
-  sendNativeFileError(response, 500, 'native-file/internal-error', 'Failed to import the document.');
+  sendNativeFileError(
+    response,
+    500,
+    'native-file/internal-error',
+    'Failed to import the document.',
+  );
 }
 
 function sendNativeFileError(

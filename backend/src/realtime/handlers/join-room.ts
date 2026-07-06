@@ -7,6 +7,7 @@ import {
 } from '@vdt/shared';
 import { getRoomClock, getRoomDiff, loadRoomElements } from '../../persistence/room-repository.js';
 import { resolveRoomAccess, RoomAccessError } from '../../rooms/room-roles.js';
+import { touchRoomCache } from '../room-cache-gc.js';
 import type { JoinRoomPayload, ResolvedWhiteboardServerDeps } from '../types.js';
 
 export async function handleJoinRoom(
@@ -82,11 +83,13 @@ export async function handleJoinRoom(
       if (!elements.has(roomId)) elements.set(roomId, new Map());
       for (const el of loaded.elements) elements.get(roomId)!.set(el.id, el);
       clocks.set(roomId, loaded.documentClock);
+      touchRoomCache(elements, roomId);
       documentClock = loaded.documentClock;
       currentRoomEpoch = loaded.roomEpoch;
       slotClocks = loaded.slotClocks;
       processedRequestHistoryStartsAtClock = loaded.processedRequestHistoryStartsAtClock ?? 0;
     } else {
+      touchRoomCache(elements, roomId);
       if (!clocks.has(roomId)) {
         clocks.set(roomId, await getRoomClock(db, roomId));
       }

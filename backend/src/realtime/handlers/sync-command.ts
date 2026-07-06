@@ -11,9 +11,10 @@ import {
   createSyncAck,
   createSyncRejectAck,
   SyncRoomCommandError,
-  getOrCreateSyncRoom,
+  withSyncRoom,
 } from '../../sync/index.js';
 import type { SyncRoom } from '../../sync/index.js';
+import { touchRoomCache } from '../room-cache-gc.js';
 import type { ResolvedWhiteboardServerDeps } from '../types.js';
 
 export async function handleSyncCommand(
@@ -33,11 +34,18 @@ export async function handleSyncCommand(
       return;
     }
 
-    const room = await getOrCreateSyncRoom(deps.db, deps.syncRooms, command.roomId);
-    const result = await room.execute(command, {
-      actorId: socket.data?.auth?.user?.id ?? null,
-      effectiveRole,
-    });
+    const { result, room } = await withSyncRoom(
+      deps.db,
+      deps.syncRooms,
+      command.roomId,
+      async (room) => ({
+        room,
+        result: await room.execute(command, {
+          actorId: socket.data?.auth?.user?.id ?? null,
+          effectiveRole,
+        }),
+      }),
+    );
     const ack = createSyncAck(result);
     const broadcast: SyncBroadcast = {
       protocolVersion: result.changeSet.protocolVersion,
@@ -98,6 +106,7 @@ function mirrorSyncRoomState(
   const snapshot = room.getStateSnapshot();
   deps.roomElements.set(roomId, new Map(snapshot.elements));
   deps.roomClocks.set(roomId, snapshot.documentClock);
+  touchRoomCache(deps.roomElements, roomId);
 }
 
 function emitReject(
