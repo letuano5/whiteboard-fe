@@ -49,6 +49,7 @@ async function emitRoomAccessForRoomSockets(
   if (!roomSockets.some((roomSocket) => roomSocket.id === actorSocket.id)) {
     roomSockets.push(actorSocket);
   }
+  const activePresences = [...(deps.roomPresence.get(roomId)?.values() ?? [])];
 
   for (const roomSocket of roomSockets) {
     try {
@@ -56,7 +57,7 @@ async function emitRoomAccessForRoomSockets(
         roomSocket.id === actorSocket.id
           ? actorAccess
           : await resolveRoomAccess(deps.db, roomId, roomSocket.data?.auth?.user, {
-              activePresences: deps.roomPresence.get(roomId)?.values(),
+              activePresences,
               currentSessionId: roomSocket.data?.sessionId,
             });
       setSocketAccess(roomSocket, access);

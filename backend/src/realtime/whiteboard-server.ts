@@ -98,12 +98,14 @@ function catchSocketHandler<TPayload>(
   handler: SocketEventHandler<TPayload>,
 ): SocketEventHandler<TPayload> {
   return (payload: TPayload) => {
-    return Promise.resolve(handler(payload)).catch((error: unknown) => {
-      console.error(`[socket:${eventName}] Unexpected handler error:`, error);
-      socket.emit(WS_EVENTS.ROOM_ACCESS_ERROR, {
-        code: 'room-access/forbidden',
-        message: 'Realtime request could not be processed.',
+    return Promise.resolve()
+      .then(() => handler(payload))
+      .catch((error: unknown) => {
+        console.error(`[socket:${eventName}] Unexpected handler error:`, error);
+        socket.emit(WS_EVENTS.ROOM_ACCESS_ERROR, {
+          code: 'room-access/forbidden',
+          message: 'Realtime request could not be processed.',
+        });
       });
-    });
   };
 }

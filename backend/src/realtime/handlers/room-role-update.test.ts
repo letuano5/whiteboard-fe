@@ -7,6 +7,7 @@ import { handleRoomRoleUpdate } from './room-role-update.js';
 
 const ownerUser = makeUser('owner-user');
 const memberUser = makeUser('member-user');
+const existingEditorUser = makeUser('existing-editor-user');
 
 describe('handleRoomRoleUpdate', () => {
   it('persists member role changes and emits per-socket access payloads', async () => {
@@ -97,6 +98,81 @@ describe('handleRoomRoleUpdate', () => {
     );
   });
 
+  it('rechecks editor capacity with reusable presences after a role update', async () => {
+    const ownerEmit = vi.fn();
+    const existingEditorEmit = vi.fn();
+    const memberEmit = vi.fn();
+    const db = makeRoleUpdateDb({
+      beforeRole: 'viewer',
+      afterRole: 'editor',
+      maxParticipants: 3,
+      maxEditors: 1,
+      extraMembers: [{ user: existingEditorUser, role: 'editor' }],
+    });
+    const ownerSocket = makeSocket('socket-owner', ownerUser, ownerEmit);
+    const existingEditorSocket = makeSocket(
+      'socket-existing-editor',
+      existingEditorUser,
+      existingEditorEmit,
+    );
+    const memberSocket = makeSocket('socket-member', memberUser, memberEmit);
+    const sockets = new Map<string, Socket>([
+      [ownerSocket.id, ownerSocket],
+      [existingEditorSocket.id, existingEditorSocket],
+      [memberSocket.id, memberSocket],
+    ]);
+
+    await handleRoomRoleUpdate(
+      { sockets: { sockets }, to: vi.fn() } as unknown as Server,
+      ownerSocket,
+      {
+        roomPresence: new Map<string, Map<string, Presence>>([
+          [
+            'room-1',
+            new Map([
+              [
+                ownerSocket.id,
+                makePresence('session-owner', ownerUser.id, 'Owner', 'owner', 'owner'),
+              ],
+              [
+                existingEditorSocket.id,
+                makePresence(
+                  'session-existing-editor',
+                  existingEditorUser.id,
+                  'Existing editor',
+                  'editor',
+                  'editor',
+                ),
+              ],
+              [
+                memberSocket.id,
+                makePresence('session-member', memberUser.id, 'Member', 'viewer', 'viewer'),
+              ],
+            ]),
+          ],
+        ]),
+        roomElements: new Map<string, Map<string, Element>>(),
+        roomClocks: new Map(),
+        syncRooms: new Map(),
+        db,
+      },
+      { roomId: 'room-1', userId: memberUser.id, role: 'editor' },
+    );
+
+    expect(memberEmit).toHaveBeenCalledWith(
+      WS_EVENTS.ROOM_ACCESS,
+      expect.objectContaining({
+        baseRole: 'editor',
+        effectiveRole: 'viewer',
+        maxParticipants: 3,
+        maxEditors: 1,
+      }),
+    );
+    expect(memberSocket.data.roomBaseRole).toBe('editor');
+    expect(memberSocket.data.roomRole).toBe('viewer');
+    expect(memberSocket.data.roomRoleCapacityDowngraded).toBe(true);
+  });
+
   it('rejects role updates from non-owner sessions', async () => {
     const socketEmit = vi.fn();
     const db = {
@@ -136,21 +212,44 @@ describe('handleRoomRoleUpdate', () => {
   });
 });
 
-function makeRoleUpdateDb(): PrismaClient {
+interface RoleUpdateDbOptions {
+  beforeRole?: 'editor' | 'viewer';
+  afterRole?: 'editor' | 'viewer';
+  maxParticipants?: number | null;
+  maxEditors?: number | null;
+  extraMembers?: Array<{ user: AppUser; role: 'editor' | 'viewer' }>;
+}
+
+function makeRoleUpdateDb(options: RoleUpdateDbOptions = {}): PrismaClient {
+  const beforeRole = options.beforeRole ?? 'editor';
+  const afterRole = options.afterRole ?? 'viewer';
+  const extraMembers =
+    options.extraMembers?.map(({ user, role }) => ({
+      roomId: 'room-1',
+      userId: user.id,
+      role,
+      user,
+    })) ?? [];
   const beforeUpdate = {
     id: 'room-1',
     ownerId: ownerUser.id,
+    maxParticipants: options.maxParticipants ?? null,
+    maxEditors: options.maxEditors ?? null,
     members: [
       { roomId: 'room-1', userId: ownerUser.id, role: 'owner', user: ownerUser },
-      { roomId: 'room-1', userId: memberUser.id, role: 'editor', user: memberUser },
+      ...extraMembers,
+      { roomId: 'room-1', userId: memberUser.id, role: beforeRole, user: memberUser },
     ],
   };
   const afterUpdate = {
     id: 'room-1',
     ownerId: ownerUser.id,
+    maxParticipants: options.maxParticipants ?? null,
+    maxEditors: options.maxEditors ?? null,
     members: [
       { roomId: 'room-1', userId: ownerUser.id, role: 'owner', user: ownerUser },
-      { roomId: 'room-1', userId: memberUser.id, role: 'viewer', user: memberUser },
+      ...extraMembers,
+      { roomId: 'room-1', userId: memberUser.id, role: afterRole, user: memberUser },
     ],
   };
 
@@ -185,10 +284,30 @@ function makeSocket(id: string, user: AppUser, emit: ReturnType<typeof vi.fn>): 
     id,
     data: {
       roomId: 'room-1',
-      sessionId: id === 'socket-owner' ? 'session-owner' : 'session-member',
+      sessionId: id.replace('socket-', 'session-'),
       auth: { user },
     },
     rooms: new Set(['room-1']),
     emit,
   } as unknown as Socket;
+}
+
+function makePresence(
+  sessionId: string,
+  userId: string,
+  name: string,
+  baseRole: Presence['baseRole'],
+  effectiveRole: Presence['effectiveRole'],
+): Presence {
+  return {
+    sessionId,
+    userId,
+    name,
+    color: '#111111',
+    cursor: null,
+    selectedIds: [],
+    status: 'active',
+    baseRole,
+    effectiveRole,
+  };
 }
