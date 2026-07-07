@@ -10,10 +10,8 @@ import { useAuthStore } from '../../auth/auth.store';
 import { useCameraStore } from '../../store/camera.store';
 import { useInteractionStore } from '../../store/interaction.store';
 import { useRoomAccessStore } from '../../rooms/room-access.store';
-import { applyRemoteElements } from '../apply-remote';
 import { saveCamera } from '../camera-persistence';
 import { LOCAL_PRESENCE } from '../presence';
-import { clearPendingQueue } from './pending-queue';
 import {
   dropDurablePendingSyncCommands,
   hydratePendingSyncCommandsFromOutbox,
@@ -32,11 +30,9 @@ import {
   getPendingRequestRefs,
   getSocketState,
   markPendingRequestsStale,
-  setLastServerClock,
 } from './state';
 import type {
   CursorMovePayload,
-  ElementUpdatePayload,
   RoomAccessErrorPayload,
   RoomAccessPayload,
   RoomDiffPayload,
@@ -81,7 +77,6 @@ export function registerSocketEventHandlers(): void {
     if (current.reconnectPending) {
       const staleRequestIds = markPendingRequestsStale();
       dropDurablePendingSyncCommands(current.roomId, staleRequestIds);
-      clearPendingQueue();
       rematerializeOptimisticStore();
       current.reconnectPending = false;
     }
@@ -119,17 +114,6 @@ export function registerSocketEventHandlers(): void {
 
   state.socket.on(WS_EVENTS.ROOM_ACCESS_ERROR, (data: RoomAccessErrorPayload) => {
     useRoomAccessStore.getState().setRoomAccessError(data);
-  });
-
-  state.socket.on(WS_EVENTS.ELEMENT_UPDATE, (data: ElementUpdatePayload) => {
-    applyRemoteElements(data.elements);
-    if (data.documentClock !== undefined) setLastServerClock(data.documentClock);
-    if (data.sessionId) {
-      const { setRemoteDrafts } = useInteractionStore.getState();
-      const current = new Map(useInteractionStore.getState().remoteDrafts);
-      current.delete(data.sessionId);
-      setRemoteDrafts(current);
-    }
   });
 
   state.socket.on(WS_EVENTS.USER_JOIN, (data: { presences: Presence[] }) => {

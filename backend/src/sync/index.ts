@@ -10,6 +10,7 @@ export {
   startSyncRoomRegistryGc,
   withSyncRoom,
 } from './sync-room-registry.js';
+export { gcTombstones, startTombstoneGc } from './sync-room-tombstone-gc.js';
 export { SyncRoomCommandError } from './sync-room-errors.js';
 export {
   SyncRoomPersistenceError,

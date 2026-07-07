@@ -632,20 +632,20 @@ describe('getRoomClock', () => {
 
 /**
  * Builds a Prisma mock for the getRoomDiff read path.
- * Supports: tombstone.aggregate, room.findUnique, record.findMany, tombstone.findMany.
+ * Supports: room.findUnique, record.findMany, tombstone.findMany.
  * changedRecords now include slotClocks for P5-13A slot-aware diff.
  */
 function buildDiffMockDb({
-  minDeletedClock,
   documentClock,
   roomEpoch = 0n,
+  tombstoneHistoryStartsAtClock = 0n,
   changedRecords,
   deletedTombstones,
   allRecords,
 }: {
-  minDeletedClock: bigint | null;
   documentClock: bigint;
   roomEpoch?: bigint;
+  tombstoneHistoryStartsAtClock?: bigint;
   changedRecords: Array<{
     recordId: string;
     state: unknown;
@@ -660,10 +660,12 @@ function buildDiffMockDb({
     slotClocks: Record<string, { clock: number }>;
   }>;
 }) {
-  const tombstoneAggregate = vi.fn().mockResolvedValue({
-    _min: { deletedClock: minDeletedClock },
+  const roomFindUnique = vi.fn().mockResolvedValue({
+    documentClock,
+    roomEpoch,
+    tombstoneHistoryStartsAtClock,
+    processedRequestHistoryStartsAtClock: 0n,
   });
-  const roomFindUnique = vi.fn().mockResolvedValue({ documentClock, roomEpoch });
   // Wipe path calls record.findMany once (all records, no clock filter).
   // Diff path calls record.findMany once (filtered by recordClock).
   // Use allRecords when provided (wipe scenario), changedRecords otherwise (diff scenario).
@@ -675,7 +677,6 @@ function buildDiffMockDb({
   const db = {
     $transaction: (task: (tx: unknown) => unknown) => task(db),
     tombstone: {
-      aggregate: tombstoneAggregate,
       findMany: tombstoneFindMany,
     },
     room: {
@@ -686,7 +687,7 @@ function buildDiffMockDb({
     },
   } as unknown as PrismaClient;
 
-  return { db, tombstoneAggregate, roomFindUnique, recordFindMany, tombstoneFindMany };
+  return { db, roomFindUnique, recordFindMany, tombstoneFindMany };
 }
 
 describe('getRoomDiff — P3A-03', () => {
@@ -696,10 +697,9 @@ describe('getRoomDiff — P3A-03', () => {
   // @covers AC-10 — no tombstones → always diff mode (never wipe-all)
   // =========================================================================
   describe('AC-10: no tombstones in room → incremental diff always returned', () => {
-    it('returns mode=diff when there are no tombstones (min deletedClock = null)', async () => {
+    it('returns mode=diff when history cutoff is 0', async () => {
       const el = makeElement({ id: 'el-1' });
       const { db } = buildDiffMockDb({
-        minDeletedClock: null, // no tombstones
         documentClock: 5n,
         changedRecords: [{ recordId: 'el-1', state: el, recordClock: 3n, slotClocks: {} }],
         deletedTombstones: [],
@@ -719,7 +719,6 @@ describe('getRoomDiff — P3A-03', () => {
     it('returns diff with empty changed and deleted when client is fully up-to-date', async () => {
       // @covers AC-10 (edge case: zero changes)
       const { db } = buildDiffMockDb({
-        minDeletedClock: null,
         documentClock: 7n,
         changedRecords: [],
         deletedTombstones: [],
@@ -744,7 +743,6 @@ describe('getRoomDiff — P3A-03', () => {
     it('returns only records with recordClock > lastServerClock', async () => {
       const el1 = makeElement({ id: 'changed-1' });
       const { db } = buildDiffMockDb({
-        minDeletedClock: null,
         documentClock: 10n,
         changedRecords: [{ recordId: 'changed-1', state: el1, recordClock: 8n, slotClocks: {} }],
         deletedTombstones: [],
@@ -765,7 +763,7 @@ describe('getRoomDiff — P3A-03', () => {
   describe('AC-2: tombstones after lastServerClock are returned in deleted list', () => {
     it('returns deleted IDs for tombstones with deletedClock > lastServerClock', async () => {
       const { db } = buildDiffMockDb({
-        minDeletedClock: 3n, // history starts at 3, lastServerClock=3 → 3 >= 3 → diff mode
+        tombstoneHistoryStartsAtClock: 3n, // lastServerClock=3 >= cutoff → diff mode
         documentClock: 10n,
         changedRecords: [],
         deletedTombstones: [{ recordId: 'del-el-1' }, { recordId: 'del-el-2' }],
@@ -775,20 +773,21 @@ describe('getRoomDiff — P3A-03', () => {
 
       expect(result.mode).toBe('diff');
       if (result.mode === 'diff') {
+        expect(result.changed.map((element) => element.id)).not.toContain('del-el-1');
         expect(result.deleted.map((d) => d.id)).toEqual(['del-el-1', 'del-el-2']);
       }
     });
   });
 
   // =========================================================================
-  // @covers AC-8 — wipe-all when lastServerClock < MIN(deletedClock)
+  // @covers AC-8 — wipe-all when lastServerClock < tombstoneHistoryStartsAtClock
   // =========================================================================
   describe('AC-8: wipe-all returned when tombstone history is insufficient', () => {
-    it('returns mode=wipe when lastServerClock=5 and MIN(deletedClock)=8', async () => {
+    it('returns mode=wipe when lastServerClock=5 and history cutoff=8', async () => {
       const el1 = makeElement({ id: 'active-1' });
       const elDeleted = makeDeletedElement({ id: 'ghost' });
       const { db } = buildDiffMockDb({
-        minDeletedClock: 8n, // history starts at 8
+        tombstoneHistoryStartsAtClock: 8n,
         documentClock: 12n,
         changedRecords: [],
         deletedTombstones: [],
@@ -809,7 +808,7 @@ describe('getRoomDiff — P3A-03', () => {
 
     it('does NOT hit record findMany for diff queries in wipe path', async () => {
       const { db, recordFindMany } = buildDiffMockDb({
-        minDeletedClock: 8n,
+        tombstoneHistoryStartsAtClock: 8n,
         documentClock: 12n,
         changedRecords: [],
         deletedTombstones: [],
@@ -825,7 +824,7 @@ describe('getRoomDiff — P3A-03', () => {
 
     it('does NOT hit tombstone findMany in wipe path', async () => {
       const { db, tombstoneFindMany } = buildDiffMockDb({
-        minDeletedClock: 8n,
+        tombstoneHistoryStartsAtClock: 8n,
         documentClock: 12n,
         changedRecords: [],
         deletedTombstones: [],
@@ -847,7 +846,6 @@ describe('getRoomDiff — P3A-03', () => {
       const memEl = makeElement({ id: 'mem-only-el' });
 
       const { db } = buildDiffMockDb({
-        minDeletedClock: null,
         documentClock: 6n,
         changedRecords: [{ recordId: 'db-el', state: dbEl, recordClock: 4n, slotClocks: {} }],
         deletedTombstones: [],
@@ -869,7 +867,6 @@ describe('getRoomDiff — P3A-03', () => {
       const delMemEl = makeDeletedElement({ id: 'mem-deleted-el' });
 
       const { db } = buildDiffMockDb({
-        minDeletedClock: null,
         documentClock: 4n,
         changedRecords: [],
         deletedTombstones: [],
@@ -888,7 +885,6 @@ describe('getRoomDiff — P3A-03', () => {
     it('returns wipe when the client roomEpoch does not match the server roomEpoch', async () => {
       const el = makeElement({ id: 'active-epoch' });
       const { db } = buildDiffMockDb({
-        minDeletedClock: null,
         documentClock: 12n,
         roomEpoch: 3n,
         changedRecords: [],
@@ -912,7 +908,6 @@ describe('getRoomDiff — P3A-03', () => {
   describe('documentClock type conversion', () => {
     it('documentClock is typeof number in diff result', async () => {
       const { db } = buildDiffMockDb({
-        minDeletedClock: null,
         documentClock: 99n,
         changedRecords: [],
         deletedTombstones: [],
@@ -925,7 +920,7 @@ describe('getRoomDiff — P3A-03', () => {
 
     it('documentClock is typeof number in wipe result', async () => {
       const { db } = buildDiffMockDb({
-        minDeletedClock: 10n,
+        tombstoneHistoryStartsAtClock: 10n,
         documentClock: 55n,
         changedRecords: [],
         deletedTombstones: [],
@@ -947,7 +942,6 @@ describe('getRoomDiff — P3A-03', () => {
       // @covers AC-6
       const el = makeElement({ id: 'patched-el' });
       const { db } = buildDiffMockDb({
-        minDeletedClock: null,
         documentClock: 5n,
         changedRecords: [
           {
@@ -979,7 +973,6 @@ describe('getRoomDiff — P3A-03', () => {
     it('returns slotClocks: [] when no slots changed since lastServerClock', async () => {
       const el = makeElement({ id: 'stale-el' });
       const { db } = buildDiffMockDb({
-        minDeletedClock: null,
         documentClock: 10n,
         changedRecords: [
           {
@@ -1016,7 +1009,7 @@ describe('getRoomDiff — P3A-03', () => {
         },
       ];
       const { db } = buildDiffMockDb({
-        minDeletedClock: 8n,
+        tombstoneHistoryStartsAtClock: 8n,
         documentClock: 12n,
         changedRecords: [],
         deletedTombstones: [],

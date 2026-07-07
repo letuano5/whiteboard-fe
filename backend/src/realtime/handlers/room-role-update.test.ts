@@ -3,7 +3,6 @@ import type { Server, Socket } from 'socket.io';
 import { describe, expect, it, vi } from 'vitest';
 import { WS_EVENTS, type Element, type Presence } from '@vdt/shared';
 import type { AppUser } from '../../auth/index.js';
-import type { AutosaveManager } from '../../persistence/autosave.js';
 import { handleRoomRoleUpdate } from './room-role-update.js';
 
 const ownerUser = makeUser('owner-user');
@@ -22,7 +21,6 @@ describe('handleRoomRoleUpdate', () => {
         roomElements: new Map<string, Map<string, Element>>(),
         roomClocks: new Map(),
         syncRooms: new Map(),
-        autosave: {} as AutosaveManager,
         db,
       },
       { roomId: 'room-1', userId: memberUser.id, role: 'viewer' },
@@ -70,7 +68,6 @@ describe('handleRoomRoleUpdate', () => {
         roomElements: new Map<string, Map<string, Element>>(),
         roomClocks: new Map(),
         syncRooms: new Map(),
-        autosave: {} as AutosaveManager,
         db,
       },
       { roomId: 'room-1', userId: ownerUser.id, role: 'viewer' },

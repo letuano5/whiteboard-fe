@@ -10,7 +10,6 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createWhiteboardServer } from '../realtime/whiteboard-server.js';
-import { createAutosaveManager } from './autosave.js';
 import type { Element, Presence } from '@vdt/shared';
 import { WS_EVENTS } from '@vdt/shared';
 import { makeElement } from '../test/element-fixtures.js';
@@ -75,16 +74,10 @@ const JOIN_PAYLOAD = {
 
 let roomPresence: Map<string, Map<string, Presence>>;
 let roomElements: Map<string, Map<string, Element>>;
-let autosave: ReturnType<typeof createAutosaveManager>;
 
 beforeEach(() => {
   roomPresence = new Map();
   roomElements = new Map();
-  autosave = createAutosaveManager({
-    delayMs: 60000,
-    getRoomElements: () => [],
-    saveRoomElements: vi.fn().mockResolvedValue(null),
-  });
 });
 
 afterEach(() => {
@@ -104,7 +97,7 @@ describe('AC-2 (P3A-02): warm-path join does NOT call loadRoomElements again', (
 
     const { ioServer, makeSocket, connect, getHandler } = makeFakeIo();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    createWhiteboardServer(ioServer as any, { roomPresence, roomElements, autosave, db });
+    createWhiteboardServer(ioServer as any, { roomPresence, roomElements, db });
 
     const socket = makeSocket();
     connect(socket);
@@ -130,7 +123,7 @@ describe('AC-2 (P3A-02): warm-path join does NOT call loadRoomElements again', (
 
     const { ioServer, makeSocket, connect, getHandler } = makeFakeIo();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    createWhiteboardServer(ioServer as any, { roomPresence, roomElements, autosave, db });
+    createWhiteboardServer(ioServer as any, { roomPresence, roomElements, db });
 
     const socket = makeSocket();
     connect(socket);
@@ -157,7 +150,7 @@ describe('AC-3 (P3A-02) socket layer: empty DB → ROOM_SNAPSHOT { elements: [],
 
     const { ioServer, makeSocket, connect, getHandler } = makeFakeIo();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    createWhiteboardServer(ioServer as any, { roomPresence, roomElements, autosave, db });
+    createWhiteboardServer(ioServer as any, { roomPresence, roomElements, db });
 
     const socket = makeSocket();
     connect(socket);
@@ -188,7 +181,7 @@ describe('Cold-path join (AC-1 socket layer): room absent in memory, loads from 
 
     const { ioServer, makeSocket, connect, getHandler } = makeFakeIo();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    createWhiteboardServer(ioServer as any, { roomPresence, roomElements, autosave, db });
+    createWhiteboardServer(ioServer as any, { roomPresence, roomElements, db });
 
     const socket = makeSocket();
     connect(socket);
@@ -214,7 +207,7 @@ describe('AC-7 (P3A-02): DB error during join is non-fatal', () => {
 
     const { ioServer, makeSocket, connect, getHandler } = makeFakeIo();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    createWhiteboardServer(ioServer as any, { roomPresence, roomElements, autosave, db });
+    createWhiteboardServer(ioServer as any, { roomPresence, roomElements, db });
 
     const socket = makeSocket();
     connect(socket);
@@ -236,7 +229,7 @@ describe('AC-7 (P3A-02): DB error during join is non-fatal', () => {
 
     const { ioServer, makeSocket, connect, getHandler, toReturn } = makeFakeIo();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    createWhiteboardServer(ioServer as any, { roomPresence, roomElements, autosave, db });
+    createWhiteboardServer(ioServer as any, { roomPresence, roomElements, db });
 
     const socket = makeSocket();
     connect(socket);
@@ -276,7 +269,7 @@ describe('P4-03 admission control on socket join', () => {
     const { db } = makeAccessDb(makeAccessRoom({ visibility: 'link_view', maxParticipants: 1 }));
     const { ioServer, makeSocket, connect, getHandler } = makeFakeIo();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    createWhiteboardServer(ioServer as any, { roomPresence, roomElements, autosave, db });
+    createWhiteboardServer(ioServer as any, { roomPresence, roomElements, db });
 
     const socket = makeSocket();
     connect(socket);
@@ -315,7 +308,7 @@ describe('P4-03 admission control on socket join', () => {
     const { db } = makeAccessDb(makeAccessRoom({ visibility: 'link_edit', maxEditors: 1 }));
     const { ioServer, makeSocket, connect, getHandler, toReturn } = makeFakeIo();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    createWhiteboardServer(ioServer as any, { roomPresence, roomElements, autosave, db });
+    createWhiteboardServer(ioServer as any, { roomPresence, roomElements, db });
 
     const socket = makeSocket();
     connect(socket);

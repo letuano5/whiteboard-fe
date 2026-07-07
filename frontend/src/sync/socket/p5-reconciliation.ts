@@ -18,7 +18,6 @@ import {
   clearDurablePendingSyncCommands,
   consumeHydratedDurableRequestIds,
 } from './p5-durable-outbox';
-import { clearPendingQueue } from './pending-queue';
 import {
   clearPendingSyncCommands,
   materializeOptimisticElements,
@@ -131,7 +130,6 @@ export function applyRoomSnapshot(snapshot: RoomSnapshot): void {
 export function applyRoomReplaced(payload: RoomReplacedPayload): void {
   const state = getSocketState();
   markPendingRequestsStale();
-  clearPendingQueue();
   clearDurablePendingSyncCommands(payload.roomId);
   clearPendingSyncCommands();
   state.bufferedSyncEvents = [];

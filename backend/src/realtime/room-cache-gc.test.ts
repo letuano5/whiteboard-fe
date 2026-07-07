@@ -1,10 +1,10 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import type { Element, Presence } from '@vdt/shared';
 import { SyncRoom } from '../sync/index.js';
 import { evictIdleHotRooms, touchRoomCache } from './room-cache-gc.js';
 
 describe('evictIdleHotRooms', () => {
-  it('evicts idle legacy room caches after flushing autosave', async () => {
+  it('evicts idle mirrored room caches', async () => {
     const deps = makeDeps();
     deps.roomElements.set('room-1', new Map());
     deps.roomClocks.set('room-1', 4);
@@ -13,7 +13,6 @@ describe('evictIdleHotRooms', () => {
     const result = await evictIdleHotRooms(deps, { idleTtlMs: 10, now: 11 });
 
     expect(result.roomCaches).toBe(1);
-    expect(deps.autosave.flushRoomNow).toHaveBeenCalledWith('room-1');
     expect(deps.roomElements.has('room-1')).toBe(false);
     expect(deps.roomClocks.has('room-1')).toBe(false);
   });
@@ -30,7 +29,6 @@ describe('evictIdleHotRooms', () => {
     const result = await evictIdleHotRooms(deps, { idleTtlMs: 10, now: 11 });
 
     expect(result.roomCaches).toBe(0);
-    expect(deps.autosave.flushRoomNow).not.toHaveBeenCalled();
     expect(deps.roomElements.has('room-1')).toBe(true);
   });
 
@@ -47,7 +45,6 @@ describe('evictIdleHotRooms', () => {
     expect(deps.syncRooms.has('room-1')).toBe(false);
     expect(deps.roomElements.has('room-1')).toBe(false);
     expect(deps.roomClocks.has('room-1')).toBe(false);
-    expect(deps.autosave.flushRoomNow).not.toHaveBeenCalled();
   });
 });
 
@@ -57,9 +54,5 @@ function makeDeps(): Parameters<typeof evictIdleHotRooms>[0] {
     roomElements: new Map<string, Map<string, Element>>(),
     roomClocks: new Map<string, number>(),
     syncRooms: new Map<string, SyncRoom>(),
-    autosave: {
-      markDirty: vi.fn(),
-      flushRoomNow: vi.fn().mockResolvedValue(undefined),
-    },
   };
 }

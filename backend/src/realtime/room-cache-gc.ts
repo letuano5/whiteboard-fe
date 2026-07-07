@@ -1,5 +1,4 @@
 import type { Element, Presence } from '@vdt/shared';
-import type { AutosaveManager } from '../persistence/autosave.js';
 import type { SyncRoom } from '../sync/index.js';
 import {
   DEFAULT_SYNC_ROOM_GC_INTERVAL_MS,
@@ -20,7 +19,6 @@ export interface HotRoomGcDeps {
   roomElements: RoomElementStore;
   roomClocks: RoomClockStore;
   syncRooms: Map<string, SyncRoom>;
-  autosave: AutosaveManager;
 }
 
 export interface HotRoomGcOptions {
@@ -91,7 +89,6 @@ async function evictIdleRoomCaches(
     const roomMetadata = metadata.get(roomId) ?? { lastAccessedAt: 0 };
     if (options.now - roomMetadata.lastAccessedAt < options.idleTtlMs) continue;
 
-    await deps.autosave.flushRoomNow(roomId);
     deps.roomElements.delete(roomId);
     deps.roomClocks.delete(roomId);
     metadata.delete(roomId);

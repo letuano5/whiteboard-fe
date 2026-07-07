@@ -24,7 +24,6 @@ function resolveDeps(deps: WhiteboardServerDeps): ResolvedWhiteboardServerDeps {
     roomPresence: deps.roomPresence,
     roomElements: deps.roomElements,
     roomClocks: deps.roomClocks ?? new Map<string, number>(),
-    autosave: deps.autosave,
     db: deps.db ?? prisma,
     syncRooms: deps.syncRooms ?? new Map(),
   };

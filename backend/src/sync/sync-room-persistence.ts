@@ -282,9 +282,8 @@ async function commitPrismaChangeSet(
 }
 
 // A room created client-side (e.g. "Create new room") has no Room DB row until its first
-// commit. Restores the lazy-creation behavior `save-room.ts`'s legacy autosave path already
-// has via `tx.room.upsert`, so the very first write to a brand-new room succeeds instead of
-// permanently failing `CONDITIONAL_CLOCK_CONFLICT` (the conditional updateMany above always
+// SyncRoom commit. Create that row lazily so the first authoritative P5 write succeeds instead
+// of permanently failing `CONDITIONAL_CLOCK_CONFLICT` (the conditional updateMany above always
 // matches 0 rows when the room has never been persisted).
 async function tryCreateFreshRoomRow(
   tx: PrismaSyncRoomTransaction,

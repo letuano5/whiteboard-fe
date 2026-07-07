@@ -120,10 +120,6 @@ function makeDeps(): ResolvedWhiteboardServerDeps {
     roomElements: new Map<string, Map<string, Element>>(),
     roomClocks: new Map(),
     syncRooms: new Map(),
-    autosave: {
-      markDirty: vi.fn(),
-      flushRoomNow: vi.fn(),
-    },
     db: {} as PrismaClient,
   };
 }

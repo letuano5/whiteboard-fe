@@ -19,9 +19,9 @@ interface RoomDiffOptions {
 /**
  * Computes the reconnect diff for a room since `lastServerClock`.
  *
- * Algorithm (R-03, R-04, P5-13A):
- * 1. Compute tombstoneHistoryStartsAtClock = MIN(tombstone.deletedClock) for the room.
- *    If no tombstones exist, treat as +Infinity → always safe to do incremental diff.
+ * Algorithm (P5-07, P5-13A):
+ * 1. Read Room.tombstoneHistoryStartsAtClock, which is advanced by tombstone GC before
+ *    old tombstones are pruned.
  * 2. If lastServerClock < tombstoneHistoryStartsAtClock: return wipe-all snapshot (AC-8).
  * 3. Else: return incremental diff — DB changed records + DB deleted tombstones since clock.
  *    Overlay any in-memory elements not already covered by the DB changed set (R-03).
@@ -61,12 +61,6 @@ async function computeRoomDiff(
   inMemoryElements: Element[],
   options: RoomDiffOptions,
 ): Promise<RoomDiffResult> {
-  const tombstoneAgg = await db.tombstone.aggregate({
-    where: { roomId },
-    _min: { deletedClock: true },
-  });
-  const minDeletedClockRaw = tombstoneAgg._min.deletedClock;
-
   const room = await db.room.findUnique({
     where: { id: roomId },
     select: {
@@ -81,9 +75,7 @@ async function computeRoomDiff(
   const tombstoneHistoryStartsAtClock =
     room && room.tombstoneHistoryStartsAtClock !== undefined
       ? Number(room.tombstoneHistoryStartsAtClock ?? 0n)
-      : minDeletedClockRaw !== null
-        ? Number(minDeletedClockRaw)
-        : 0;
+      : 0;
   const processedRequestHistoryStartsAtClock = room
     ? Number(room.processedRequestHistoryStartsAtClock ?? 0n)
     : 0;

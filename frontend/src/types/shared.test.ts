@@ -15,7 +15,6 @@ describe('WS_EVENTS', () => {
 
   it('defines all required element mutation events', () => {
     expect(WS_EVENTS.ELEMENT_CREATE).toBe('element-create');
-    expect(WS_EVENTS.ELEMENT_UPDATE).toBe('element-update');
     expect(WS_EVENTS.ELEMENT_DELETE).toBe('element-delete');
   });
 
@@ -46,11 +45,11 @@ describe('WS_EVENTS', () => {
     expect(WS_EVENTS.ROOM_ACCESS_ERROR).toBe('room-access-error');
   });
 
-  it('has 20 distinct event values', () => {
+  it('has 19 distinct event values', () => {
     // P5-05: slot-level sync command/ack/broadcast events added.
     // P5-09: whole-document replace notification added.
     const values = Object.values(WS_EVENTS);
-    expect(values).toHaveLength(20);
-    expect(new Set(values).size).toBe(20);
+    expect(values).toHaveLength(19);
+    expect(new Set(values).size).toBe(19);
   });
 });

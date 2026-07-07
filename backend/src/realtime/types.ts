@@ -8,7 +8,6 @@ import type {
   RoomRole,
 } from '@vdt/shared';
 import type { AppUser, AppUserRepository, AuthVerifier, VerifiedIdentity } from '../auth/index.js';
-import type { AutosaveManager } from '../persistence/autosave.js';
 import type { SyncRoom } from '../sync/index.js';
 import type { RoomState } from './room-state.js';
 
@@ -19,7 +18,6 @@ export type RoomClockStore = Map<string, number>;
 export interface WhiteboardServerDeps extends Partial<RoomState> {
   roomPresence: RoomPresenceStore;
   roomElements: RoomElementStore;
-  autosave: AutosaveManager;
   db?: PrismaClient;
   authVerifier?: AuthVerifier;
   appUserRepository?: AppUserRepository;
@@ -30,7 +28,6 @@ export interface ResolvedWhiteboardServerDeps {
   roomPresence: RoomPresenceStore;
   roomElements: RoomElementStore;
   roomClocks: RoomClockStore;
-  autosave: AutosaveManager;
   db: PrismaClient;
   syncRooms: Map<string, SyncRoom>;
 }
@@ -43,12 +40,6 @@ export interface JoinRoomPayload {
   lastServerClock?: number;
   roomEpoch?: number;
   pendingRequests?: PendingRequestRef[];
-}
-
-export interface ElementUpdatePayload {
-  roomId: string;
-  elements: Element[];
-  sessionId?: string;
 }
 
 export interface RoomDiffRequestPayload extends Partial<ReconnectRequest> {

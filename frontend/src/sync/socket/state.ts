@@ -25,7 +25,6 @@ interface SocketClientState {
   roomId: string | null;
   hasJoined: boolean;
   reconnectPending: boolean;
-  pendingQueue: Element[];
   pendingSyncRequests: PendingSyncRequest[];
   queuedSyncCommands: QueuedSyncCommand[];
   inFlightSyncCommands: QueuedSyncCommand[];
@@ -66,7 +65,6 @@ const state: SocketClientState = {
   roomId: null,
   hasJoined: false,
   reconnectPending: false,
-  pendingQueue: [],
   pendingSyncRequests: [],
   queuedSyncCommands: [],
   inFlightSyncCommands: [],
@@ -164,7 +162,6 @@ export function consumeStaleAckRequest(requestId: string): boolean {
 
 export function resetReconnectState(): void {
   state.lastServerClock = 0;
-  state.pendingQueue = [];
   state.pendingSyncRequests = [];
   state.queuedSyncCommands = [];
   state.inFlightSyncCommands = [];
