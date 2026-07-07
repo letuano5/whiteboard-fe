@@ -1,4 +1,4 @@
-import type { Request, Response, Router } from 'express';
+import type { NextFunction, Request, RequestHandler, Response, Router } from 'express';
 import express from 'express';
 import type { PrismaClient } from '@prisma/client';
 import type { AuthVerifier } from '../auth/index.js';
@@ -39,36 +39,42 @@ export function createDocumentDashboardRouter(deps: DocumentDashboardDeps): Rout
 
   router.get(
     '/api/documents',
-    (request: Request, response: Response<DocumentDashboardResponse | DocumentErrorResponse>) => {
-      void handleListDocuments(request as AuthenticatedRequest, response, deps);
-    },
+    asyncRoute((request, response: Response<DocumentDashboardResponse | DocumentErrorResponse>) =>
+      handleListDocuments(request as AuthenticatedRequest, response, deps),
+    ),
   );
   router.post(
     '/api/documents',
-    (request: Request, response: Response<{ roomId: string } | DocumentErrorResponse>) => {
-      void handleCreateDocument(request as AuthenticatedRequest, response, deps);
-    },
+    asyncRoute((request, response: Response<{ roomId: string } | DocumentErrorResponse>) =>
+      handleCreateDocument(request as AuthenticatedRequest, response, deps),
+    ),
   );
   router.post(
     '/api/documents/:roomId/open',
-    (request: Request, response: Response<{ ok: true } | DocumentErrorResponse>) => {
-      void handleOpenDocument(request as AuthenticatedRequest, response, deps);
-    },
+    asyncRoute((request, response: Response<{ ok: true } | DocumentErrorResponse>) =>
+      handleOpenDocument(request as AuthenticatedRequest, response, deps),
+    ),
   );
   router.patch(
     '/api/documents/:roomId',
-    (request: Request, response: Response<DashboardDocument | DocumentErrorResponse>) => {
-      void handleUpdateDocument(request as AuthenticatedRequest, response, deps);
-    },
+    asyncRoute((request, response: Response<DashboardDocument | DocumentErrorResponse>) =>
+      handleUpdateDocument(request as AuthenticatedRequest, response, deps),
+    ),
   );
   router.delete(
     '/api/documents/:roomId',
-    (request: Request, response: Response<{ ok: true } | DocumentErrorResponse>) => {
-      void handleDeleteDocument(request as AuthenticatedRequest, response, deps);
-    },
+    asyncRoute((request, response: Response<{ ok: true } | DocumentErrorResponse>) =>
+      handleDeleteDocument(request as AuthenticatedRequest, response, deps),
+    ),
   );
 
   return router;
+}
+
+function asyncRoute(handler: (request: Request, response: Response) => Promise<void>): RequestHandler {
+  return (request: Request, response: Response, next: NextFunction) => {
+    handler(request, response).catch(next);
+  };
 }
 
 async function handleListDocuments(
