@@ -1,0 +1,48 @@
+{
+  "kind": "render",
+  "scenario": "svg-elements",
+  "startedAt": "2026-07-07T09:32:26.194Z",
+  "finishedAt": "2026-07-07T09:32:29.735Z",
+  "target": "http://127.0.0.1:5173",
+  "options": {
+    "scenarios": [
+      "render",
+      "pan-zoom"
+    ],
+    "elementCounts": [
+      1000
+    ],
+    "durationMs": 1000,
+    "browser": "chromium",
+    "startServer": true
+  },
+  "metrics": {
+    "runs": [
+      {
+        "scenario": "render",
+        "elementCount": 1000,
+        "timeToFirstRenderMs": 131.6,
+        "p95FrameTimeMs": 9,
+        "maxFrameTimeMs": 9.3,
+        "averageFrameTimeMs": 8.33,
+        "longTaskCount": 0,
+        "svgNodeCount": 2252,
+        "domNodeCount": 2313
+      },
+      {
+        "scenario": "pan-zoom",
+        "elementCount": 1000,
+        "timeToFirstRenderMs": 123.6,
+        "p95FrameTimeMs": 8.6,
+        "maxFrameTimeMs": 17.5,
+        "averageFrameTimeMs": 8.4,
+        "longTaskCount": 0,
+        "svgNodeCount": 2252,
+        "domNodeCount": 2313
+      }
+    ]
+  },
+  "notes": [
+    "Started local Vite server on http://127.0.0.1:5173."
+  ]
+}

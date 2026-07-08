@@ -16,7 +16,11 @@
     "lint": "pnpm -r lint",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "test": "pnpm -r test"
+    "test": "pnpm -r test",
+    "benchmark:socket": "tsx benchmarks/socket.ts",
+    "benchmark:http": "tsx benchmarks/http.ts",
+    "benchmark:render": "tsx benchmarks/render.ts",
+    "benchmark:report": "tsx benchmarks/report.ts"
   },
   "prisma": {
     "schema": "backend/prisma/schema.prisma"
@@ -30,6 +34,10 @@
     ]
   },
   "devDependencies": {
-    "prisma": "^6.19.3"
+    "@vdt/shared": "workspace:*",
+    "playwright": "^1.61.1",
+    "prisma": "^6.19.3",
+    "socket.io-client": "^4.8.3",
+    "tsx": "^4.22.4"
   }
 }

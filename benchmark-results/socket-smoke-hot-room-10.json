@@ -1,0 +1,88 @@
+{
+  "kind": "socket",
+  "scenario": "hot-room",
+  "startedAt": "2026-07-07T09:43:55.169Z",
+  "finishedAt": "2026-07-07T09:43:59.318Z",
+  "target": "http://localhost:3001",
+  "options": {
+    "authMode": "database-link-edit",
+    "roomIds": [
+      "5b85bada-9518-4779-9b36-da0c87059aab"
+    ],
+    "clientsPerRoom": 10,
+    "durationMs": 3000,
+    "updateRate": 1,
+    "editorRatio": 0.35,
+    "elementCount": 1000
+  },
+  "metrics": {
+    "clients": 10,
+    "rooms": 1,
+    "editors": 4,
+    "viewers": 6,
+    "joins": {
+      "success": 10,
+      "failed": 0,
+      "accessErrors": 0,
+      "latencyMs": {
+        "count": 10,
+        "min": 30.06,
+        "p50": 32.06,
+        "p95": 41.86,
+        "p99": 41.86,
+        "max": 41.86,
+        "average": 32.73
+      }
+    },
+    "updates": {
+      "sent": 12,
+      "acked": 12,
+      "rejected": 0,
+      "broadcasts": 108,
+      "ackLatencyMs": {
+        "count": 12,
+        "min": 17.34,
+        "p50": 43.92,
+        "p95": 96.03,
+        "p99": 96.03,
+        "max": 96.03,
+        "average": 47.97
+      },
+      "broadcastLatencyMs": {
+        "count": 108,
+        "min": 17.45,
+        "p50": 44.33,
+        "p95": 96.31,
+        "p99": 96.53,
+        "max": 96.58,
+        "average": 48.32
+      }
+    },
+    "reconnect": {
+      "attempts": 0,
+      "ready": 0,
+      "latencyMs": {
+        "count": 0,
+        "min": 0,
+        "p50": 0,
+        "p95": 0,
+        "p99": 0,
+        "max": 0,
+        "average": 0
+      }
+    },
+    "payloadBytesApprox": 317262,
+    "roomDiffCount": 0,
+    "roomSnapshotCount": 10,
+    "disconnects": 10,
+    "errors": 0,
+    "throughputEventsPerSec": 30,
+    "convergence": {
+      "ok": true,
+      "reason": "Ack/broadcast counters reached expected smoke threshold."
+    }
+  },
+  "notes": [
+    "Seeded benchmark rooms as link_edit so anonymous socket clients can mutate."
+  ]
+}
