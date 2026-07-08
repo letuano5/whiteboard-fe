@@ -4,8 +4,8 @@
 # Usage on the VPS:
 #   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 #
-# The base file binds the `db` port to localhost so local dev can still connect
-# without publishing Postgres on the VPS public interface.
+# The base file binds the `db` and `kong` published ports to localhost so local
+# dev can still connect without publishing them on the VPS public interface.
 
 name: supabase
 

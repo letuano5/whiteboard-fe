@@ -1,4 +1,4 @@
-import type { Server, Socket } from 'socket.io';
+import type { Socket } from 'socket.io';
 import {
   SYNC_PROTOCOL_VERSION,
   SYNC_SCHEMA_VERSION,
@@ -11,12 +11,12 @@ import { getOrCreateSyncRoom } from '../../sync/index.js';
 import type { JoinRoomPayload, ResolvedWhiteboardServerDeps } from '../types.js';
 
 export async function handleJoinRoom(
-  ioServer: Server,
   socket: Socket,
   deps: ResolvedWhiteboardServerDeps,
   payload: JoinRoomPayload,
 ): Promise<void> {
-  const { roomId, sessionId, name, color, lastServerClock, roomEpoch, pendingRequests } = payload;
+  const { roomId, name, color, lastServerClock, roomEpoch, pendingRequests } = payload;
+  const sessionId = socket.id;
   const { roomPresence: presence, db } = deps;
 
   try {
@@ -155,7 +155,12 @@ export async function handleJoinRoom(
   }
 
   const presences = [...roomMap.values()];
-  ioServer.to(roomId).emit(WS_EVENTS.USER_JOIN, { presences });
+  socket.emit(WS_EVENTS.USER_JOIN, {
+    presences: presences.filter((presence) => presence.sessionId !== sessionId),
+  });
+  socket.to(roomId).emit(WS_EVENTS.USER_JOIN, {
+    presences: presences.filter((presence) => presence.sessionId === sessionId),
+  });
 }
 
 function createRoomSnapshot(
