@@ -22,6 +22,14 @@ vi.mock('../presence', () => ({
   }),
 }));
 
+vi.mock('../socket/p5-durable-outbox', () => ({
+  clearDurablePendingSyncCommands: vi.fn(),
+  consumeHydratedDurableRequestIds: vi.fn(() => new Set<string>()),
+  dropDurablePendingSyncCommands: vi.fn(),
+  hydratePendingSyncCommandsFromOutbox: vi.fn(() => Promise.resolve()),
+  syncQueuedDurableSnapshot: vi.fn(),
+}));
+
 // Mock socket.io-client before importing socket-client
 const mockEmit = vi.fn();
 const mockOn = vi.fn();
@@ -50,7 +58,8 @@ beforeEach(() => {
 
   mockOn.mockImplementation((event: string, handler: (data: unknown) => void) => {
     _handlers[event] = handler;
-    // P3A-03: auto-fire 'connect' when registered so JOIN_ROOM is emitted synchronously in tests.
+    // P3A-03: auto-fire 'connect' when registered so tests simulate Socket.IO
+    // connecting immediately. JOIN_ROOM itself may wait for durable outbox hydration.
     // This simulates Socket.IO firing 'connect' immediately on a successful connection.
     if (event === 'connect') {
       handler(undefined as unknown);
@@ -75,12 +84,19 @@ describe('socket-client — 014/AC-1 (join-room payload)', () => {
   it('emits join-room with roomId and session identity on init', async () => {
     const { initSocketClient } = await import('../socket-client');
     initSocketClient('room-abc');
+    await flushAsyncWork();
     expect(mockEmit).toHaveBeenCalledWith(
       WS_EVENTS.JOIN_ROOM,
       expect.objectContaining({ roomId: 'room-abc' }),
     );
   });
 });
+
+async function flushAsyncWork(): Promise<void> {
+  for (let index = 0; index < 5; index += 1) {
+    await Promise.resolve();
+  }
+}
 
 describe('socket-client — P3B-01d token attachment', () => {
   it('passes auth.accessToken when the auth store has a session', async () => {
@@ -120,49 +136,6 @@ describe('socket-client — P3B-01d token attachment', () => {
     initSocketClient('room-anon');
 
     expect(ioMock).toHaveBeenCalledWith(undefined);
-  });
-});
-
-describe('socket-client — 014/AC-2 (element-update delivery)', () => {
-  it('calls applyRemoteElements when element-update event arrives', async () => {
-    const applyModule = await import('../apply-remote');
-    const spy = vi.spyOn(applyModule, 'applyRemoteElements');
-
-    const { initSocketClient } = await import('../socket-client');
-    initSocketClient('room-abc');
-
-    const fakeElement = {
-      id: 'el-1',
-      type: 'rectangle' as const,
-      x: 0,
-      y: 0,
-      width: 100,
-      height: 100,
-      angle: 0,
-      zIndex: 1,
-      props: {
-        strokeColor: '#000',
-        fillColor: 'transparent',
-        strokeWidth: 1,
-        strokeStyle: 'solid' as const,
-        opacity: 1,
-      },
-      version: 1,
-      versionNonce: 42,
-      updatedAt: Date.now(),
-      isDeleted: false,
-      groupId: null,
-      frameId: null,
-      locked: false,
-      createdBy: 'test',
-    };
-
-    const handler = _handlers[WS_EVENTS.ELEMENT_UPDATE];
-    expect(handler).toBeDefined();
-    handler({ elements: [fakeElement] });
-
-    expect(spy).toHaveBeenCalledWith([fakeElement]);
-    spy.mockRestore();
   });
 });
 
@@ -481,51 +454,6 @@ describe('socket-client — P3A-02/AC-5 (T014) ROOM_SNAPSHOT with empty elements
   });
 });
 
-// ─── P3A-04: ELEMENT_UPDATE documentClock tracking ──────────────────────────
-
-describe('socket-client — P3A-04/AC-5 ELEMENT_UPDATE updates lastServerClock', () => {
-  // @covers AC-5
-  it('receiving ELEMENT_UPDATE with documentClock sets getLastServerClock() to that value', async () => {
-    const { initSocketClient, getLastServerClock } = await import('../socket-client');
-    initSocketClient('room-abc');
-
-    const snapshotHandler = _handlers[WS_EVENTS.ROOM_SNAPSHOT];
-    snapshotHandler({ elements: [], documentClock: 5 });
-
-    const updateHandler = _handlers[WS_EVENTS.ELEMENT_UPDATE];
-    updateHandler({ elements: [makeFakeElement('clocked-update')], documentClock: 7 });
-
-    expect(getLastServerClock()).toBe(7);
-  });
-
-  it('ROOM_SNAPSHOT followed by ELEMENT_UPDATE stores the later update clock', async () => {
-    // @covers AC-5
-    const { initSocketClient, getLastServerClock } = await import('../socket-client');
-    initSocketClient('room-abc');
-
-    _handlers[WS_EVENTS.ROOM_SNAPSHOT]({ elements: [], documentClock: 10 });
-    _handlers[WS_EVENTS.ELEMENT_UPDATE]({
-      elements: [makeFakeElement('later-clocked-update')],
-      documentClock: 11,
-    });
-
-    expect(getLastServerClock()).toBe(11);
-  });
-});
-
-describe('socket-client — P3A-04/AC-6 legacy ELEMENT_UPDATE keeps lastServerClock', () => {
-  // @covers AC-6
-  it('receiving ELEMENT_UPDATE without documentClock leaves lastServerClock unchanged', async () => {
-    const { initSocketClient, getLastServerClock } = await import('../socket-client');
-    initSocketClient('room-abc');
-
-    _handlers[WS_EVENTS.ROOM_SNAPSHOT]({ elements: [], documentClock: 5 });
-    _handlers[WS_EVENTS.ELEMENT_UPDATE]({ elements: [makeFakeElement('legacy-update')] });
-
-    expect(getLastServerClock()).toBe(5);
-  });
-});
-
 describe('socket-client — P3A-04/AC-8 outbound clock ownership', () => {
   // @covers AC-8
   it('outbound sync command does not include a client-authored documentClock', async () => {
@@ -839,51 +767,6 @@ describe('socket-client — 018/AC-9 (T020) incoming element-draft with elements
   });
 });
 
-describe('socket-client — 018/AC-10 (T021) incoming element-update with sessionId clears remoteDrafts', () => {
-  // @covers AC-10
-  it('element-update with sessionId field clears remoteDrafts[sessionId]', async () => {
-    const { initSocketClient } = await import('../socket-client');
-    const { useInteractionStore: store } = await import('../../store/interaction.store');
-    initSocketClient('room-abc');
-
-    const draftEl = {
-      id: 'peer-commit-1',
-      type: 'rectangle' as const,
-      x: 0,
-      y: 0,
-      width: 50,
-      height: 50,
-      angle: 0,
-      zIndex: 1,
-      props: {
-        strokeColor: '#000',
-        fillColor: '#fff',
-        strokeWidth: 1,
-        strokeStyle: 'solid' as const,
-        opacity: 1,
-      },
-      version: 1,
-      versionNonce: 1,
-      updatedAt: Date.now(),
-      isDeleted: false,
-      groupId: null,
-      frameId: null,
-      locked: false,
-      createdBy: 'peer-6',
-    };
-
-    const draftHandler = _handlers[WS_EVENTS.ELEMENT_DRAFT];
-    draftHandler({ sessionId: 'peer-6', elements: [draftEl] });
-    expect(store.getState().remoteDrafts.has('peer-6')).toBe(true);
-
-    // Commit arrives
-    const updateHandler = _handlers[WS_EVENTS.ELEMENT_UPDATE];
-    updateHandler({ elements: [{ ...draftEl, x: 100 }], sessionId: 'peer-6' });
-
-    expect(store.getState().remoteDrafts.has('peer-6')).toBe(false);
-  });
-});
-
 describe('socket-client — 018/AC-5 (T022) USER_LEAVE also clears remoteDrafts', () => {
   // @covers AC-5
   it('USER_LEAVE for a sessionId deletes that session from remoteDrafts', async () => {
@@ -1076,11 +959,11 @@ describe('socket-client — P5-05 sync broadcast handler', () => {
   });
 });
 
-// ─── P3A-03: Pending queue (T014) ────────────────────────────────────────────
+// ─── P5 reconnect command queue ─────────────────────────────────────────────
 
-describe('socket-client — P3A-03/AC-6 (T014) mutation while disconnected → queued, no ELEMENT_UPDATE', () => {
+describe('socket-client — P5 reconnect mutation while disconnected', () => {
   // @covers AC-6
-  it('when socket is disconnected, mutation is queued and ELEMENT_UPDATE is NOT emitted', async () => {
+  it('queues sync commands without emitting while disconnected', async () => {
     const { initSocketClient } = await import('../socket-client');
     const { dispatchMutationEvent } = await import('../../store/mutation-pipeline');
     initSocketClient('room-abc');
@@ -1092,9 +975,8 @@ describe('socket-client — P3A-03/AC-6 (T014) mutation while disconnected → q
     const el = makeFakeElement('offline-el');
     dispatchMutationEvent({ type: 'update', elements: [el], before: [] });
 
-    // ELEMENT_UPDATE must NOT be emitted while disconnected
-    const updateCalls = mockEmit.mock.calls.filter((c) => c[0] === WS_EVENTS.ELEMENT_UPDATE);
-    expect(updateCalls).toHaveLength(0);
+    const syncCalls = mockEmit.mock.calls.filter((c) => c[0] === WS_EVENTS.SYNC_COMMAND);
+    expect(syncCalls).toHaveLength(0);
 
     // Restore connected state for other tests
     mockSocket.connected = true;
@@ -1143,9 +1025,9 @@ describe('socket-client — P3A-03/AC-5 (T014) ROOM_DIFF replays pending queue v
   });
 });
 
-describe('socket-client — P3A-03/AC-6 (T014) no pending → no ELEMENT_UPDATE on ROOM_DIFF', () => {
+describe('socket-client — P5 no pending command on ROOM_DIFF', () => {
   // @covers AC-6
-  it('ROOM_DIFF with empty pending queue does NOT emit ELEMENT_UPDATE', async () => {
+  it('ROOM_DIFF with empty command queue emits no SYNC_COMMAND', async () => {
     const { initSocketClient } = await import('../socket-client');
     initSocketClient('room-abc');
 
@@ -1155,16 +1037,14 @@ describe('socket-client — P3A-03/AC-6 (T014) no pending → no ELEMENT_UPDATE 
     const diffHandler = _handlers[WS_EVENTS.ROOM_DIFF];
     diffHandler({ changed: [], deleted: [], documentClock: 5 });
 
-    const updateCalls = mockEmit.mock.calls.filter((c) => c[0] === WS_EVENTS.ELEMENT_UPDATE);
     const syncCalls = mockEmit.mock.calls.filter((c) => c[0] === WS_EVENTS.SYNC_COMMAND);
-    expect(updateCalls).toHaveLength(0);
     expect(syncCalls).toHaveLength(0);
   });
 });
 
-describe('socket-client — P3A-03/AC-9 (T014) wipe-all ROOM_SNAPSHOT clears pending queue', () => {
+describe('socket-client — P5 wipe-all ROOM_SNAPSHOT clears pending sync commands', () => {
   // @covers AC-9
-  it('wipe-all ROOM_SNAPSHOT while reconnect pending clears queue and emits no ELEMENT_UPDATE', async () => {
+  it('wipe-all ROOM_SNAPSHOT while reconnect pending clears commands and emits no SYNC_COMMAND', async () => {
     const { initSocketClient } = await import('../socket-client');
     const { dispatchMutationEvent } = await import('../../store/mutation-pipeline');
     initSocketClient('room-abc');
@@ -1190,9 +1070,8 @@ describe('socket-client — P3A-03/AC-9 (T014) wipe-all ROOM_SNAPSHOT clears pen
     const snapHandler = _handlers[WS_EVENTS.ROOM_SNAPSHOT];
     snapHandler({ elements: [makeFakeElement('server-el')], documentClock: 20 });
 
-    // Queue should be cleared — no ELEMENT_UPDATE
-    const updateCalls = mockEmit.mock.calls.filter((c) => c[0] === WS_EVENTS.ELEMENT_UPDATE);
-    expect(updateCalls).toHaveLength(0);
+    const syncCalls = mockEmit.mock.calls.filter((c) => c[0] === WS_EVENTS.SYNC_COMMAND);
+    expect(syncCalls).toHaveLength(0);
   });
 });
 

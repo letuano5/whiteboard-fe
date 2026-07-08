@@ -8,7 +8,7 @@ export function handleDisconnect(
   deps: ResolvedWhiteboardServerDeps,
 ): void {
   const { sessionId, roomId } = socket.data;
-  const { roomPresence: presence, autosave: save } = deps;
+  const { roomPresence: presence } = deps;
 
   console.log(`client disconnected ${socket.id} (sessionId: ${sessionId})`);
 
@@ -18,11 +18,6 @@ export function handleDisconnect(
       roomMap.delete(socket.id);
       if (roomMap.size === 0) {
         presence.delete(roomId);
-        if (!deps.syncRooms.has(roomId)) {
-          save.flushRoomNow(roomId).catch((err: unknown) => {
-            console.error(`[autosave] flushRoomNow failed for room ${roomId}:`, err);
-          });
-        }
       }
     }
     ioServer.to(roomId).emit(WS_EVENTS.USER_LEAVE, { sessionId });

@@ -1,0 +1,106 @@
+{
+  "kind": "http",
+  "scenario": "get-endpoints",
+  "startedAt": "2026-07-07T10:09:09.081Z",
+  "finishedAt": "2026-07-07T10:09:09.367Z",
+  "target": "http://localhost:3002",
+  "options": {
+    "authMode": "bearer-token",
+    "seedMode": "database-link-edit",
+    "roomIds": [
+      "56d30592-cdf1-4b95-b660-5973098358aa"
+    ],
+    "concurrencies": [
+      10
+    ],
+    "requestsPerConcurrency": 20
+  },
+  "metrics": {
+    "endpoints": [
+      {
+        "endpoint": "/api/documents?limit=24",
+        "concurrency": 10,
+        "requests": 20,
+        "errors": 0,
+        "errorRate": 0,
+        "payloadBytesApprox": 690,
+        "latencyMs": {
+          "count": 20,
+          "min": 4.36,
+          "p50": 9.29,
+          "p95": 55.05,
+          "p99": 82.81,
+          "max": 82.81,
+          "average": 30.66
+        },
+        "statusCounts": {
+          "200": 20
+        }
+      },
+      {
+        "endpoint": "/api/rooms/56d30592-cdf1-4b95-b660-5973098358aa/access",
+        "concurrency": 10,
+        "requests": 20,
+        "errors": 0,
+        "errorRate": 0,
+        "payloadBytesApprox": 7690,
+        "latencyMs": {
+          "count": 20,
+          "min": 7.7,
+          "p50": 12.44,
+          "p95": 17,
+          "p99": 17.18,
+          "max": 17.18,
+          "average": 11.9
+        },
+        "statusCounts": {
+          "200": 20
+        }
+      },
+      {
+        "endpoint": "/api/rooms/56d30592-cdf1-4b95-b660-5973098358aa/export-native",
+        "concurrency": 10,
+        "requests": 20,
+        "errors": 0,
+        "errorRate": 0,
+        "payloadBytesApprox": 5750,
+        "latencyMs": {
+          "count": 20,
+          "min": 7.61,
+          "p50": 12.46,
+          "p95": 15.68,
+          "p99": 16.45,
+          "max": 16.45,
+          "average": 13.1
+        },
+        "statusCounts": {
+          "200": 20
+        }
+      },
+      {
+        "endpoint": "/api/rooms/56d30592-cdf1-4b95-b660-5973098358aa/snapshots",
+        "concurrency": 10,
+        "requests": 20,
+        "errors": 0,
+        "errorRate": 0,
+        "payloadBytesApprox": 50,
+        "latencyMs": {
+          "count": 20,
+          "min": 13.23,
+          "p50": 22.48,
+          "p95": 25.86,
+          "p99": 33.24,
+          "max": 33.24,
+          "average": 21.01
+        },
+        "statusCounts": {
+          "200": 20
+        }
+      }
+    ]
+  },
+  "notes": [
+    "Seeded benchmark rooms as link_edit so anonymous socket clients can mutate.",
+    "HTTP requests used the provided bearer token."
+  ]
+}

@@ -5,8 +5,9 @@ import {
   WS_EVENTS,
   type RoomSnapshot,
 } from '@vdt/shared';
-import { getRoomClock, getRoomDiff, loadRoomElements } from '../../persistence/room-repository.js';
+import { getRoomDiff } from '../../persistence/room-repository.js';
 import { resolveRoomAccess, RoomAccessError } from '../../rooms/room-roles.js';
+import { getOrCreateSyncRoom } from '../../sync/index.js';
 import type { JoinRoomPayload, ResolvedWhiteboardServerDeps } from '../types.js';
 
 export async function handleJoinRoom(
@@ -16,7 +17,7 @@ export async function handleJoinRoom(
   payload: JoinRoomPayload,
 ): Promise<void> {
   const { roomId, sessionId, name, color, lastServerClock, roomEpoch, pendingRequests } = payload;
-  const { roomPresence: presence, roomElements: elements, roomClocks: clocks, db } = deps;
+  const { roomPresence: presence, db } = deps;
 
   try {
     const roomMap = presence.get(roomId);
@@ -73,39 +74,29 @@ export async function handleJoinRoom(
 
   let documentClock = 0;
   let currentRoomEpoch = 0;
+  let snapshotElements: RoomSnapshot['elements'] = [];
   let slotClocks: RoomSnapshot['slotClocks'] = [];
-  let processedRequestHistoryStartsAtClock = 0;
   try {
-    const elMap = elements.get(roomId);
-    if (!elMap || elMap.size === 0) {
-      const loaded = await loadRoomElements(db, roomId);
-      if (!elements.has(roomId)) elements.set(roomId, new Map());
-      for (const el of loaded.elements) elements.get(roomId)!.set(el.id, el);
-      clocks.set(roomId, loaded.documentClock);
-      documentClock = loaded.documentClock;
-      currentRoomEpoch = loaded.roomEpoch;
-      slotClocks = loaded.slotClocks;
-      processedRequestHistoryStartsAtClock = loaded.processedRequestHistoryStartsAtClock ?? 0;
-    } else {
-      if (!clocks.has(roomId)) {
-        clocks.set(roomId, await getRoomClock(db, roomId));
-      }
-      documentClock = clocks.get(roomId) ?? 0;
-      const syncRoomSnapshot = deps.syncRooms.get(roomId)?.getStateSnapshot();
-      if (syncRoomSnapshot) {
-        currentRoomEpoch = syncRoomSnapshot.roomEpoch;
-        slotClocks = toSlotClockUpdates(syncRoomSnapshot.slotClocks);
-      }
-    }
+    const syncRoom = await getOrCreateSyncRoom(db, deps.syncRooms, roomId);
+    const syncRoomSnapshot = syncRoom.getStateSnapshot();
+    snapshotElements = [...syncRoomSnapshot.elements.values()];
+    documentClock = syncRoomSnapshot.documentClock;
+    currentRoomEpoch = syncRoomSnapshot.roomEpoch;
+    slotClocks = toSlotClockUpdates(syncRoomSnapshot.slotClocks);
   } catch (err) {
     console.error('[load-room] DB error during join:', err);
-    documentClock = clocks.get(roomId) ?? 0;
+    const syncRoomSnapshot = deps.syncRooms.get(roomId)?.getStateSnapshot();
+    if (syncRoomSnapshot) {
+      snapshotElements = [...syncRoomSnapshot.elements.values()];
+      documentClock = syncRoomSnapshot.documentClock;
+      currentRoomEpoch = syncRoomSnapshot.roomEpoch;
+      slotClocks = toSlotClockUpdates(syncRoomSnapshot.slotClocks);
+    }
   }
 
   if (lastServerClock !== undefined && lastServerClock > 0) {
     try {
-      const inMemory = elements.has(roomId) ? [...elements.get(roomId)!.values()] : [];
-      const diffResult = await getRoomDiff(db, roomId, lastServerClock, inMemory, {
+      const diffResult = await getRoomDiff(db, roomId, lastServerClock, snapshotElements, {
         roomEpoch,
         pendingRequests: pendingRequests ?? [],
         actorId: socket.data?.auth?.user?.id ?? null,
@@ -149,22 +140,17 @@ export async function handleJoinRoom(
       }
     } catch (err) {
       console.error('[reconnect-diff] DB error, falling back to full snapshot:', err);
-      const snapshot = elements.has(roomId) ? [...elements.get(roomId)!.values()] : [];
       socket.emit(
         WS_EVENTS.ROOM_SNAPSHOT,
-        createRoomSnapshot(roomId, snapshot, documentClock, currentRoomEpoch, slotClocks, {
-          processedRequestHistoryStartsAtClock,
+        createRoomSnapshot(roomId, snapshotElements, documentClock, currentRoomEpoch, slotClocks, {
           wipeAll: true,
         }),
       );
     }
   } else {
-    const snapshot = elements.has(roomId) ? [...elements.get(roomId)!.values()] : [];
     socket.emit(
       WS_EVENTS.ROOM_SNAPSHOT,
-      createRoomSnapshot(roomId, snapshot, documentClock, currentRoomEpoch, slotClocks, {
-        processedRequestHistoryStartsAtClock,
-      }),
+      createRoomSnapshot(roomId, snapshotElements, documentClock, currentRoomEpoch, slotClocks),
     );
   }
 

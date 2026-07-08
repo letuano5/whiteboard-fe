@@ -17,4 +17,21 @@ describe('createRuntimeAuthDeps', () => {
     expect(deps.authVerifier).toBeDefined();
     expect(deps.appUserRepository).toBeDefined();
   });
+
+  it('creates a static benchmark verifier when BENCHMARK_AUTH_TOKEN is configured', async () => {
+    const db = {} as Parameters<typeof createRuntimeAuthDeps>[0];
+    const deps = createRuntimeAuthDeps(db, {
+      BENCHMARK_AUTH_TOKEN: 'bench-token',
+      BENCHMARK_AUTH_SUBJECT: 'bench-subject',
+    });
+
+    await expect(deps.authVerifier?.verify({ bearerToken: 'bench-token' })).resolves.toEqual({
+      provider: 'benchmark',
+      providerSubject: 'bench-subject',
+      email: 'bench-subject@benchmark.local',
+      name: 'Benchmark User',
+      avatarUrl: null,
+    });
+    expect(deps.appUserRepository).toBeDefined();
+  });
 });

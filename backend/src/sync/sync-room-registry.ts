@@ -4,7 +4,42 @@ import { captureIntervalSnapshotForCommit } from '../rooms/room-snapshots.js';
 import { SyncRoom } from './sync-room.js';
 import { createPrismaSyncRoomPersistence } from './sync-room-persistence.js';
 
-const loadingSyncRooms = new WeakMap<Map<string, SyncRoom>, Map<string, Promise<SyncRoom>>>();
+export const DEFAULT_SYNC_ROOM_IDLE_TTL_MS = 10 * 60 * 1000;
+export const DEFAULT_SYNC_ROOM_GC_INTERVAL_MS = 60 * 1000;
+
+interface SyncRoomEntryMetadata {
+  lastAccessedAt: number;
+  activeLeaseCount: number;
+}
+
+interface SyncRoomRegistryState {
+  loading: Map<string, Promise<SyncRoom>>;
+  invalidatedLoads: Set<Promise<SyncRoom>>;
+  entries: Map<string, SyncRoomEntryMetadata>;
+  loadCount: number;
+  evictedCount: number;
+}
+
+export interface SyncRoomRegistryMetrics {
+  hotRoomCount: number;
+  loadingRoomCount: number;
+  loadCount: number;
+  evictedCount: number;
+}
+
+export interface EvictIdleSyncRoomsOptions {
+  idleTtlMs?: number;
+  now?: number;
+  hasActiveSockets?: (roomId: string) => boolean;
+  onEvict?: (roomId: string, room: SyncRoom) => void;
+}
+
+export interface StartSyncRoomRegistryGcOptions extends EvictIdleSyncRoomsOptions {
+  intervalMs?: number;
+  logger?: Pick<typeof console, 'error'>;
+}
+
+const registryStates = new WeakMap<Map<string, SyncRoom>, SyncRoomRegistryState>();
 
 /**
  * Returns the single hot `SyncRoom` for a room, loading it from Postgres on first
@@ -17,14 +52,18 @@ export async function getOrCreateSyncRoom(
   syncRooms: Map<string, SyncRoom>,
   roomId: string,
 ): Promise<SyncRoom> {
+  const state = getRegistryState(syncRooms);
   const existing = syncRooms.get(roomId);
-  if (existing) return existing;
+  if (existing) {
+    markAccess(state, roomId);
+    return existing;
+  }
 
-  const loading = getLoadingMap(syncRooms);
-  const pending = loading.get(roomId);
+  const pending = state.loading.get(roomId);
   if (pending) return pending;
 
-  const promise = loadRoomElements(db, roomId)
+  let promise: Promise<SyncRoom>;
+  promise = loadRoomElements(db, roomId)
     .then((loaded) => {
       const room = new SyncRoom({
         roomId,
@@ -45,20 +84,142 @@ export async function getOrCreateSyncRoom(
           },
         ),
       });
-      syncRooms.set(roomId, room);
+      if (!state.invalidatedLoads.delete(promise)) {
+        syncRooms.set(roomId, room);
+        markAccess(state, roomId);
+        state.loadCount += 1;
+      }
       return room;
     })
     .finally(() => {
-      loading.delete(roomId);
+      if (state.loading.get(roomId) === promise) {
+        state.loading.delete(roomId);
+      }
     });
-  loading.set(roomId, promise);
+  state.loading.set(roomId, promise);
   return promise;
 }
 
-function getLoadingMap(syncRooms: Map<string, SyncRoom>): Map<string, Promise<SyncRoom>> {
-  const existing = loadingSyncRooms.get(syncRooms);
+export async function withSyncRoom<T>(
+  db: PrismaClient,
+  syncRooms: Map<string, SyncRoom>,
+  roomId: string,
+  task: (room: SyncRoom) => T | Promise<T>,
+): Promise<T> {
+  const room = await getOrCreateSyncRoom(db, syncRooms, roomId);
+  const state = getRegistryState(syncRooms);
+  const metadata = markAccess(state, roomId);
+  metadata.activeLeaseCount += 1;
+  try {
+    return await task(room);
+  } finally {
+    metadata.activeLeaseCount = Math.max(0, metadata.activeLeaseCount - 1);
+    metadata.lastAccessedAt = Date.now();
+  }
+}
+
+export function deleteSyncRoom(syncRooms: Map<string, SyncRoom> | undefined, roomId: string): void {
+  if (!syncRooms) return;
+  const state = getRegistryState(syncRooms);
+  const pending = state.loading.get(roomId);
+  if (pending) {
+    state.invalidatedLoads.add(pending);
+  }
+  syncRooms.delete(roomId);
+  state.entries.delete(roomId);
+  state.loading.delete(roomId);
+}
+
+export function evictIdleSyncRooms(
+  syncRooms: Map<string, SyncRoom>,
+  options: EvictIdleSyncRoomsOptions = {},
+): number {
+  const {
+    idleTtlMs = DEFAULT_SYNC_ROOM_IDLE_TTL_MS,
+    now = Date.now(),
+    hasActiveSockets = () => false,
+    onEvict,
+  } = options;
+  const state = getRegistryState(syncRooms);
+  let evicted = 0;
+
+  for (const [roomId, room] of syncRooms) {
+    const metadata = ensureMetadata(state, roomId);
+    if (now - metadata.lastAccessedAt < idleTtlMs) continue;
+    if (metadata.activeLeaseCount > 0) continue;
+    if (state.loading.has(roomId)) continue;
+    if (hasActiveSockets(roomId)) continue;
+
+    syncRooms.delete(roomId);
+    state.entries.delete(roomId);
+    state.evictedCount += 1;
+    evicted += 1;
+    onEvict?.(roomId, room);
+  }
+
+  return evicted;
+}
+
+export function getSyncRoomRegistryMetrics(
+  syncRooms: Map<string, SyncRoom>,
+): SyncRoomRegistryMetrics {
+  const state = getRegistryState(syncRooms);
+  return {
+    hotRoomCount: syncRooms.size,
+    loadingRoomCount: state.loading.size,
+    loadCount: state.loadCount,
+    evictedCount: state.evictedCount,
+  };
+}
+
+export function startSyncRoomRegistryGc(
+  syncRooms: Map<string, SyncRoom>,
+  options: StartSyncRoomRegistryGcOptions = {},
+): () => void {
+  const {
+    intervalMs = DEFAULT_SYNC_ROOM_GC_INTERVAL_MS,
+    logger = console,
+    ...evictionOptions
+  } = options;
+  const timer = setInterval(() => {
+    try {
+      evictIdleSyncRooms(syncRooms, evictionOptions);
+    } catch (error) {
+      logger.error('[sync-room-gc] Scheduled eviction failed:', error);
+    }
+  }, intervalMs);
+  timer.unref?.();
+  return () => clearInterval(timer);
+}
+
+function getRegistryState(syncRooms: Map<string, SyncRoom>): SyncRoomRegistryState {
+  const existing = registryStates.get(syncRooms);
   if (existing) return existing;
-  const loading = new Map<string, Promise<SyncRoom>>();
-  loadingSyncRooms.set(syncRooms, loading);
-  return loading;
+  const state: SyncRoomRegistryState = {
+    loading: new Map<string, Promise<SyncRoom>>(),
+    invalidatedLoads: new Set<Promise<SyncRoom>>(),
+    entries: new Map<string, SyncRoomEntryMetadata>(),
+    loadCount: 0,
+    evictedCount: 0,
+  };
+  registryStates.set(syncRooms, state);
+  return state;
+}
+
+function markAccess(state: SyncRoomRegistryState, roomId: string): SyncRoomEntryMetadata {
+  const metadata = ensureMetadata(state, roomId);
+  metadata.lastAccessedAt = Date.now();
+  return metadata;
+}
+
+function ensureMetadata(state: SyncRoomRegistryState, roomId: string): SyncRoomEntryMetadata {
+  const existing = state.entries.get(roomId);
+  if (existing) return existing;
+
+  const metadata: SyncRoomEntryMetadata = {
+    lastAccessedAt: Date.now(),
+    activeLeaseCount: 0,
+  };
+  state.entries.set(roomId, metadata);
+  return metadata;
 }

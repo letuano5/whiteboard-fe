@@ -10,12 +10,12 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createWhiteboardServer } from '../realtime/whiteboard-server.js';
-import { createAutosaveManager } from './autosave.js';
 import type { Element, Presence } from '@vdt/shared';
 import { WS_EVENTS } from '@vdt/shared';
 import { makeElement } from '../test/element-fixtures.js';
 import { makeFakeIo } from '../test/fake-socket-io.js';
 import type { PrismaClient } from '@prisma/client';
+import { SyncRoom } from '../sync/index.js';
 
 // ---------------------------------------------------------------------------
 // Mock DB builder for join path
@@ -44,7 +44,9 @@ function makeMockDb(opts: {
         typeName: el.type,
         state: el,
         recordClock: BigInt(documentClock),
+        slotClocks: {},
       })),
+      tombstones: [],
     });
   }
 
@@ -74,17 +76,11 @@ const JOIN_PAYLOAD = {
 };
 
 let roomPresence: Map<string, Map<string, Presence>>;
-let roomElements: Map<string, Map<string, Element>>;
-let autosave: ReturnType<typeof createAutosaveManager>;
+let syncRooms: Map<string, SyncRoom>;
 
 beforeEach(() => {
   roomPresence = new Map();
-  roomElements = new Map();
-  autosave = createAutosaveManager({
-    delayMs: 60000,
-    getRoomElements: () => [],
-    saveRoomElements: vi.fn().mockResolvedValue(null),
-  });
+  syncRooms = new Map();
 });
 
 afterEach(() => {
@@ -92,19 +88,21 @@ afterEach(() => {
 });
 
 // ---------------------------------------------------------------------------
-// @covers AC-2 (P3A-02) — Warm path: in-memory elements exist, no DB element reload
+// @covers AC-2 (P3A-02) — Warm path: SyncRoom exists, no DB element reload
 // ---------------------------------------------------------------------------
-describe('AC-2 (P3A-02): warm-path join does NOT call loadRoomElements again', () => {
-  it('does not call db.room.findUnique with include:{records} when room already has elements', async () => {
-    // Pre-populate in-memory state
+describe('AC-2 (P3A-02): warm-path join reuses hot SyncRoom', () => {
+  it('does not call db.room.findUnique when a hot SyncRoom already exists', async () => {
     const el = makeElement({ id: 'warm-el-1' });
-    roomElements.set(JOIN_PAYLOAD.roomId, new Map([['warm-el-1', el]]));
+    syncRooms.set(
+      JOIN_PAYLOAD.roomId,
+      new SyncRoom({ roomId: JOIN_PAYLOAD.roomId, elements: [el], documentClock: 3 }),
+    );
 
-    const { db, findUnique } = makeMockDb({ clockResult: 3 });
+    const { db, findUnique } = makeMockDb({});
 
     const { ioServer, makeSocket, connect, getHandler } = makeFakeIo();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    createWhiteboardServer(ioServer as any, { roomPresence, roomElements, autosave, db });
+    createWhiteboardServer(ioServer as any, { roomPresence, syncRooms, db });
 
     const socket = makeSocket();
     connect(socket);
@@ -112,25 +110,21 @@ describe('AC-2 (P3A-02): warm-path join does NOT call loadRoomElements again', (
     const handler = getHandler(socket, WS_EVENTS.JOIN_ROOM);
     await (handler as (p: typeof JOIN_PAYLOAD) => Promise<void>)(JOIN_PAYLOAD);
 
-    // findUnique called exactly once (for getRoomClock, select only) — not include:{records:true}
-    expect(findUnique).toHaveBeenCalledTimes(1);
-    const call = findUnique.mock.calls[0][0] as {
-      select?: { documentClock?: boolean };
-      include?: { records?: boolean };
-    };
-    expect(call.select).toEqual({ documentClock: true });
-    expect(call.include).toBeUndefined();
+    expect(findUnique).not.toHaveBeenCalled();
   });
 
-  it('emits ROOM_SNAPSHOT with in-memory elements and DB clock on warm path', async () => {
+  it('emits ROOM_SNAPSHOT with hot SyncRoom elements and clock on warm path', async () => {
     const el = makeElement({ id: 'warm-el-2' });
-    roomElements.set(JOIN_PAYLOAD.roomId, new Map([['warm-el-2', el]]));
+    syncRooms.set(
+      JOIN_PAYLOAD.roomId,
+      new SyncRoom({ roomId: JOIN_PAYLOAD.roomId, elements: [el], documentClock: 5 }),
+    );
 
-    const { db } = makeMockDb({ clockResult: 5 });
+    const { db } = makeMockDb({});
 
     const { ioServer, makeSocket, connect, getHandler } = makeFakeIo();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    createWhiteboardServer(ioServer as any, { roomPresence, roomElements, autosave, db });
+    createWhiteboardServer(ioServer as any, { roomPresence, syncRooms, db });
 
     const socket = makeSocket();
     connect(socket);
@@ -157,7 +151,7 @@ describe('AC-3 (P3A-02) socket layer: empty DB → ROOM_SNAPSHOT { elements: [],
 
     const { ioServer, makeSocket, connect, getHandler } = makeFakeIo();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    createWhiteboardServer(ioServer as any, { roomPresence, roomElements, autosave, db });
+    createWhiteboardServer(ioServer as any, { roomPresence, syncRooms, db });
 
     const socket = makeSocket();
     connect(socket);
@@ -182,13 +176,13 @@ describe('AC-3 (P3A-02) socket layer: empty DB → ROOM_SNAPSHOT { elements: [],
 // Cold path: room in DB with active records
 // ---------------------------------------------------------------------------
 describe('Cold-path join (AC-1 socket layer): room absent in memory, loads from DB', () => {
-  it('populates in-memory elements and sends ROOM_SNAPSHOT with elements and clock', async () => {
+  it('populates SyncRoom and sends ROOM_SNAPSHOT with elements and clock', async () => {
     const el = makeElement({ id: 'cold-el-1' });
     const { db } = makeMockDb({ loadResult: { elements: [el], documentClock: 7 } });
 
     const { ioServer, makeSocket, connect, getHandler } = makeFakeIo();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    createWhiteboardServer(ioServer as any, { roomPresence, roomElements, autosave, db });
+    createWhiteboardServer(ioServer as any, { roomPresence, syncRooms, db });
 
     const socket = makeSocket();
     connect(socket);
@@ -200,8 +194,9 @@ describe('Cold-path join (AC-1 socket layer): room absent in memory, loads from 
       WS_EVENTS.ROOM_SNAPSHOT,
       expect.objectContaining({ elements: [el], documentClock: 7 }),
     );
-    // In-memory state populated
-    expect(roomElements.get(JOIN_PAYLOAD.roomId)?.get('cold-el-1')).toEqual(el);
+    expect(syncRooms.get(JOIN_PAYLOAD.roomId)?.getStateSnapshot().elements.get('cold-el-1')).toEqual(
+      el,
+    );
   });
 });
 
@@ -214,7 +209,7 @@ describe('AC-7 (P3A-02): DB error during join is non-fatal', () => {
 
     const { ioServer, makeSocket, connect, getHandler } = makeFakeIo();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    createWhiteboardServer(ioServer as any, { roomPresence, roomElements, autosave, db });
+    createWhiteboardServer(ioServer as any, { roomPresence, syncRooms, db });
 
     const socket = makeSocket();
     connect(socket);
@@ -236,7 +231,7 @@ describe('AC-7 (P3A-02): DB error during join is non-fatal', () => {
 
     const { ioServer, makeSocket, connect, getHandler, toReturn } = makeFakeIo();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    createWhiteboardServer(ioServer as any, { roomPresence, roomElements, autosave, db });
+    createWhiteboardServer(ioServer as any, { roomPresence, syncRooms, db });
 
     const socket = makeSocket();
     connect(socket);
@@ -276,7 +271,7 @@ describe('P4-03 admission control on socket join', () => {
     const { db } = makeAccessDb(makeAccessRoom({ visibility: 'link_view', maxParticipants: 1 }));
     const { ioServer, makeSocket, connect, getHandler } = makeFakeIo();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    createWhiteboardServer(ioServer as any, { roomPresence, roomElements, autosave, db });
+    createWhiteboardServer(ioServer as any, { roomPresence, syncRooms, db });
 
     const socket = makeSocket();
     connect(socket);
@@ -315,7 +310,7 @@ describe('P4-03 admission control on socket join', () => {
     const { db } = makeAccessDb(makeAccessRoom({ visibility: 'link_edit', maxEditors: 1 }));
     const { ioServer, makeSocket, connect, getHandler, toReturn } = makeFakeIo();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    createWhiteboardServer(ioServer as any, { roomPresence, roomElements, autosave, db });
+    createWhiteboardServer(ioServer as any, { roomPresence, syncRooms, db });
 
     const socket = makeSocket();
     connect(socket);

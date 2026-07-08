@@ -19,12 +19,11 @@ import type {
   WhiteboardServerDeps,
 } from './types.js';
 
+type SocketEventHandler<TPayload> = (payload: TPayload) => void | Promise<void>;
+
 function resolveDeps(deps: WhiteboardServerDeps): ResolvedWhiteboardServerDeps {
   return {
     roomPresence: deps.roomPresence,
-    roomElements: deps.roomElements,
-    roomClocks: deps.roomClocks ?? new Map<string, number>(),
-    autosave: deps.autosave,
     db: deps.db ?? prisma,
     syncRooms: deps.syncRooms ?? new Map(),
   };
@@ -45,30 +44,66 @@ export function createWhiteboardServer(ioServer: Server, deps: WhiteboardServerD
   ioServer.on('connection', (socket: Socket) => {
     console.log('client connected', socket.id);
 
-    socket.on(WS_EVENTS.JOIN_ROOM, (payload: JoinRoomPayload) =>
-      handleJoinRoom(ioServer, socket, resolvedDeps, payload),
+    socket.on(
+      WS_EVENTS.JOIN_ROOM,
+      catchSocketHandler(socket, WS_EVENTS.JOIN_ROOM, (payload: JoinRoomPayload) =>
+        handleJoinRoom(ioServer, socket, resolvedDeps, payload),
+      ),
     );
 
-    socket.on(WS_EVENTS.SYNC_COMMAND, (payload: SyncCommand) =>
-      handleSyncCommand(socket, resolvedDeps, payload),
+    socket.on(
+      WS_EVENTS.SYNC_COMMAND,
+      catchSocketHandler(socket, WS_EVENTS.SYNC_COMMAND, (payload: SyncCommand) =>
+        handleSyncCommand(socket, resolvedDeps, payload),
+      ),
     );
 
-    socket.on(WS_EVENTS.ROOM_DIFF_REQUEST, (payload: RoomDiffRequestPayload) =>
-      handleRoomDiffRequest(socket, resolvedDeps, payload),
+    socket.on(
+      WS_EVENTS.ROOM_DIFF_REQUEST,
+      catchSocketHandler(socket, WS_EVENTS.ROOM_DIFF_REQUEST, (payload: RoomDiffRequestPayload) =>
+        handleRoomDiffRequest(socket, resolvedDeps, payload),
+      ),
     );
 
-    socket.on(WS_EVENTS.ELEMENT_DRAFT, (payload: ElementDraftPayload) =>
-      handleElementDraft(socket, payload),
+    socket.on(
+      WS_EVENTS.ELEMENT_DRAFT,
+      catchSocketHandler(socket, WS_EVENTS.ELEMENT_DRAFT, (payload: ElementDraftPayload) =>
+        handleElementDraft(socket, payload),
+      ),
     );
 
-    socket.on(WS_EVENTS.ROOM_ROLE_UPDATE, (payload: RoomRoleUpdatePayload) =>
-      handleRoomRoleUpdate(ioServer, socket, resolvedDeps, payload),
+    socket.on(
+      WS_EVENTS.ROOM_ROLE_UPDATE,
+      catchSocketHandler(socket, WS_EVENTS.ROOM_ROLE_UPDATE, (payload: RoomRoleUpdatePayload) =>
+        handleRoomRoleUpdate(ioServer, socket, resolvedDeps, payload),
+      ),
     );
 
-    socket.on(WS_EVENTS.CURSOR_MOVE, (payload: CursorMovePayload) =>
-      handleCursorMove(socket, payload),
+    socket.on(
+      WS_EVENTS.CURSOR_MOVE,
+      catchSocketHandler(socket, WS_EVENTS.CURSOR_MOVE, (payload: CursorMovePayload) =>
+        handleCursorMove(socket, payload),
+      ),
     );
 
     socket.on('disconnect', () => handleDisconnect(ioServer, socket, resolvedDeps));
   });
+}
+
+function catchSocketHandler<TPayload>(
+  socket: Socket,
+  eventName: string,
+  handler: SocketEventHandler<TPayload>,
+): SocketEventHandler<TPayload> {
+  return (payload: TPayload) => {
+    return Promise.resolve()
+      .then(() => handler(payload))
+      .catch((error: unknown) => {
+        console.error(`[socket:${eventName}] Unexpected handler error:`, error);
+        socket.emit(WS_EVENTS.ROOM_ACCESS_ERROR, {
+          code: 'room-access/forbidden',
+          message: 'Realtime request could not be processed.',
+        });
+      });
+  };
 }

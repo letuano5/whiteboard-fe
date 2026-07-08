@@ -1,6 +1,5 @@
 import type { Socket } from 'socket.io-client';
 import type {
-  Element,
   RoomAccessErrorPayload,
   RoomAccessPayload,
   RoomDiff,
@@ -12,12 +11,6 @@ export type WhiteboardSocket = Socket;
 export type RoomSnapshotPayload = RoomSnapshot & { documentClock?: number };
 
 export type RoomDiffPayload = RoomDiff & { documentClock?: number };
-
-export interface ElementUpdatePayload {
-  elements: Element[];
-  sessionId?: string;
-  documentClock?: number;
-}
 
 export interface CursorMovePayload {
   sessionId: string;

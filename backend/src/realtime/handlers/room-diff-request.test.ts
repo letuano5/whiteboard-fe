@@ -1,9 +1,10 @@
 import type { PrismaClient } from '@prisma/client';
 import type { Socket } from 'socket.io';
-import { WS_EVENTS, type Element, type Presence } from '@vdt/shared';
+import { WS_EVENTS, type Presence } from '@vdt/shared';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getRoomDiff } from '../../persistence/room-repository.js';
 import { makeElement } from '../../test/element-fixtures.js';
+import { SyncRoom } from '../../sync/index.js';
 import type { ResolvedWhiteboardServerDeps } from '../types.js';
 import { handleRoomDiffRequest } from './room-diff-request.js';
 
@@ -115,15 +116,11 @@ describe('handleRoomDiffRequest', () => {
 });
 
 function makeDeps(): ResolvedWhiteboardServerDeps {
+  const syncRooms = new Map<string, SyncRoom>();
+  syncRooms.set('room-1', new SyncRoom({ roomId: 'room-1' }));
   return {
     roomPresence: new Map<string, Map<string, Presence>>(),
-    roomElements: new Map<string, Map<string, Element>>(),
-    roomClocks: new Map(),
-    syncRooms: new Map(),
-    autosave: {
-      markDirty: vi.fn(),
-      flushRoomNow: vi.fn(),
-    },
+    syncRooms,
     db: {} as PrismaClient,
   };
 }

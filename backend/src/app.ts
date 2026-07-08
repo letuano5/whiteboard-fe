@@ -18,8 +18,6 @@ export interface AppServerOptions {
   appUserRepository?: AppUserRepository;
   db?: PrismaClient;
   syncRooms?: Map<string, SyncRoom>;
-  roomElements?: Map<string, unknown>;
-  roomClocks?: Map<string, number>;
 }
 
 export function createAppServer(options: AppServerOptions = {}) {
@@ -68,8 +66,6 @@ export function createAppServer(options: AppServerOptions = {}) {
         db: options.db,
         ioServer: io,
         syncRooms: options.syncRooms,
-        roomElements: options.roomElements,
-        roomClocks: options.roomClocks,
       }),
     );
     app.use(
@@ -79,8 +75,6 @@ export function createAppServer(options: AppServerOptions = {}) {
         db: options.db as never,
         ioServer: io,
         syncRooms: options.syncRooms,
-        roomElements: options.roomElements,
-        roomClocks: options.roomClocks,
       }),
     );
   }

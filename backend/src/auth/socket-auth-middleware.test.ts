@@ -1,6 +1,5 @@
 import type { Socket } from 'socket.io';
 import { describe, expect, it, vi } from 'vitest';
-import { createAutosaveManager } from '../persistence/autosave.js';
 import { createWhiteboardServer } from '../realtime/whiteboard-server.js';
 import { makeFakeIo } from '../test/fake-socket-io.js';
 import {
@@ -184,16 +183,9 @@ describe('createSocketAuthMiddleware', () => {
 describe('createWhiteboardServer socket auth wiring', () => {
   it('installs socket auth only when an AuthVerifier is provided', () => {
     const { ioServer } = makeFakeIo();
-    const autosave = createAutosaveManager({
-      delayMs: 60000,
-      getRoomElements: () => [],
-      saveRoomElements: vi.fn().mockResolvedValue(null),
-    });
 
     createWhiteboardServer(ioServer as unknown as Parameters<typeof createWhiteboardServer>[0], {
       roomPresence: new Map(),
-      roomElements: new Map(),
-      autosave,
       authVerifier: createVerifier(),
     });
 
@@ -202,16 +194,9 @@ describe('createWhiteboardServer socket auth wiring', () => {
 
   it('keeps socket auth disabled when no AuthVerifier is provided', () => {
     const { ioServer } = makeFakeIo();
-    const autosave = createAutosaveManager({
-      delayMs: 60000,
-      getRoomElements: () => [],
-      saveRoomElements: vi.fn().mockResolvedValue(null),
-    });
 
     createWhiteboardServer(ioServer as unknown as Parameters<typeof createWhiteboardServer>[0], {
       roomPresence: new Map(),
-      roomElements: new Map(),
-      autosave,
     });
 
     expect(ioServer.use).not.toHaveBeenCalled();

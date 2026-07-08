@@ -4,12 +4,12 @@ import type { PrismaClient } from '@prisma/client';
 import { NATIVE_FILE_KIND, NATIVE_FILE_SCHEMA_VERSION, type NativeFileDocument } from '@vdt/shared';
 import type { AuthVerifier } from '../auth/index.js';
 import {
-  createHttpAuthMiddleware,
   type AppUser,
   type AppUserRepository,
   type AuthenticatedRequest,
+  createHttpAuthMiddleware,
 } from '../auth/index.js';
-import { getOrCreateSyncRoom, type SyncRoom } from '../sync/index.js';
+import { withSyncRoom, type SyncRoom } from '../sync/index.js';
 import { resolveRoomAccess, RoomAccessError } from './room-roles.js';
 
 interface NativeFileExportDeps {
@@ -67,8 +67,9 @@ export async function exportNativeFileFromRoom(
 
   await resolveRoomAccess(db, roomId, user);
   const roomName = await loadRoomName(db, roomId);
-  const syncRoom = await getOrCreateSyncRoom(db, syncRooms ?? new Map(), roomId);
-  const snapshot = syncRoom.getStateSnapshot();
+  const snapshot = await withSyncRoom(db, syncRooms ?? new Map(), roomId, (syncRoom) =>
+    syncRoom.getStateSnapshot(),
+  );
   const elements = [...snapshot.elements.values()];
 
   return {

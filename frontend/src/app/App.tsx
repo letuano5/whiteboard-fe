@@ -1,6 +1,7 @@
 import { useEffect, useRef, useSyncExternalStore } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { AuthMenu } from '../auth/AuthMenu';
+import { RenderBenchmarkProbe } from '../benchmark/render-benchmark';
 import { useAuthStore } from '../auth/auth.store';
 import Whiteboard from '../canvas/Whiteboard';
 import { DocumentDashboard } from '../documents/DocumentDashboard';
@@ -57,6 +58,7 @@ export default function App() {
 
   return (
     <div style={{ width: '100vw', height: '100dvh' }}>
+      <RenderBenchmarkProbe />
       <Whiteboard mode={boardMode} />
     </div>
   );

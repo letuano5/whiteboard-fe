@@ -11,5 +11,11 @@
 }
 
 {$SUPABASE_DOMAIN} {
-	reverse_proxy kong:8000
+	handle /auth/v1* {
+		reverse_proxy kong:8000
+	}
+
+	handle {
+		respond 404
+	}
 }

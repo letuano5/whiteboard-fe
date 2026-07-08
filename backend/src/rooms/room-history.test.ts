@@ -11,6 +11,7 @@ import {
 import { listRoomSnapshots, restoreRoomSnapshot } from './room-history.js';
 
 vi.mock('../sync/index.js', () => ({
+  deleteSyncRoom: vi.fn(),
   executeReplaceDocument: vi.fn().mockResolvedValue({
     kind: 'replace-document',
     roomId: 'room-1',
@@ -134,8 +135,6 @@ describe('room history snapshots', () => {
           db,
           ioServer: { to } as never,
           syncRooms: new Map(),
-          roomElements: new Map(),
-          roomClocks: new Map(),
         },
         { roomId: 'room-1', snapshotId: 'snap-1', user: owner },
       ),

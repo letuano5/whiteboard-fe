@@ -10,10 +10,12 @@ import { useAuthStore } from '../../auth/auth.store';
 import { useCameraStore } from '../../store/camera.store';
 import { useInteractionStore } from '../../store/interaction.store';
 import { useRoomAccessStore } from '../../rooms/room-access.store';
-import { applyRemoteElements } from '../apply-remote';
 import { saveCamera } from '../camera-persistence';
 import { LOCAL_PRESENCE } from '../presence';
-import { clearPendingQueue } from './pending-queue';
+import {
+  dropDurablePendingSyncCommands,
+  hydratePendingSyncCommandsFromOutbox,
+} from './p5-durable-outbox';
 import { flushPendingSyncCommands } from './p5-command-queue';
 import {
   applyRoomDiff,
@@ -28,11 +30,9 @@ import {
   getPendingRequestRefs,
   getSocketState,
   markPendingRequestsStale,
-  setLastServerClock,
 } from './state';
 import type {
   CursorMovePayload,
-  ElementUpdatePayload,
   RoomAccessErrorPayload,
   RoomAccessPayload,
   RoomDiffPayload,
@@ -44,12 +44,19 @@ export function registerSocketEventHandlers(): void {
   if (!state.socket) return;
 
   state.socket.on('connect', () => {
+    void handleSocketConnect();
+  });
+
+  async function handleSocketConnect(): Promise<void> {
     const current = getSocketState();
     if (!current.socket || !current.roomId) return;
 
     if (current.hasJoined) {
       current.reconnectPending = true;
     }
+
+    await hydratePendingSyncCommandsFromOutbox(current.roomId);
+    if (!current.socket || !current.roomId) return;
 
     current.socket.emit(WS_EVENTS.JOIN_ROOM, {
       roomId: current.roomId,
@@ -62,18 +69,21 @@ export function registerSocketEventHandlers(): void {
     });
 
     current.hasJoined = true;
-  });
+  }
 
   state.socket.on(WS_EVENTS.ROOM_SNAPSHOT, (data: RoomSnapshotPayload) => {
     const current = getSocketState();
     applyRoomSnapshot(normalizeSnapshotPayload(data));
     if (current.reconnectPending) {
-      markPendingRequestsStale();
-      clearPendingQueue();
+      const staleRequestIds = markPendingRequestsStale();
+      dropDurablePendingSyncCommands(current.roomId, staleRequestIds);
       rematerializeOptimisticStore();
       current.reconnectPending = false;
     }
     replayBufferedSyncEvents({ localActorId: getLocalActorId() });
+    if (!getSocketState().pausedForResync) {
+      flushPendingSyncCommands(true);
+    }
   });
 
   state.socket.on(WS_EVENTS.ROOM_DIFF, (data: RoomDiffPayload) => {
@@ -104,17 +114,6 @@ export function registerSocketEventHandlers(): void {
 
   state.socket.on(WS_EVENTS.ROOM_ACCESS_ERROR, (data: RoomAccessErrorPayload) => {
     useRoomAccessStore.getState().setRoomAccessError(data);
-  });
-
-  state.socket.on(WS_EVENTS.ELEMENT_UPDATE, (data: ElementUpdatePayload) => {
-    applyRemoteElements(data.elements);
-    if (data.documentClock !== undefined) setLastServerClock(data.documentClock);
-    if (data.sessionId) {
-      const { setRemoteDrafts } = useInteractionStore.getState();
-      const current = new Map(useInteractionStore.getState().remoteDrafts);
-      current.delete(data.sessionId);
-      setRemoteDrafts(current);
-    }
   });
 
   state.socket.on(WS_EVENTS.USER_JOIN, (data: { presences: Presence[] }) => {

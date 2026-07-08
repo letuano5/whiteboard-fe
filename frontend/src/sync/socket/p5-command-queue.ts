@@ -11,6 +11,7 @@ import type { MutationEvent } from '../../store/mutation-pipeline';
 import { compactQueuedSyncCommands, enqueueCoalescedPatch } from './p5-command-backpressure';
 import { commandsFromMutation } from './p5-command-from-mutation';
 import { isCommandRelevantForResend, requestBackpressureResync } from './p5-command-resync';
+import { dropDurablePendingSyncCommands, syncQueuedDurableSnapshot } from './p5-durable-outbox';
 import {
   applyOptimisticCommand,
   cloneElement,
@@ -85,10 +86,6 @@ export function flushPendingSyncCommands(force = false): void {
 
     state.queuedSyncCommands = state.queuedSyncCommands.slice(1);
     state.inFlightSyncCommands = [...state.inFlightSyncCommands, next];
-    state.pendingSyncRequests = [
-      ...state.pendingSyncRequests,
-      { requestId: next.command.requestId, actorId: null, clientClock: next.command.clientClock },
-    ];
     state.socket.emit(WS_EVENTS.SYNC_COMMAND, next.command);
   }
 
@@ -128,7 +125,6 @@ export function clearPendingSyncCommands(): void {
   const state = getSocketState();
   state.queuedSyncCommands = [];
   state.inFlightSyncCommands = [];
-  state.pendingSyncRequests = [];
   state.pausedForResync = false;
   if (state.syncFlushTimer !== null) {
     clearTimeout(state.syncFlushTimer);
@@ -141,6 +137,7 @@ export function settleSyncCommandRequest(requestId: string): void {
   state.inFlightSyncCommands = state.inFlightSyncCommands.filter(
     (queued) => queued.command.requestId !== requestId,
   );
+  dropDurablePendingSyncCommands(state.roomId, [requestId]);
   flushPendingSyncCommands();
 }
 
@@ -159,6 +156,7 @@ export function reconcilePendingCommandStatuses(statuses: PendingRequestStatus[]
       state.queuedSyncCommands = state.queuedSyncCommands.filter(
         (queued) => queued.command.requestId !== status.requestId,
       );
+      dropDurablePendingSyncCommands(state.roomId, [status.requestId]);
       continue;
     }
 
@@ -169,13 +167,11 @@ export function reconcilePendingCommandStatuses(statuses: PendingRequestStatus[]
     state.inFlightSyncCommands = state.inFlightSyncCommands.filter(
       (queued) => queued.command.requestId !== status.requestId,
     );
-    state.pendingSyncRequests = state.pendingSyncRequests.filter(
-      (request) => request.requestId !== status.requestId,
-    );
     if (isCommandRelevantForResend(sent.command)) {
       resendableUnknown.push({ ...sent, sendAfter: Date.now() });
     } else {
       state.staleAckRequestIds.add(status.requestId);
+      dropDurablePendingSyncCommands(state.roomId, [status.requestId]);
     }
   }
   if (resendableUnknown.length > 0) {
@@ -224,6 +220,7 @@ export function createUndoPatchCommand(
 
 function enqueueCommand(command: SyncCommand, now: number, forceImmediate: boolean): void {
   const state = getSocketState();
+  const beforeQueue = state.queuedSyncCommands;
   const queued: QueuedSyncCommand = {
     command,
     dependsOnRequestId: dependencyForCommand(command),
@@ -233,9 +230,11 @@ function enqueueCommand(command: SyncCommand, now: number, forceImmediate: boole
 
   if (command.kind === 'patch-slots') {
     state.queuedSyncCommands = enqueueCoalescedPatch(state.queuedSyncCommands, queued);
+    syncQueuedDurableSnapshot(state.roomId, beforeQueue, state.queuedSyncCommands);
     return;
   }
   state.queuedSyncCommands = [...state.queuedSyncCommands, queued];
+  syncQueuedDurableSnapshot(state.roomId, beforeQueue, state.queuedSyncCommands);
 }
 
 function enforceBackpressure(): void {

@@ -14,7 +14,10 @@ import { WS_EVENTS } from '../../types/shared';
 import { useElementsStore } from '../../store/elements.store';
 import { useHistoryStore } from '../../store/history.store';
 import { applyChangeSetToElements, applySlotPatch, slotValueFromElement } from './p5-change-set';
-import { clearPendingQueue } from './pending-queue';
+import {
+  clearDurablePendingSyncCommands,
+  consumeHydratedDurableRequestIds,
+} from './p5-durable-outbox';
 import {
   clearPendingSyncCommands,
   materializeOptimisticElements,
@@ -35,7 +38,6 @@ import {
   removeKnownTombstones,
   setLastServerClock,
   setRoomEpoch,
-  type PendingSyncRequest,
 } from './state';
 
 export type P5ReconciliationResult =
@@ -48,18 +50,13 @@ interface ReconciliationOptions {
   requestRoomDiff?: (roomId: string, lastServerClock: SyncClock, incomingClock: SyncClock) => void;
 }
 
-export function queuePendingSyncRequest(request: PendingSyncRequest): void {
-  const state = getSocketState();
-  state.pendingSyncRequests = [...state.pendingSyncRequests, request];
-}
-
 export function processSyncAck(
   ack: SyncAck,
   options: ReconciliationOptions = {},
 ): P5ReconciliationResult {
   const state = getSocketState();
-  const isPending = state.pendingSyncRequests.some(
-    (request) => request.requestId === ack.requestId,
+  const isPending = state.inFlightSyncCommands.some(
+    (queued) => queued.command.requestId === ack.requestId,
   );
   if (!isPending && consumeStaleAckRequest(ack.requestId)) {
     return { status: 'ignored-stale', serverClock: ack.serverClock };
@@ -120,16 +117,14 @@ export function applyRoomSnapshot(snapshot: RoomSnapshot): void {
   removeKnownTombstones(snapshot.elements.map((element) => element.id));
   setRoomEpoch(snapshot.roomEpoch);
   setLastServerClock(snapshot.serverClock);
-  if (snapshot.pendingRequests) {
-    reconcilePendingRequests(snapshot.pendingRequests);
-  }
+  reconcilePendingRequests(pendingStatusesOrUnknown(snapshot.pendingRequests));
   rematerializeOptimisticStore();
 }
 
 export function applyRoomReplaced(payload: RoomReplacedPayload): void {
   const state = getSocketState();
   markPendingRequestsStale();
-  clearPendingQueue();
+  clearDurablePendingSyncCommands(payload.roomId);
   clearPendingSyncCommands();
   state.bufferedSyncEvents = [];
   state.serverElements = payload.elements;
@@ -189,9 +184,7 @@ export function applyRoomDiff(diff: RoomDiff): void {
   applyKnownSlotClocks(diff.slotClocks);
   setRoomEpoch(diff.roomEpoch);
   setLastServerClock(diff.serverClock);
-  if (diff.pendingRequests) {
-    reconcilePendingRequests(diff.pendingRequests);
-  }
+  reconcilePendingRequests(pendingStatusesOrUnknown(diff.pendingRequests));
   rematerializeOptimisticStore();
 }
 
@@ -203,8 +196,8 @@ export function rematerializeOptimisticStore(): void {
 
 function clearPendingRequest(requestId: string): void {
   const state = getSocketState();
-  state.pendingSyncRequests = state.pendingSyncRequests.filter(
-    (request) => request.requestId !== requestId,
+  state.inFlightSyncCommands = state.inFlightSyncCommands.filter(
+    (queued) => queued.command.requestId !== requestId,
   );
 }
 
@@ -293,17 +286,11 @@ function reconcilePendingRequests(pendingRequests: PendingRequestStatus[]): void
       case 'processed':
         // Server already committed this request: drop it and let the replayed
         // ACK (if any) apply the committed change set.
-        state.pendingSyncRequests = state.pendingSyncRequests.filter(
-          (r) => r.requestId !== status.requestId,
-        );
         reconcilePendingCommandStatuses([status]);
         break;
       case 'conflict':
       case 'expired':
         // Not safe to replay: drop the pending entry and mark any late ACK stale.
-        state.pendingSyncRequests = state.pendingSyncRequests.filter(
-          (r) => r.requestId !== status.requestId,
-        );
         state.staleAckRequestIds.add(status.requestId);
         reconcilePendingCommandStatuses([status]);
         break;
@@ -314,4 +301,18 @@ function reconcilePendingRequests(pendingRequests: PendingRequestStatus[]): void
         break;
     }
   }
+}
+
+function pendingStatusesOrUnknown(
+  pendingRequests: PendingRequestStatus[] | undefined,
+): PendingRequestStatus[] {
+  const hydratedRequestIds = consumeHydratedDurableRequestIds();
+  if (pendingRequests) return pendingRequests;
+  if (hydratedRequestIds.size === 0) return [];
+  return getSocketState()
+    .inFlightSyncCommands.filter((queued) => hydratedRequestIds.has(queued.command.requestId))
+    .map((queued) => ({
+      requestId: queued.command.requestId,
+      status: 'unknown',
+    }));
 }

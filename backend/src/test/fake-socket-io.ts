@@ -10,7 +10,11 @@ export interface FakeSocket {
       identity: VerifiedIdentity;
       user?: AppUser;
     };
+    roomBaseRole?: string;
+    roomRole?: string;
+    roomRoleCapacityDowngraded?: boolean;
   };
+  rooms: Set<string>;
   join: ReturnType<typeof vi.fn>;
   emit: ReturnType<typeof vi.fn>;
   to: ReturnType<typeof vi.fn>;
@@ -28,6 +32,7 @@ interface MakeSocketOptions {
 export function makeFakeIo() {
   let connectionHandler: ConnectionHandler | null = null;
   const broadcastEmitted: Array<[string, unknown]> = [];
+  const sockets = new Map<string, FakeSocket>();
 
   const roomEmit = vi.fn((event: string, payload: unknown) => {
     broadcastEmitted.push([event, payload]);
@@ -46,24 +51,34 @@ export function makeFakeIo() {
     }),
     use: vi.fn(),
     to: vi.fn().mockReturnValue(toReturn),
+    sockets: {
+      sockets,
+    },
   };
 
   function makeSocket(options: MakeSocketOptions = {}): FakeSocket {
-    return {
-      id: options.socketId ?? 'socket-1',
+    const socketId = options.socketId ?? 'socket-1';
+    const socket: FakeSocket = {
+      id: socketId,
       data: {
         sessionId: options.sessionId ?? '',
         roomId: options.roomId ?? '',
       },
-      join: vi.fn(),
+      rooms: new Set([socketId]),
+      join: vi.fn((roomId: string) => {
+        socket.rooms.add(roomId);
+        socket.data.roomId = roomId;
+      }),
       emit: vi.fn(),
       to: vi.fn().mockReturnValue(peerReturn),
       on: vi.fn(),
     };
+    return socket;
   }
 
   function connect(socket: FakeSocket): void {
     if (!connectionHandler) throw new Error('connection handler not registered');
+    sockets.set(socket.id, socket);
     connectionHandler(socket);
   }
 
