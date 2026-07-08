@@ -4,6 +4,7 @@ import type { Element, Camera } from '../../types/shared';
 import type { HandleId, ToolId } from '../../types/interaction';
 import { useCameraStore, useInteractionStore } from '../../store';
 import { emitCursorMove } from '../../sync/socket-client';
+import { PRESENCE_PREVIEW_THROTTLE_MS } from '../../sync/socket/p5-command-queue';
 import {
   isShapeTool,
   onShapePointerDown,
@@ -130,7 +131,7 @@ export function useWhiteboardPointerHandlers({
     if (multiTouchGesture.handlePointerMove(event)) return;
 
     const now = Date.now();
-    if (now - lastCursorSent.current >= 33) {
+    if (now - lastCursorSent.current >= PRESENCE_PREVIEW_THROTTLE_MS) {
       emitCursorMove(svgWorldPoint(event, camera));
       lastCursorSent.current = now;
     }

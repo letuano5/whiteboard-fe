@@ -4,9 +4,8 @@
 # Usage on the VPS:
 #   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 #
-# Does not touch the base file's `db` port publish — local dev keeps using
-# docker-compose.yml alone. Public exposure on the VPS is restricted at the
-# GCP firewall level instead (see infra/scripts/bootstrap-vps.sh).
+# The base file binds the `db` port to localhost so local dev can still connect
+# without publishing Postgres on the VPS public interface.
 
 name: supabase
 
