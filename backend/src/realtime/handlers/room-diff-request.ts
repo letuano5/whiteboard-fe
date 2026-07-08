@@ -1,7 +1,7 @@
 import type { Socket } from 'socket.io';
 import { SYNC_PROTOCOL_VERSION, SYNC_SCHEMA_VERSION, WS_EVENTS } from '@vdt/shared';
 import { getRoomDiff } from '../../persistence/room-repository.js';
-import { touchRoomCache } from '../room-cache-gc.js';
+import { getOrCreateSyncRoom } from '../../sync/index.js';
 import type { ResolvedWhiteboardServerDeps, RoomDiffRequestPayload } from '../types.js';
 
 export async function handleRoomDiffRequest(
@@ -20,14 +20,11 @@ export async function handleRoomDiffRequest(
   }
 
   const baseClock = lastServerClock ?? fromClock ?? 0;
-  if (deps.roomElements.has(roomId)) {
-    touchRoomCache(deps.roomElements, roomId);
-  }
-  const inMemory = deps.roomElements.has(roomId)
-    ? [...deps.roomElements.get(roomId)!.values()]
-    : [];
 
   try {
+    const syncRoom = await getOrCreateSyncRoom(deps.db, deps.syncRooms, roomId);
+    const snapshot = syncRoom.getStateSnapshot();
+    const inMemory = [...snapshot.elements.values()];
     const diffResult = await getRoomDiff(deps.db, roomId, baseClock, inMemory, {
       roomEpoch,
       pendingRequests,

@@ -186,7 +186,6 @@ describe('createWhiteboardServer socket auth wiring', () => {
 
     createWhiteboardServer(ioServer as unknown as Parameters<typeof createWhiteboardServer>[0], {
       roomPresence: new Map(),
-      roomElements: new Map(),
       authVerifier: createVerifier(),
     });
 
@@ -198,7 +197,6 @@ describe('createWhiteboardServer socket auth wiring', () => {
 
     createWhiteboardServer(ioServer as unknown as Parameters<typeof createWhiteboardServer>[0], {
       roomPresence: new Map(),
-      roomElements: new Map(),
     });
 
     expect(ioServer.use).not.toHaveBeenCalled();

@@ -12,12 +12,9 @@ import type { SyncRoom } from '../sync/index.js';
 import type { RoomState } from './room-state.js';
 
 export type RoomPresenceStore = Map<string, Map<string, Presence>>;
-export type RoomElementStore = Map<string, Map<string, Element>>;
-export type RoomClockStore = Map<string, number>;
 
-export interface WhiteboardServerDeps extends Partial<RoomState> {
+export interface WhiteboardServerDeps extends Partial<Pick<RoomState, 'roomPresence'>> {
   roomPresence: RoomPresenceStore;
-  roomElements: RoomElementStore;
   db?: PrismaClient;
   authVerifier?: AuthVerifier;
   appUserRepository?: AppUserRepository;
@@ -26,8 +23,6 @@ export interface WhiteboardServerDeps extends Partial<RoomState> {
 
 export interface ResolvedWhiteboardServerDeps {
   roomPresence: RoomPresenceStore;
-  roomElements: RoomElementStore;
-  roomClocks: RoomClockStore;
   db: PrismaClient;
   syncRooms: Map<string, SyncRoom>;
 }

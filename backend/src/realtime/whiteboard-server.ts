@@ -24,8 +24,6 @@ type SocketEventHandler<TPayload> = (payload: TPayload) => void | Promise<void>;
 function resolveDeps(deps: WhiteboardServerDeps): ResolvedWhiteboardServerDeps {
   return {
     roomPresence: deps.roomPresence,
-    roomElements: deps.roomElements,
-    roomClocks: deps.roomClocks ?? new Map<string, number>(),
     db: deps.db ?? prisma,
     syncRooms: deps.syncRooms ?? new Map(),
   };

@@ -135,8 +135,6 @@ describe('room history snapshots', () => {
           db,
           ioServer: { to } as never,
           syncRooms: new Map(),
-          roomElements: new Map(),
-          roomClocks: new Map(),
         },
         { roomId: 'room-1', snapshotId: 'snap-1', user: owner },
       ),

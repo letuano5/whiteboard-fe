@@ -20,6 +20,7 @@ import { WS_EVENTS } from '@vdt/shared';
 import { makeElement } from '../test/element-fixtures.js';
 import { makeFakeIo } from '../test/fake-socket-io.js';
 import type { PrismaClient } from '@prisma/client';
+import { SyncRoom } from '../sync/index.js';
 
 // ---------------------------------------------------------------------------
 // DB mock builder for the reconnect-diff path
@@ -99,11 +100,11 @@ const JOIN_PAYLOAD_BASE = {
 };
 
 let roomPresence: Map<string, Map<string, Presence>>;
-let roomElements: Map<string, Map<string, Element>>;
+let syncRooms: Map<string, SyncRoom>;
 
 beforeEach(() => {
   roomPresence = new Map();
-  roomElements = new Map();
+  syncRooms = new Map();
 });
 
 afterEach(() => {
@@ -114,9 +115,7 @@ afterEach(() => {
 // Helper: pre-populate in-memory room elements (warm path)
 // ---------------------------------------------------------------------------
 function seedRoom(elements: Element[]): void {
-  const m = new Map<string, Element>();
-  for (const el of elements) m.set(el.id, el);
-  roomElements.set(ROOM_ID, m);
+  syncRooms.set(ROOM_ID, new SyncRoom({ roomId: ROOM_ID, elements }));
 }
 
 // ---------------------------------------------------------------------------
@@ -134,7 +133,7 @@ describe('AC-4: initial join (lastServerClock absent or 0) → ROOM_SNAPSHOT, no
 
     const { ioServer, makeSocket, connect, getHandler } = makeFakeIo();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    createWhiteboardServer(ioServer as any, { roomPresence, roomElements, db });
+    createWhiteboardServer(ioServer as any, { roomPresence, syncRooms, db });
 
     const socket = makeSocket();
     connect(socket);
@@ -162,7 +161,7 @@ describe('AC-4: initial join (lastServerClock absent or 0) → ROOM_SNAPSHOT, no
 
     const { ioServer, makeSocket, connect, getHandler } = makeFakeIo();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    createWhiteboardServer(ioServer as any, { roomPresence, roomElements, db });
+    createWhiteboardServer(ioServer as any, { roomPresence, syncRooms, db });
 
     const socket = makeSocket();
     connect(socket);
@@ -201,7 +200,7 @@ describe('AC-1 + AC-12: reconnect with lastServerClock > 0 and sufficient histor
 
     const { ioServer, makeSocket, connect, getHandler } = makeFakeIo();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    createWhiteboardServer(ioServer as any, { roomPresence, roomElements, db });
+    createWhiteboardServer(ioServer as any, { roomPresence, syncRooms, db });
 
     const socket = makeSocket();
     connect(socket);
@@ -250,7 +249,7 @@ describe('AC-2: elements deleted while offline appear in ROOM_DIFF.deleted', () 
 
     const { ioServer, makeSocket, connect, getHandler } = makeFakeIo();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    createWhiteboardServer(ioServer as any, { roomPresence, roomElements, db });
+    createWhiteboardServer(ioServer as any, { roomPresence, syncRooms, db });
 
     const socket = makeSocket();
     connect(socket);
@@ -291,7 +290,7 @@ describe('AC-8: wipe-all returned when tombstone history is insufficient', () =>
 
     const { ioServer, makeSocket, connect, getHandler } = makeFakeIo();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    createWhiteboardServer(ioServer as any, { roomPresence, roomElements, db });
+    createWhiteboardServer(ioServer as any, { roomPresence, syncRooms, db });
 
     const socket = makeSocket();
     connect(socket);
@@ -330,7 +329,7 @@ describe('AC-8: wipe-all returned when tombstone history is insufficient', () =>
 
     const { ioServer, makeSocket, connect, getHandler } = makeFakeIo();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    createWhiteboardServer(ioServer as any, { roomPresence, roomElements, db });
+    createWhiteboardServer(ioServer as any, { roomPresence, syncRooms, db });
 
     const socket = makeSocket();
     connect(socket);
@@ -372,7 +371,7 @@ describe('AC-10: room with no tombstones always returns ROOM_DIFF', () => {
 
     const { ioServer, makeSocket, connect, getHandler } = makeFakeIo();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    createWhiteboardServer(ioServer as any, { roomPresence, roomElements, db });
+    createWhiteboardServer(ioServer as any, { roomPresence, syncRooms, db });
 
     const socket = makeSocket();
     connect(socket);
@@ -405,7 +404,7 @@ describe('AC-10: room with no tombstones always returns ROOM_DIFF', () => {
 
     const { ioServer, makeSocket, connect, getHandler } = makeFakeIo();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    createWhiteboardServer(ioServer as any, { roomPresence, roomElements, db });
+    createWhiteboardServer(ioServer as any, { roomPresence, syncRooms, db });
 
     const socket = makeSocket();
     connect(socket);

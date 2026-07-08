@@ -13,8 +13,6 @@ import {
   SyncRoomCommandError,
   withSyncRoom,
 } from '../../sync/index.js';
-import type { SyncRoom } from '../../sync/index.js';
-import { touchRoomCache } from '../room-cache-gc.js';
 import type { ResolvedWhiteboardServerDeps } from '../types.js';
 
 export async function handleSyncCommand(
@@ -34,17 +32,15 @@ export async function handleSyncCommand(
       return;
     }
 
-    const { result, room } = await withSyncRoom(
+    const result = await withSyncRoom(
       deps.db,
       deps.syncRooms,
       command.roomId,
-      async (room) => ({
-        room,
-        result: await room.execute(command, {
+      (room) =>
+        room.execute(command, {
           actorId: socket.data?.auth?.user?.id ?? null,
           effectiveRole,
         }),
-      }),
     );
     const ack = createSyncAck(result);
     const broadcast: SyncBroadcast = {
@@ -54,8 +50,6 @@ export async function handleSyncCommand(
       serverClock: result.changeSet.serverClock,
       changeSet: result.changeSet,
     };
-
-    mirrorSyncRoomState(deps, command.roomId, room);
 
     // Idempotent replays re-send the original ACK to the caller but must not
     // re-broadcast to peers or re-mark the room dirty: the state did not change.
@@ -98,27 +92,13 @@ async function resolveEffectiveRole(
   return effectiveRole;
 }
 
-function mirrorSyncRoomState(
-  deps: ResolvedWhiteboardServerDeps,
-  roomId: string,
-  room: SyncRoom,
-): void {
-  const snapshot = room.getStateSnapshot();
-  deps.roomElements.set(roomId, new Map(snapshot.elements));
-  deps.roomClocks.set(roomId, snapshot.documentClock);
-  touchRoomCache(deps.roomElements, roomId);
-}
-
 function emitReject(
   socket: Socket,
   deps: ResolvedWhiteboardServerDeps,
   command: SyncCommand,
   error: unknown,
 ): void {
-  const serverClock =
-    deps.syncRooms.get(command.roomId)?.getStateSnapshot().documentClock ??
-    deps.roomClocks.get(command.roomId) ??
-    0;
+  const serverClock = deps.syncRooms.get(command.roomId)?.getStateSnapshot().documentClock ?? 0;
   socket.emit(WS_EVENTS.SYNC_ACK, createSyncRejectAck(command, error, serverClock));
 }
 

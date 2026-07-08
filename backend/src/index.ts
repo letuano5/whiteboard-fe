@@ -18,13 +18,11 @@ const { httpServer, io } = createAppServer({
   ...authDeps,
   db: prisma,
   syncRooms,
-  roomElements: roomState.roomElements,
-  roomClocks: roomState.roomClocks,
 });
 
 createWhiteboardServer(io, { ...roomState, ...authDeps, syncRooms });
 startProcessedRequestGc(prisma);
 startTombstoneGc(prisma);
-startHotRoomGc({ ...roomState, syncRooms });
+startHotRoomGc({ roomPresence: roomState.roomPresence, syncRooms });
 
 httpServer.listen(PORT, () => console.log(`Server running on :${PORT}`));

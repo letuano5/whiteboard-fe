@@ -10,7 +10,6 @@ import {
   type AuthenticatedRequest,
 } from '../auth/index.js';
 import { deleteSyncRoom, executeReplaceDocument, type SyncRoom } from '../sync/index.js';
-import { forgetRoomCache } from '../realtime/room-cache-gc.js';
 import { loadRoomForOwnerAction, resolveRoomAccess, RoomAccessError } from './room-roles.js';
 import {
   captureRoomSnapshot,
@@ -27,8 +26,6 @@ interface RoomHistoryDeps {
   db: RoomHistoryDb;
   ioServer?: Server;
   syncRooms?: Map<string, SyncRoom>;
-  roomElements?: Map<string, unknown>;
-  roomClocks?: Map<string, number>;
 }
 
 type RoomHistoryDb = RoomSnapshotDb & {
@@ -140,7 +137,7 @@ export async function listRoomSnapshots(
 }
 
 export async function restoreRoomSnapshot(
-  deps: Pick<RoomHistoryDeps, 'db' | 'ioServer' | 'syncRooms' | 'roomElements' | 'roomClocks'>,
+  deps: Pick<RoomHistoryDeps, 'db' | 'ioServer' | 'syncRooms'>,
   input: {
     roomId: string;
     snapshotId: string;
@@ -186,9 +183,6 @@ export async function restoreRoomSnapshot(
   );
 
   deleteSyncRoom(deps.syncRooms, input.roomId);
-  deps.roomElements?.delete(input.roomId);
-  deps.roomClocks?.delete(input.roomId);
-  forgetRoomCache(deps.roomElements, input.roomId);
   deps.ioServer?.to(input.roomId).emit(WS_EVENTS.ROOM_REPLACED, result.replacePayload);
 
   return {

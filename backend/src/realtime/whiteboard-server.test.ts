@@ -10,7 +10,6 @@ describe('createWhiteboardServer handler safety', () => {
 
     createWhiteboardServer(ioServer as unknown as Parameters<typeof createWhiteboardServer>[0], {
       roomPresence: new Map(),
-      roomElements: new Map(),
     });
 
     const socket = makeSocket();
@@ -32,7 +31,6 @@ describe('createWhiteboardServer handler safety', () => {
 
     createWhiteboardServer(ioServer as unknown as Parameters<typeof createWhiteboardServer>[0], {
       roomPresence: new Map(),
-      roomElements: new Map(),
     });
 
     const socket = makeSocket({ roomId: 'room-1' });

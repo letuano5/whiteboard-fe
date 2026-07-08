@@ -1,7 +1,7 @@
 import type { PrismaClient } from '@prisma/client';
 import type { Server, Socket } from 'socket.io';
 import { describe, expect, it, vi } from 'vitest';
-import { WS_EVENTS, type Element, type Presence } from '@vdt/shared';
+import { WS_EVENTS, type Presence } from '@vdt/shared';
 import type { AppUser } from '../../auth/index.js';
 import { handleRoomRoleUpdate } from './room-role-update.js';
 
@@ -60,8 +60,6 @@ describe('handleRoomRoleUpdate', () => {
             ]),
           ],
         ]),
-        roomElements: new Map<string, Map<string, Element>>(),
-        roomClocks: new Map(),
         syncRooms: new Map(),
         db,
       },
@@ -151,8 +149,6 @@ describe('handleRoomRoleUpdate', () => {
             ]),
           ],
         ]),
-        roomElements: new Map<string, Map<string, Element>>(),
-        roomClocks: new Map(),
         syncRooms: new Map(),
         db,
       },
@@ -196,8 +192,6 @@ describe('handleRoomRoleUpdate', () => {
       { data: { auth: { user: memberUser } }, emit: socketEmit } as unknown as Socket,
       {
         roomPresence: new Map<string, Map<string, Presence>>(),
-        roomElements: new Map<string, Map<string, Element>>(),
-        roomClocks: new Map(),
         syncRooms: new Map(),
         db,
       },

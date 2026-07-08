@@ -6,7 +6,6 @@ import {
   WS_EVENTS,
   type CreateElementCommand,
   type Element,
-  type Presence,
   type ReplaceDocumentCommand,
 } from '@vdt/shared';
 import { describe, expect, it, vi } from 'vitest';
@@ -17,7 +16,7 @@ import type { ResolvedWhiteboardServerDeps } from '../types.js';
 import { handleSyncCommand } from './sync-command.js';
 
 describe('handleSyncCommand', () => {
-  it('ACKs the sender, broadcasts the committed change-set, and mirrors hot room state', async () => {
+  it('ACKs the sender, broadcasts the committed change-set, and updates hot room state', async () => {
     const emit = vi.fn();
     const peerEmit = vi.fn();
     const socket = makeSocket(emit, peerEmit);
@@ -45,10 +44,10 @@ describe('handleSyncCommand', () => {
         }),
       }),
     );
-    expect(deps.roomElements.get('room-1')?.get('created-shape')).toEqual(
+    expect(deps.syncRooms.get('room-1')?.getStateSnapshot().elements.get('created-shape')).toEqual(
       expect.objectContaining({ id: 'created-shape' }),
     );
-    expect(deps.roomClocks.get('room-1')).toBe(1);
+    expect(deps.syncRooms.get('room-1')?.getStateSnapshot().documentClock).toBe(1);
   });
 
   it('replays the ACK on a duplicate request without re-broadcasting or re-marking dirty', async () => {
@@ -93,7 +92,7 @@ describe('handleSyncCommand', () => {
       }),
     );
     expect(peerEmit).not.toHaveBeenCalled();
-    expect(deps.roomElements.get('room-1')).toBeUndefined();
+    expect(deps.syncRooms.get('room-1')).toBeUndefined();
   });
 
   it('rejects commands for a room the socket has not joined', async () => {
@@ -193,8 +192,9 @@ describe('handleSyncCommand', () => {
         elements: [expect.objectContaining({ id: 'replacement-shape' })],
       }),
     );
-    expect(deps.roomElements.get('room-1')?.has('old-shape')).toBe(false);
-    expect(deps.roomElements.get('room-1')?.get('replacement-shape')).toEqual(
+    const elements = deps.syncRooms.get('room-1')?.getStateSnapshot().elements;
+    expect(elements?.has('old-shape')).toBe(false);
+    expect(elements?.get('replacement-shape')).toEqual(
       expect.objectContaining({ id: 'replacement-shape' }),
     );
   });
@@ -217,7 +217,6 @@ describe('handleSyncCommand', () => {
 
     expect(emit).not.toHaveBeenCalledWith(WS_EVENTS.SYNC_ACK, expect.anything());
     expect(peerEmit).not.toHaveBeenCalled();
-    expect(deps.roomElements.get('room-1')).toBeUndefined();
   });
 
   it('does not ACK or broadcast when conditional clock conflict marks the room unhealthy', async () => {
@@ -245,7 +244,6 @@ describe('handleSyncCommand', () => {
 
     expect(emit).not.toHaveBeenCalledWith(WS_EVENTS.SYNC_ACK, expect.anything());
     expect(peerEmit).not.toHaveBeenCalled();
-    expect(deps.roomClocks.get('room-1')).toBeUndefined();
   });
 });
 
@@ -278,9 +276,7 @@ function createReplaceCommand(requestId: string, elements: Element[]): ReplaceDo
 
 function makeDeps(): ResolvedWhiteboardServerDeps {
   return {
-    roomPresence: new Map<string, Map<string, Presence>>(),
-    roomElements: new Map<string, Map<string, Element>>(),
-    roomClocks: new Map(),
+    roomPresence: new Map(),
     syncRooms: new Map(),
     db: makeTestDb(),
   };
