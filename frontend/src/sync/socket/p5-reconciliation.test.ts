@@ -1,4 +1,10 @@
-import type { CommittedChangeSet, Element, SyncAck, SyncBroadcast } from '../../types/shared';
+import type {
+  CommittedChangeSet,
+  Element,
+  SyncAck,
+  SyncBroadcast,
+  SyncCommand,
+} from '../../types/shared';
 import { SYNC_PROTOCOL_VERSION, SYNC_SCHEMA_VERSION, WS_EVENTS } from '../../types/shared';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useElementsStore } from '../../store/elements.store';
@@ -9,7 +15,6 @@ import {
   applyRoomSnapshot,
   processSyncAck,
   processSyncBroadcast,
-  queuePendingSyncRequest,
 } from './p5-reconciliation';
 import { enqueueMutationSyncCommands } from './p5-command-queue';
 import { getKnownSlotClock, getSocketState, setLastServerClock, setRoomEpoch } from './state';
@@ -19,7 +24,6 @@ beforeEach(() => {
   useHistoryStore.setState({ undoStack: [], redoStack: [], isApplying: false });
   setLastServerClock(0);
   const state = getSocketState();
-  state.pendingSyncRequests = [];
   state.queuedSyncCommands = [];
   state.inFlightSyncCommands = [];
   state.serverElements = [];
@@ -34,9 +38,9 @@ beforeEach(() => {
 describe('P5 reconciliation pending and change-set handling', () => {
   it('clears matching pending requests for commit and rebase ACKs', () => {
     // @covers AC-1
-    queuePendingSyncRequest({ requestId: 'commit-1', actorId: 'actor-1', clientClock: 0 });
-    queuePendingSyncRequest({ requestId: 'rebase-1', actorId: 'actor-1', clientClock: 0 });
-    queuePendingSyncRequest({ requestId: 'later-1', actorId: 'actor-1', clientClock: 0 });
+    addInFlightSyncCommand('commit-1');
+    addInFlightSyncCommand('rebase-1');
+    addInFlightSyncCommand('later-1');
 
     processSyncAck({
       status: 'commit',
@@ -49,14 +53,12 @@ describe('P5 reconciliation pending and change-set handling', () => {
       changeSet: changeSet({ requestId: 'rebase-1', serverClock: 2, reason: 'patch_lww_conflict' }),
     });
 
-    expect(getSocketState().pendingSyncRequests).toEqual([
-      { requestId: 'later-1', actorId: 'actor-1', clientClock: 0 },
-    ]);
+    expect(pendingRequestIds()).toEqual(['later-1']);
   });
 
   it('clears local pending from a same-origin broadcast when ACK is missed', () => {
     // @covers AC-2
-    queuePendingSyncRequest({ requestId: 'missed-ack', actorId: 'actor-1', clientClock: 0 });
+    addInFlightSyncCommand('missed-ack');
 
     processSyncBroadcast(
       broadcast(
@@ -70,13 +72,13 @@ describe('P5 reconciliation pending and change-set handling', () => {
       { localActorId: 'actor-1' },
     );
 
-    expect(getSocketState().pendingSyncRequests).toEqual([]);
+    expect(pendingRequestIds()).toEqual([]);
   });
 
   it('clears rejected pending without dropping newer pending changes', () => {
     // @covers AC-3
-    queuePendingSyncRequest({ requestId: 'rejected', actorId: 'actor-1', clientClock: 0 });
-    queuePendingSyncRequest({ requestId: 'newer-slot-change', actorId: 'actor-1', clientClock: 0 });
+    addInFlightSyncCommand('rejected');
+    addInFlightSyncCommand('newer-slot-change');
     useElementsStore.setState({ elements: [makeElement({ id: 'shape-1' })] });
 
     processSyncAck({
@@ -85,9 +87,7 @@ describe('P5 reconciliation pending and change-set handling', () => {
       reason: 'STALE_CLIENT_STATE',
     });
 
-    expect(getSocketState().pendingSyncRequests).toEqual([
-      { requestId: 'newer-slot-change', actorId: 'actor-1', clientClock: 0 },
-    ]);
+    expect(pendingRequestIds()).toEqual(['newer-slot-change']);
     expect(useElementsStore.getState().elements).toHaveLength(1);
   });
 
@@ -97,7 +97,7 @@ describe('P5 reconciliation pending and change-set handling', () => {
     const state = getSocketState();
     state.socket = { emit } as never;
     useElementsStore.setState({ elements: [makeElement({ id: 'shape-1' })] });
-    queuePendingSyncRequest({ requestId: 'rebase-1', actorId: 'actor-1', clientClock: 0 });
+    addInFlightSyncCommand('rebase-1');
 
     processSyncAck({
       status: 'rebase',
@@ -228,7 +228,7 @@ describe('P5 reconciliation pending and change-set handling', () => {
     // @covers AC-4 (P4-07)
     // @covers AC-6
     const serverElement = makeElement({ id: 'server-shape' });
-    queuePendingSyncRequest({ requestId: 'old-pending', actorId: 'actor-1', clientClock: 0 });
+    addInFlightSyncCommand('old-pending');
     useElementsStore.setState({ elements: [makeElement({ id: 'local-draft' })] });
     useHistoryStore.setState({
       undoStack: [{ before: [], after: [makeElement({ id: 'undo-shape' })] }],
@@ -268,7 +268,7 @@ describe('P5 reconciliation pending and change-set handling', () => {
     });
 
     expect(lateAckResult.status).toBe('ignored-stale');
-    expect(getSocketState().pendingSyncRequests).toEqual([]);
+    expect(pendingRequestIds()).toEqual([]);
     expect(getSocketState().bufferedSyncEvents).toEqual([]);
     expect(useElementsStore.getState().elements).toEqual([serverElement]);
     expect(getSocketState().lastServerClock).toBe(10);
@@ -386,7 +386,7 @@ describe('P5 reconciliation pending and change-set handling', () => {
     setLastServerClock(4);
     useElementsStore.setState({ elements: [makeElement({ id: 'shape-1', x: 50 })] });
     getSocketState().serverElements = [makeElement({ id: 'shape-1', x: 40 })];
-    queuePendingSyncRequest({ requestId: 'late-ack', actorId: 'actor-1', clientClock: 0 });
+    addInFlightSyncCommand('late-ack');
 
     const result = processSyncAck({
       status: 'commit',
@@ -407,7 +407,7 @@ describe('P5 reconciliation pending and change-set handling', () => {
     });
 
     expect(result.status).toBe('ignored-stale');
-    expect(getSocketState().pendingSyncRequests).toEqual([]);
+    expect(pendingRequestIds()).toEqual([]);
     expect(useElementsStore.getState().elements[0]?.x).toBe(50);
   });
 
@@ -440,7 +440,7 @@ describe('P5 reconciliation pending and change-set handling', () => {
     });
 
     expect(getSocketState().inFlightSyncCommands).toEqual([]);
-    expect(getSocketState().pendingSyncRequests).toEqual([]);
+    expect(pendingRequestIds()).toEqual([]);
     expect(
       useElementsStore.getState().elements.filter((element) => element.id === 'created-1'),
     ).toHaveLength(1);
@@ -511,7 +511,7 @@ describe('P5 reconciliation pending and change-set handling', () => {
 
     expect(getSocketState().inFlightSyncCommands).toEqual([]);
     expect(getSocketState().queuedSyncCommands).toEqual([]);
-    expect(getSocketState().pendingSyncRequests).toEqual([]);
+    expect(pendingRequestIds()).toEqual([]);
     expect(emit).toHaveBeenCalledTimes(1);
   });
 });
@@ -556,6 +556,35 @@ function changeSet(
     slotClocks: [],
     normalizedOrder: [],
     ...overrides,
+  };
+}
+
+function addInFlightSyncCommand(requestId: string, clientClock = 0): void {
+  getSocketState().inFlightSyncCommands = [
+    ...getSocketState().inFlightSyncCommands,
+    {
+      command: makePendingCommand(requestId, clientClock),
+      sendAfter: 0,
+      createdAt: 0,
+    },
+  ];
+}
+
+function pendingRequestIds(): string[] {
+  return getSocketState().inFlightSyncCommands.map((queued) => queued.command.requestId);
+}
+
+function makePendingCommand(requestId: string, clientClock: number): SyncCommand {
+  return {
+    protocolVersion: SYNC_PROTOCOL_VERSION,
+    schemaVersion: SYNC_SCHEMA_VERSION,
+    roomId: 'room-1',
+    requestId,
+    clientClock,
+    baseRoomEpoch: getSocketState().roomEpoch,
+    persistence: { durability: 'durable', resendable: true, storeProcessedRequest: true },
+    kind: 'patch-slots',
+    patches: [],
   };
 }
 

@@ -32,11 +32,11 @@ import {
   applyRoomSnapshot,
   processSyncAck,
   processSyncBroadcast,
-  queuePendingSyncRequest,
 } from './p5-reconciliation';
 import { clearSocketSubscriptions, registerSocketSubscriptions } from './subscriptions';
 import {
   applyKnownSlotClocks,
+  getPendingRequestRefs,
   getSocketState,
   resetReconnectState,
   setLastServerClock,
@@ -518,7 +518,7 @@ describe('P5 command queue drag flushing and backpressure', () => {
     setLastServerClock(4);
     useElementsStore.setState({ elements: [makeElement({ id: 'shape-1', x: 50 })] });
     getSocketState().serverElements = [makeElement({ id: 'shape-1', x: 40 })];
-    queuePendingSyncRequest({ requestId: 'late-ack', actorId: 'actor-1', clientClock: 0 });
+    addInFlightSyncCommand('late-ack');
 
     const result = processSyncAck({
       status: 'commit',
@@ -539,7 +539,7 @@ describe('P5 command queue drag flushing and backpressure', () => {
     });
 
     expect(result.status).toBe('ignored-stale');
-    expect(getSocketState().pendingSyncRequests).toEqual([]);
+    expect(getPendingRequestRefs()).toEqual([]);
     expect(useElementsStore.getState().elements[0]?.x).toBe(50);
   });
 
@@ -598,7 +598,6 @@ describe('P5 command queue drag flushing and backpressure', () => {
 
     enqueueMutationSyncCommands(createEvent('created-1'), 'room-1', { now: 0 });
     const requestId = getSocketState().inFlightSyncCommands[0]!.command.requestId;
-    queuePendingSyncRequest({ requestId, actorId: null, clientClock: 0 });
 
     processSyncAck({
       status: 'reject',
@@ -634,7 +633,7 @@ describe('P5 command queue drag flushing and backpressure', () => {
     });
 
     expect(getSocketState().inFlightSyncCommands).toEqual([]);
-    expect(getSocketState().pendingSyncRequests).toEqual([]);
+    expect(getPendingRequestRefs()).toEqual([]);
     expect(
       useElementsStore.getState().elements.filter((element) => element.id === 'created-1'),
     ).toHaveLength(1);
@@ -680,9 +679,7 @@ describe('P5 durable sync outbox', () => {
     expect(getSocketState().inFlightSyncCommands.map((queued) => queued.command.requestId)).toEqual(
       [requestId],
     );
-    expect(getSocketState().pendingSyncRequests).toEqual([
-      { requestId, actorId: null, clientClock: 0 },
-    ]);
+    expect(getPendingRequestRefs()).toEqual([{ requestId, clientClock: 0 }]);
 
     applyRoomSnapshot({
       protocolVersion: SYNC_PROTOCOL_VERSION,
@@ -866,7 +863,7 @@ describe('P5 durable sync outbox', () => {
 
     expect(getSocketState().inFlightSyncCommands).toEqual([]);
     expect(getSocketState().queuedSyncCommands).toEqual([]);
-    expect(getSocketState().pendingSyncRequests).toEqual([]);
+    expect(getPendingRequestRefs()).toEqual([]);
     expect(emit).not.toHaveBeenCalledWith(
       WS_EVENTS.SYNC_COMMAND,
       expect.objectContaining({ requestId }),
@@ -992,6 +989,31 @@ function emittedCommand(emit: ReturnType<typeof vi.fn>, index: number): SyncComm
   const command = emit.mock.calls[index]?.[1] as SyncCommand | undefined;
   if (!command) throw new Error(`Missing emitted command at ${index}.`);
   return command;
+}
+
+function addInFlightSyncCommand(requestId: string, clientClock = 0): void {
+  getSocketState().inFlightSyncCommands = [
+    ...getSocketState().inFlightSyncCommands,
+    {
+      command: makePendingCommand(requestId, clientClock),
+      sendAfter: 0,
+      createdAt: 0,
+    },
+  ];
+}
+
+function makePendingCommand(requestId: string, clientClock: number): SyncCommand {
+  return {
+    protocolVersion: SYNC_PROTOCOL_VERSION,
+    schemaVersion: SYNC_SCHEMA_VERSION,
+    roomId: 'room-1',
+    requestId,
+    clientClock,
+    baseRoomEpoch: getSocketState().roomEpoch,
+    persistence: { durability: 'durable', resendable: true, storeProcessedRequest: true },
+    kind: 'patch-slots',
+    patches: [],
+  };
 }
 
 function createEvent(id: string): MutationEvent {

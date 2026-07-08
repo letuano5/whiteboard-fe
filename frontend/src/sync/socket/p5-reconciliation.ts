@@ -38,7 +38,6 @@ import {
   removeKnownTombstones,
   setLastServerClock,
   setRoomEpoch,
-  type PendingSyncRequest,
 } from './state';
 
 export type P5ReconciliationResult =
@@ -51,18 +50,13 @@ interface ReconciliationOptions {
   requestRoomDiff?: (roomId: string, lastServerClock: SyncClock, incomingClock: SyncClock) => void;
 }
 
-export function queuePendingSyncRequest(request: PendingSyncRequest): void {
-  const state = getSocketState();
-  state.pendingSyncRequests = [...state.pendingSyncRequests, request];
-}
-
 export function processSyncAck(
   ack: SyncAck,
   options: ReconciliationOptions = {},
 ): P5ReconciliationResult {
   const state = getSocketState();
-  const isPending = state.pendingSyncRequests.some(
-    (request) => request.requestId === ack.requestId,
+  const isPending = state.inFlightSyncCommands.some(
+    (queued) => queued.command.requestId === ack.requestId,
   );
   if (!isPending && consumeStaleAckRequest(ack.requestId)) {
     return { status: 'ignored-stale', serverClock: ack.serverClock };
@@ -202,8 +196,8 @@ export function rematerializeOptimisticStore(): void {
 
 function clearPendingRequest(requestId: string): void {
   const state = getSocketState();
-  state.pendingSyncRequests = state.pendingSyncRequests.filter(
-    (request) => request.requestId !== requestId,
+  state.inFlightSyncCommands = state.inFlightSyncCommands.filter(
+    (queued) => queued.command.requestId !== requestId,
   );
 }
 
@@ -292,17 +286,11 @@ function reconcilePendingRequests(pendingRequests: PendingRequestStatus[]): void
       case 'processed':
         // Server already committed this request: drop it and let the replayed
         // ACK (if any) apply the committed change set.
-        state.pendingSyncRequests = state.pendingSyncRequests.filter(
-          (r) => r.requestId !== status.requestId,
-        );
         reconcilePendingCommandStatuses([status]);
         break;
       case 'conflict':
       case 'expired':
         // Not safe to replay: drop the pending entry and mark any late ACK stale.
-        state.pendingSyncRequests = state.pendingSyncRequests.filter(
-          (r) => r.requestId !== status.requestId,
-        );
         state.staleAckRequestIds.add(status.requestId);
         reconcilePendingCommandStatuses([status]);
         break;
@@ -322,9 +310,9 @@ function pendingStatusesOrUnknown(
   if (pendingRequests) return pendingRequests;
   if (hydratedRequestIds.size === 0) return [];
   return getSocketState()
-    .pendingSyncRequests.filter((request) => hydratedRequestIds.has(request.requestId))
-    .map((request) => ({
-      requestId: request.requestId,
+    .inFlightSyncCommands.filter((queued) => hydratedRequestIds.has(queued.command.requestId))
+    .map((queued) => ({
+      requestId: queued.command.requestId,
       status: 'unknown',
     }));
 }

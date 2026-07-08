@@ -86,10 +86,6 @@ export function flushPendingSyncCommands(force = false): void {
 
     state.queuedSyncCommands = state.queuedSyncCommands.slice(1);
     state.inFlightSyncCommands = [...state.inFlightSyncCommands, next];
-    state.pendingSyncRequests = [
-      ...state.pendingSyncRequests,
-      { requestId: next.command.requestId, actorId: null, clientClock: next.command.clientClock },
-    ];
     state.socket.emit(WS_EVENTS.SYNC_COMMAND, next.command);
   }
 
@@ -129,7 +125,6 @@ export function clearPendingSyncCommands(): void {
   const state = getSocketState();
   state.queuedSyncCommands = [];
   state.inFlightSyncCommands = [];
-  state.pendingSyncRequests = [];
   state.pausedForResync = false;
   if (state.syncFlushTimer !== null) {
     clearTimeout(state.syncFlushTimer);
@@ -171,9 +166,6 @@ export function reconcilePendingCommandStatuses(statuses: PendingRequestStatus[]
     if (!sent) continue;
     state.inFlightSyncCommands = state.inFlightSyncCommands.filter(
       (queued) => queued.command.requestId !== status.requestId,
-    );
-    state.pendingSyncRequests = state.pendingSyncRequests.filter(
-      (request) => request.requestId !== status.requestId,
     );
     if (isCommandRelevantForResend(sent.command)) {
       resendableUnknown.push({ ...sent, sendAfter: Date.now() });

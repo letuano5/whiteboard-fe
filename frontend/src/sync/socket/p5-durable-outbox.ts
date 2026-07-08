@@ -28,14 +28,6 @@ export async function hydratePendingSyncCommandsFromOutbox(roomId: string): Prom
 
   for (const queued of missing) hydratedDurableRequestIds.add(queued.command.requestId);
   state.inFlightSyncCommands = [...state.inFlightSyncCommands, ...missing];
-  state.pendingSyncRequests = [
-    ...state.pendingSyncRequests,
-    ...missing.map((queued) => ({
-      requestId: queued.command.requestId,
-      actorId: null,
-      clientClock: queued.command.clientClock,
-    })),
-  ];
 }
 
 export function clearDurablePendingSyncCommands(roomId: string | null): void {

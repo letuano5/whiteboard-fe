@@ -25,7 +25,6 @@ interface SocketClientState {
   roomId: string | null;
   hasJoined: boolean;
   reconnectPending: boolean;
-  pendingSyncRequests: PendingSyncRequest[];
   queuedSyncCommands: QueuedSyncCommand[];
   inFlightSyncCommands: QueuedSyncCommand[];
   syncFlushTimer: ReturnType<typeof setTimeout> | null;
@@ -35,12 +34,6 @@ interface SocketClientState {
   tombstoneElementIds: Set<string>;
   staleAckRequestIds: Set<string>;
   bufferedSyncEvents: Array<SyncAck | SyncBroadcast>;
-}
-
-export interface PendingSyncRequest {
-  requestId: string;
-  actorId: string | null;
-  clientClock: SyncClock;
 }
 
 export interface QueuedSyncCommand {
@@ -65,7 +58,6 @@ const state: SocketClientState = {
   roomId: null,
   hasJoined: false,
   reconnectPending: false,
-  pendingSyncRequests: [],
   queuedSyncCommands: [],
   inFlightSyncCommands: [],
   syncFlushTimer: null,
@@ -139,18 +131,17 @@ export function isKnownTombstone(elementId: string): boolean {
  * that was simply never received (see `getPendingRequestStatuses` on the backend).
  */
 export function getPendingRequestRefs(): PendingRequestRef[] {
-  return state.pendingSyncRequests.map((request) => ({
-    requestId: request.requestId,
-    clientClock: request.clientClock,
+  return state.inFlightSyncCommands.map((queued) => ({
+    requestId: queued.command.requestId,
+    clientClock: queued.command.clientClock,
   }));
 }
 
 export function markPendingRequestsStale(): string[] {
-  const requestIds = state.pendingSyncRequests.map((request) => request.requestId);
+  const requestIds = state.inFlightSyncCommands.map((queued) => queued.command.requestId);
   for (const requestId of requestIds) {
     state.staleAckRequestIds.add(requestId);
   }
-  state.pendingSyncRequests = [];
   state.inFlightSyncCommands = [];
   return requestIds;
 }
@@ -162,7 +153,6 @@ export function consumeStaleAckRequest(requestId: string): boolean {
 
 export function resetReconnectState(): void {
   state.lastServerClock = 0;
-  state.pendingSyncRequests = [];
   state.queuedSyncCommands = [];
   state.inFlightSyncCommands = [];
   if (state.syncFlushTimer !== null) {
