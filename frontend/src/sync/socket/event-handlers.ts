@@ -16,7 +16,7 @@ import {
   dropDurablePendingSyncCommands,
   hydratePendingSyncCommandsFromOutbox,
 } from './p5-durable-outbox';
-import { flushPendingSyncCommands } from './p5-command-queue';
+import { clearPendingSyncCommands, flushPendingSyncCommands } from './p5-command-queue';
 import {
   applyRoomDiff,
   applyRoomReplaced,
@@ -31,6 +31,7 @@ import {
   getSocketState,
   markPendingRequestsStale,
 } from './state';
+import { clearSocketSubscriptions } from './subscriptions';
 import type {
   CursorMovePayload,
   RoomAccessErrorPayload,
@@ -113,7 +114,7 @@ export function registerSocketEventHandlers(): void {
   });
 
   state.socket.on(WS_EVENTS.ROOM_ACCESS_ERROR, (data: RoomAccessErrorPayload) => {
-    useRoomAccessStore.getState().setRoomAccessError(data);
+    handleRoomAccessError(data);
   });
 
   state.socket.on(WS_EVENTS.USER_JOIN, (data: { presences: Presence[] }) => {
@@ -171,6 +172,20 @@ export function registerSocketEventHandlers(): void {
     }
     setRemoteDrafts(current);
   });
+}
+
+function handleRoomAccessError(data: RoomAccessErrorPayload): void {
+  const state = getSocketState();
+  useRoomAccessStore.getState().setRoomAccessError(data);
+  clearSocketSubscriptions();
+  clearPendingSyncCommands();
+  state.roomId = null;
+  state.reconnectPending = false;
+  state.hasJoined = false;
+
+  const { setRemoteCursors, setRemoteDrafts } = useInteractionStore.getState();
+  setRemoteCursors(new Map());
+  setRemoteDrafts(new Map());
 }
 
 function normalizeSnapshotPayload(data: RoomSnapshotPayload): RoomSnapshotPayload {

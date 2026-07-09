@@ -42,6 +42,10 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
     ],
   },
   {
+    title: 'Canvas',
+    items: [{ keys: 'Middle mouse drag', label: 'Pan canvas' }],
+  },
+  {
     title: 'Help',
     items: [{ keys: '?', label: 'Toggle this panel' }],
   },

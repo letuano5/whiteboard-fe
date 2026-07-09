@@ -47,7 +47,7 @@ export function createWhiteboardServer(ioServer: Server, deps: WhiteboardServerD
     socket.on(
       WS_EVENTS.JOIN_ROOM,
       catchSocketHandler(socket, WS_EVENTS.JOIN_ROOM, (payload: JoinRoomPayload) =>
-        handleJoinRoom(ioServer, socket, resolvedDeps, payload),
+        handleJoinRoom(socket, resolvedDeps, payload),
       ),
     );
 

@@ -31,7 +31,7 @@ const SCOPE_OPTIONS: { value: DocumentScopeFilter; label: string }[] = [
 ];
 
 export function DocumentDashboard() {
-  const session = useAuthStore((state: AuthStoreState) => state.session);
+  const userId = useAuthStore((state: AuthStoreState) => state.session?.user.id ?? null);
   const status = useAuthStore((state: AuthStoreState) => state.status);
   const initAuth = useAuthStore((state: AuthStoreState) => state.initAuth);
   const [documents, setDocuments] = useState<DashboardDocument[]>(EMPTY_DASHBOARD.documents);
@@ -42,7 +42,12 @@ export function DocumentDashboard() {
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const latestRequestRef = useRef(0);
+  const documentCountRef = useRef(0);
   const loadMoreRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    documentCountRef.current = documents.length;
+  }, [documents.length]);
 
   useEffect(() => {
     if (status === 'idle') {
@@ -57,7 +62,7 @@ export function DocumentDashboard() {
       latestRequestRef.current = requestId;
       setErrorMessage(null);
       if (mode === 'replace') {
-        setIsInitialLoading(true);
+        setIsInitialLoading(documentCountRef.current === 0);
       } else {
         setIsLoadingMore(true);
       }
@@ -85,12 +90,21 @@ export function DocumentDashboard() {
   );
 
   useEffect(() => {
-    if (!session) return;
+    if (!userId) {
+      latestRequestRef.current += 1;
+      setDocuments(EMPTY_DASHBOARD.documents);
+      setNextCursor(EMPTY_DASHBOARD.nextCursor);
+      setErrorMessage(null);
+      setIsInitialLoading(false);
+      setIsLoadingMore(false);
+      return;
+    }
+
     const timer = window.setTimeout(() => {
       void fetchDocuments('replace');
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [fetchDocuments, session]);
+  }, [fetchDocuments, userId]);
 
   useEffect(() => {
     const sentinel = loadMoreRef.current;
@@ -167,7 +181,7 @@ export function DocumentDashboard() {
 
   const isCheckingAuth = status === 'idle' || status === 'loading';
 
-  if (!session) {
+  if (!userId) {
     return <DocumentDashboardLogin isCheckingAuth={isCheckingAuth} />;
   }
 

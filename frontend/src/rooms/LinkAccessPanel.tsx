@@ -15,15 +15,17 @@ const ACCESS_MODES: Array<{ value: RoomAccessMode; label: string }> = [
 
 export function LinkAccessPanel({ visibility, onChange }: LinkAccessPanelProps) {
   const [copied, setCopied] = useState(false);
+  const shareUrl = window.location.href;
+  const displayUrl = formatShareUrl(shareUrl);
 
   function handleCopy() {
-    navigator.clipboard.writeText(window.location.href).then(
+    navigator.clipboard.writeText(shareUrl).then(
       () => {
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
       },
       () => {
-        window.prompt('Copy this link:', window.location.href);
+        window.prompt('Copy this link:', shareUrl);
       },
     );
   }
@@ -51,8 +53,11 @@ export function LinkAccessPanel({ visibility, onChange }: LinkAccessPanelProps) 
         ))}
       </div>
       <div className="mt-2 flex h-9 items-stretch overflow-hidden rounded-lg border border-field-border bg-paper">
-        <span className="flex min-w-0 flex-1 items-center truncate px-2.5 text-[13px] text-muted [font-variant-numeric:tabular-nums]">
-          {window.location.href}
+        <span
+          className="flex min-w-0 flex-1 items-center truncate px-2.5 text-[13px] text-muted [font-variant-numeric:tabular-nums]"
+          title={shareUrl}
+        >
+          {displayUrl}
         </span>
         <button
           type="button"
@@ -65,4 +70,21 @@ export function LinkAccessPanel({ visibility, onChange }: LinkAccessPanelProps) 
       </div>
     </div>
   );
+}
+
+function formatShareUrl(value: string): string {
+  try {
+    const url = new URL(value);
+    const roomId = url.searchParams.get('room');
+    if (!roomId) return `${url.host}${url.pathname}`;
+
+    return `/?room=${compactRoomId(roomId)}`;
+  } catch {
+    return value;
+  }
+}
+
+function compactRoomId(roomId: string): string {
+  if (roomId.length <= 16) return roomId;
+  return `${roomId.slice(0, 8)}...${roomId.slice(-4)}`;
 }

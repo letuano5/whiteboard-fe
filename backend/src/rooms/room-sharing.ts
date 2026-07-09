@@ -1,6 +1,7 @@
 import type { Request, Response, Router } from 'express';
 import express from 'express';
 import type { PrismaClient } from '@prisma/client';
+import type { Server } from 'socket.io';
 import {
   ROOM_CAPACITY_LIMITS,
   type RoomAccessMode,
@@ -13,6 +14,9 @@ import {
   type AppUserRepository,
   type AuthenticatedRequest,
 } from '../auth/index.js';
+import { refreshRoomAccessForRoomSockets } from '../realtime/room-access-refresh.js';
+import type { RoomPresenceStore } from '../realtime/types.js';
+import type { SyncRoom } from '../sync/index.js';
 import {
   inviteRoomUser,
   removeRoomMember,
@@ -29,6 +33,9 @@ interface RoomSharingDeps {
   authVerifier: AuthVerifier;
   appUserRepository: AppUserRepository;
   db: PrismaClient;
+  ioServer?: Server;
+  roomPresence?: RoomPresenceStore;
+  syncRooms?: Map<string, SyncRoom>;
 }
 
 interface RoomAccessHttpError {
@@ -120,9 +127,9 @@ async function handleUpdateRoomCapacity(
   }
 
   try {
-    response.json(
-      await updateRoomCapacitySettings(deps.db, readRoomId(request), request.auth.user, input),
-    );
+    const roomId = readRoomId(request);
+    const access = await updateRoomCapacitySettings(deps.db, roomId, request.auth.user, input);
+    await sendAccessUpdate(response, deps, roomId, access);
   } catch (error) {
     sendKnownAccessError(response, error);
   }
@@ -152,7 +159,9 @@ async function handleUpdateShareMode(
   }
 
   try {
-    response.json(await updateRoomShareMode(deps.db, readRoomId(request), request.auth.user, mode));
+    const roomId = readRoomId(request);
+    const access = await updateRoomShareMode(deps.db, roomId, request.auth.user, mode);
+    await sendAccessUpdate(response, deps, roomId, access);
   } catch (error) {
     sendKnownAccessError(response, error);
   }
@@ -164,7 +173,9 @@ async function handleRevokeShareLink(
   deps: RoomSharingDeps,
 ): Promise<void> {
   try {
-    response.json(await revokeRoomShareLink(deps.db, readRoomId(request), request.auth.user));
+    const roomId = readRoomId(request);
+    const access = await revokeRoomShareLink(deps.db, roomId, request.auth.user);
+    await sendAccessUpdate(response, deps, roomId, access);
   } catch (error) {
     sendKnownAccessError(response, error);
   }
@@ -182,17 +193,9 @@ async function handleInviteUser(
   }
 
   try {
-    response
-      .status(201)
-      .json(
-        await inviteRoomUser(
-          deps.db,
-          readRoomId(request),
-          request.auth.user,
-          input.email,
-          input.role,
-        ),
-      );
+    const roomId = readRoomId(request);
+    const access = await inviteRoomUser(deps.db, roomId, request.auth.user, input.email, input.role);
+    await sendAccessUpdate(response, deps, roomId, access, 201);
   } catch (error) {
     sendKnownAccessError(response, error);
   }
@@ -204,14 +207,14 @@ async function handleRevokeInvitation(
   deps: RoomSharingDeps,
 ): Promise<void> {
   try {
-    response.json(
-      await revokeRoomInvitation(
-        deps.db,
-        readRoomId(request),
-        request.auth.user,
-        readInvitationId(request),
-      ),
+    const roomId = readRoomId(request);
+    const access = await revokeRoomInvitation(
+      deps.db,
+      roomId,
+      request.auth.user,
+      readInvitationId(request),
     );
+    await sendAccessUpdate(response, deps, roomId, access);
   } catch (error) {
     sendKnownAccessError(response, error);
   }
@@ -229,15 +232,15 @@ async function handleUpdateMemberRole(
   }
 
   try {
-    response.json(
-      await updateRoomMemberRole(
-        deps.db,
-        readRoomId(request),
-        request.auth.user,
-        readUserId(request),
-        role,
-      ),
+    const roomId = readRoomId(request);
+    const access = await updateRoomMemberRole(
+      deps.db,
+      roomId,
+      request.auth.user,
+      readUserId(request),
+      role,
     );
+    await sendAccessUpdate(response, deps, roomId, access);
   } catch (error) {
     sendKnownAccessError(response, error);
   }
@@ -249,12 +252,34 @@ async function handleRemoveMember(
   deps: RoomSharingDeps,
 ): Promise<void> {
   try {
-    response.json(
-      await removeRoomMember(deps.db, readRoomId(request), request.auth.user, readUserId(request)),
-    );
+    const roomId = readRoomId(request);
+    const access = await removeRoomMember(deps.db, roomId, request.auth.user, readUserId(request));
+    await sendAccessUpdate(response, deps, roomId, access);
   } catch (error) {
     sendKnownAccessError(response, error);
   }
+}
+
+async function sendAccessUpdate(
+  response: Response<RoomAccessPayload | RoomAccessHttpError>,
+  deps: RoomSharingDeps,
+  roomId: string,
+  access: RoomAccessPayload,
+  status = 200,
+): Promise<void> {
+  if (deps.ioServer && deps.roomPresence) {
+    await refreshRoomAccessForRoomSockets(
+      deps.ioServer,
+      {
+        db: deps.db,
+        roomPresence: deps.roomPresence,
+        syncRooms: deps.syncRooms ?? new Map(),
+      },
+      roomId,
+    );
+  }
+
+  response.status(status).json(access);
 }
 
 function readShareMode(value: unknown): RoomAccessMode | null {

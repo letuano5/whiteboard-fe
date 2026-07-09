@@ -17,6 +17,7 @@ const syncRooms = new Map<string, SyncRoom>();
 const { httpServer, io } = createAppServer({
   ...authDeps,
   db: prisma,
+  roomPresence: roomState.roomPresence,
   syncRooms,
 });
 

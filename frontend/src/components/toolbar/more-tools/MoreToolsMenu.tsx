@@ -8,31 +8,60 @@ import { useDismissOnOutsideClick } from '../../../hooks/use-dismiss-on-outside-
 
 interface MoreToolsMenuProps {
   tool: ToolId;
+  open?: boolean;
+  showToolActive?: boolean;
   chooseTool: (id: ToolId) => void;
+  resetInteraction?: () => void;
+  onOpenChange?: (open: boolean) => void;
 }
 
-export default function MoreToolsMenu({ tool, chooseTool }: MoreToolsMenuProps) {
-  const [open, setOpen] = useState(false);
+export default function MoreToolsMenu({
+  tool,
+  open,
+  showToolActive,
+  chooseTool,
+  resetInteraction,
+  onOpenChange,
+}: MoreToolsMenuProps) {
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const isOverflowToolActive = OVERFLOW_TOOLS.some((t) => t.id === tool);
+  const isOpen = open ?? uncontrolledOpen;
+  const shouldShowToolActive = showToolActive ?? true;
 
-  useDismissOnOutsideClick([ref, menuRef], () => setOpen(false));
+  function setOpen(nextOpen: boolean) {
+    if (onOpenChange) {
+      onOpenChange(nextOpen);
+      return;
+    }
+
+    setUncontrolledOpen(nextOpen);
+  }
+
+  useDismissOnOutsideClick([ref, menuRef], () => {
+    if (isOpen) setOpen(false);
+  });
 
   function handleSelect(id: ToolId) {
     chooseTool(id);
     setOpen(false);
   }
 
+  function handleToggle() {
+    resetInteraction?.();
+    setOpen(!isOpen);
+  }
+
   return (
     <div ref={ref} className="relative">
       <ToolButton
         title="More tools"
-        active={open || isOverflowToolActive}
-        onClick={() => setOpen((o) => !o)}
+        active={isOpen || (shouldShowToolActive && isOverflowToolActive)}
+        onClick={handleToggle}
         Icon={MoreHorizontal}
       />
-      {open &&
+      {isOpen &&
         createPortal(
           <div
             ref={menuRef}

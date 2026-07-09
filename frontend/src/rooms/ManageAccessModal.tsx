@@ -1,5 +1,5 @@
 import type { FormEvent } from 'react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronRight, X } from 'lucide-react';
 import type { RoomAccessMode, RoomRole } from '../types/shared';
@@ -29,6 +29,15 @@ export function ManageAccessModal({ roomId, onClose }: ManageAccessModalProps) {
   const [role, setRole] = useState<EditableRole>('viewer');
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') onClose();
+    }
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
   async function apply(action: Promise<Parameters<typeof setRoomAccess>[0]>) {
     try {
       setError(null);
@@ -50,11 +59,16 @@ export function ManageAccessModal({ roomId, onClose }: ManageAccessModalProps) {
   }
 
   return createPortal(
-    <div role="presentation" className="fixed inset-0 z-[10000] grid place-items-center bg-black/70">
+    <div
+      role="presentation"
+      onClick={onClose}
+      className="fixed inset-0 z-[10000] grid place-items-center bg-black/70"
+    >
       <section
         role="dialog"
         aria-modal="true"
         aria-label="Share"
+        onClick={(event) => event.stopPropagation()}
         className="max-h-[calc(100vh-48px)] w-[min(460px,calc(100vw-32px))] overflow-auto rounded-[14px] bg-paper p-[18px] text-ink shadow-lg"
       >
         <div className="mb-4 flex items-center justify-between">

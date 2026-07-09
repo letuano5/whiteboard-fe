@@ -5,11 +5,18 @@ import { useInteractionStore } from '../../store/interaction.store';
 import { insertImageFromSource, readFileAsDataUrl } from './image-insert';
 
 interface ImageInsertControlProps {
+  open: boolean;
+  onOpen: () => void;
+  onClose: () => void;
   resetInteraction: () => void;
 }
 
-export default function ImageInsertControl({ resetInteraction }: ImageInsertControlProps) {
-  const [open, setOpen] = useState(false);
+export default function ImageInsertControl({
+  open,
+  onOpen,
+  onClose,
+  resetInteraction,
+}: ImageInsertControlProps) {
   const [url, setUrl] = useState('');
   const setTool = useInteractionStore((state) => state.setTool);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -17,11 +24,11 @@ export default function ImageInsertControl({ resetInteraction }: ImageInsertCont
   function openDialog() {
     resetInteraction();
     setTool('select');
-    setOpen(true);
+    onOpen();
   }
 
   function closeDialog() {
-    setOpen(false);
+    onClose();
     setUrl('');
   }
 
@@ -73,7 +80,7 @@ export default function ImageInsertControl({ resetInteraction }: ImageInsertCont
                 aria-label="Insert URL"
                 onClick={insertFromUrl}
                 disabled={url.trim().length === 0}
-                className={`h-[34px] w-[34px] rounded-md border border-field-border ${
+                className={`flex h-[34px] w-[34px] items-center justify-center rounded-md border border-field-border ${
                   url.trim().length === 0
                     ? 'cursor-not-allowed bg-panel text-muted'
                     : 'cursor-pointer bg-paper text-ink hover:bg-panel'
@@ -86,7 +93,7 @@ export default function ImageInsertControl({ resetInteraction }: ImageInsertCont
                 title="Upload image"
                 aria-label="Upload image"
                 onClick={() => fileInputRef.current?.click()}
-                className="h-[34px] w-[34px] cursor-pointer rounded-md border border-field-border bg-paper text-ink hover:bg-panel"
+                className="flex h-[34px] w-[34px] cursor-pointer items-center justify-center rounded-md border border-field-border bg-paper text-ink hover:bg-panel"
               >
                 <Upload size={16} />
               </button>
@@ -95,7 +102,7 @@ export default function ImageInsertControl({ resetInteraction }: ImageInsertCont
                 title="Close"
                 aria-label="Close"
                 onClick={closeDialog}
-                className="h-[34px] w-[34px] cursor-pointer rounded-md border border-field-border bg-paper text-ink hover:bg-panel"
+                className="flex h-[34px] w-[34px] cursor-pointer items-center justify-center rounded-md border border-field-border bg-paper text-ink hover:bg-panel"
               >
                 <X size={16} />
               </button>

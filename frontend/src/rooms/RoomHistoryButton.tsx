@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { AlertCircle, History, Loader2, RotateCcw, X } from 'lucide-react';
+import { useDismissOnOutsideClick } from '../hooks/use-dismiss-on-outside-click';
 import {
   fetchRoomSnapshots,
   restoreRoomSnapshot,
@@ -10,14 +11,36 @@ import {
 interface RoomHistoryButtonProps {
   roomId: string | null;
   canRestore: boolean;
+  isOpen?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
-export function RoomHistoryButton({ roomId, canRestore }: RoomHistoryButtonProps) {
-  const [isOpen, setIsOpen] = useState(false);
+export function RoomHistoryButton({
+  roomId,
+  canRestore,
+  isOpen: controlledIsOpen,
+  onOpenChange,
+}: RoomHistoryButtonProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [uncontrolledIsOpen, setUncontrolledIsOpen] = useState(false);
   const [snapshots, setSnapshots] = useState<RoomSnapshotMetadata[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [restoringId, setRestoringId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const isOpen = controlledIsOpen ?? uncontrolledIsOpen;
+
+  useDismissOnOutsideClick(containerRef, () => {
+    if (isOpen) setOpen(false);
+  });
+
+  function setOpen(nextOpen: boolean) {
+    if (onOpenChange) {
+      onOpenChange(nextOpen);
+      return;
+    }
+
+    setUncontrolledIsOpen(nextOpen);
+  }
 
   async function loadSnapshots(nextRoomId: string) {
     setIsLoading(true);
@@ -33,11 +56,11 @@ export function RoomHistoryButton({ roomId, canRestore }: RoomHistoryButtonProps
 
   function handleToggle() {
     if (isOpen) {
-      setIsOpen(false);
+      setOpen(false);
       return;
     }
     if (!roomId) return;
-    setIsOpen(true);
+    setOpen(true);
     void loadSnapshots(roomId);
   }
 
@@ -52,7 +75,7 @@ export function RoomHistoryButton({ roomId, canRestore }: RoomHistoryButtonProps
     setErrorMessage(null);
     try {
       await restoreRoomSnapshot(roomId, snapshot.id);
-      setIsOpen(false);
+      setOpen(false);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Could not restore snapshot.');
     } finally {
@@ -61,7 +84,7 @@ export function RoomHistoryButton({ roomId, canRestore }: RoomHistoryButtonProps
   }
 
   return (
-    <div className="relative">
+    <div ref={containerRef} className="relative">
       <button
         type="button"
         onClick={handleToggle}
@@ -82,7 +105,7 @@ export function RoomHistoryButton({ roomId, canRestore }: RoomHistoryButtonProps
             </div>
             <button
               type="button"
-              onClick={() => setIsOpen(false)}
+              onClick={() => setOpen(false)}
               className="flex h-8 w-8 items-center justify-center rounded-lg border border-rule bg-paper text-ink hover:bg-panel"
               aria-label="Close version history"
             >

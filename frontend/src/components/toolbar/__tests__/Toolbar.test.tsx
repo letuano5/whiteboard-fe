@@ -116,6 +116,24 @@ describe('image insertion control', () => {
 
     expect(useInteractionStore.getState().tool).toBe('select');
     expect(screen.getByTitle('Image')).toHaveClass('bg-primary');
+    expect(screen.getByTitle('Select')).not.toHaveClass('bg-primary');
+    expect(screen.getByTitle('Rectangle')).not.toHaveClass('bg-primary');
+  });
+
+  it('opens either Image or More tools, never both at once', () => {
+    useInteractionStore.getState().setTool('laser');
+    render(<Toolbar />);
+
+    fireEvent.click(screen.getByTitle('Image'));
+    expect(screen.getByRole('dialog', { name: 'Insert image' })).toBeInTheDocument();
+    expect(screen.getByTitle('Image')).toHaveClass('bg-primary');
+    expect(screen.getByTitle('More tools')).not.toHaveClass('bg-primary');
+
+    fireEvent.click(screen.getByTitle('More tools'));
+    expect(screen.queryByRole('dialog', { name: 'Insert image' })).not.toBeInTheDocument();
+    expect(screen.getByRole('menu', { name: 'More tools' })).toBeInTheDocument();
+    expect(screen.getByTitle('More tools')).toHaveClass('bg-primary');
+    expect(screen.getByTitle('Image')).not.toHaveClass('bg-primary');
   });
 
   // @covers AC-1 (046-image-background)
@@ -257,6 +275,18 @@ describe('More tools trigger active state', () => {
     const inactiveBtn = screen.getByTitle('Rectangle') as HTMLButtonElement;
     expect(moreBtn).not.toHaveClass('bg-primary');
     expect(inactiveBtn).not.toHaveClass('bg-primary');
+  });
+
+  it('suppresses fixed tool highlight while the More tools panel is open', () => {
+    useInteractionStore.setState({ tool: 'rectangle' } as Parameters<
+      typeof useInteractionStore.setState
+    >[0]);
+    render(<Toolbar />);
+
+    fireEvent.click(screen.getByTitle('More tools'));
+
+    expect(screen.getByTitle('More tools')).toHaveClass('bg-primary');
+    expect(screen.getByTitle('Rectangle')).not.toHaveClass('bg-primary');
   });
 });
 

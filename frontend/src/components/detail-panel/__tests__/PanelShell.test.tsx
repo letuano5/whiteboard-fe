@@ -14,7 +14,11 @@ describe('PanelShell mobile sizing', () => {
 
     expect(panel).toHaveClass('min-w-[220px]');
     expect(panel).toHaveClass('max-w-[min(320px,calc(100vw-32px))]');
-    expect(panel.style.maxHeight).toBe('60vh');
+    expect(panel.style.top).toBe('calc(64px + env(safe-area-inset-top))');
+    expect(panel.style.left).toBe('calc(12px + env(safe-area-inset-left))');
+    expect(panel.style.maxHeight).toBe(
+      'calc((100vh - 88px) - (env(safe-area-inset-bottom) + env(safe-area-inset-top)))',
+    );
     expect(panel.style.overflowY).toBe('auto');
   });
 });

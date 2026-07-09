@@ -1,4 +1,5 @@
 import { authenticatedFetch } from '../auth/authenticated-fetch';
+import { useAuthStore } from '../auth/auth.store';
 import type { Element } from '../types/shared';
 
 const SERVER_URL = import.meta.env?.VITE_BACKEND_URL ?? '';
@@ -143,6 +144,10 @@ function buildQuery(input: ListDocumentsInput): string {
 }
 
 async function readErrorMessage(response: Response): Promise<string> {
+  if (isDocumentAuthFailure(response)) {
+    clearAuthSession();
+  }
+
   try {
     const body: unknown = await response.json();
     if (isErrorResponse(body)) {
@@ -153,6 +158,19 @@ async function readErrorMessage(response: Response): Promise<string> {
   }
 
   return response.statusText || 'Document request failed.';
+}
+
+function isDocumentAuthFailure(response: Response): boolean {
+  return response.status === 401 || response.status === 403;
+}
+
+function clearAuthSession(): void {
+  useAuthStore.setState({
+    session: null,
+    status: 'anonymous',
+    errorMessage: null,
+    noticeMessage: null,
+  });
 }
 
 function isDocumentDashboardResponse(value: unknown): value is DocumentDashboardResponse {

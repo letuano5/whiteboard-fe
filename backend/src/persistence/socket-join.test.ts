@@ -170,6 +170,57 @@ describe('AC-3 (P3A-02) socket layer: empty DB → ROOM_SNAPSHOT { elements: [],
       }),
     );
   });
+
+  it('uses the server socket id instead of the client-supplied session id for presence', async () => {
+    roomPresence.set(
+      JOIN_PAYLOAD.roomId,
+      new Map([
+        [
+          'socket-existing',
+          {
+            sessionId: 'existing-session',
+            name: 'Existing',
+            color: '#111111',
+            cursor: null,
+            selectedIds: [],
+            status: 'active',
+          },
+        ],
+      ]),
+    );
+    const { db } = makeMockDb({});
+    const { ioServer, makeSocket, connect, getHandler, peerEmit } = makeFakeIo();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    createWhiteboardServer(ioServer as any, { roomPresence, syncRooms, db });
+
+    const socket = makeSocket({ socketId: 'server-socket-id' });
+    connect(socket);
+
+    const handler = getHandler(socket, WS_EVENTS.JOIN_ROOM);
+    await (handler as (p: typeof JOIN_PAYLOAD) => Promise<void>)({
+      ...JOIN_PAYLOAD,
+      sessionId: 'spoofed-peer-session',
+    });
+
+    expect(socket.data.sessionId).toBe('server-socket-id');
+    expect(roomPresence.get(JOIN_PAYLOAD.roomId)?.get(socket.id)).toMatchObject({
+      sessionId: 'server-socket-id',
+    });
+    expect(socket.emit).toHaveBeenCalledWith(WS_EVENTS.USER_JOIN, {
+      presences: [expect.objectContaining({ sessionId: 'existing-session' })],
+    });
+    expect(peerEmit).toHaveBeenCalledWith(WS_EVENTS.USER_JOIN, {
+      presences: [expect.objectContaining({ sessionId: 'server-socket-id' })],
+    });
+    expect(peerEmit).not.toHaveBeenCalledWith(
+      WS_EVENTS.USER_JOIN,
+      expect.objectContaining({
+        presences: expect.arrayContaining([
+          expect.objectContaining({ sessionId: 'spoofed-peer-session' }),
+        ]),
+      }),
+    );
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -194,9 +245,9 @@ describe('Cold-path join (AC-1 socket layer): room absent in memory, loads from 
       WS_EVENTS.ROOM_SNAPSHOT,
       expect.objectContaining({ elements: [el], documentClock: 7 }),
     );
-    expect(syncRooms.get(JOIN_PAYLOAD.roomId)?.getStateSnapshot().elements.get('cold-el-1')).toEqual(
-      el,
-    );
+    expect(
+      syncRooms.get(JOIN_PAYLOAD.roomId)?.getStateSnapshot().elements.get('cold-el-1'),
+    ).toEqual(el);
   });
 });
 
@@ -229,7 +280,7 @@ describe('AC-7 (P3A-02): DB error during join is non-fatal', () => {
   it('still broadcasts USER_JOIN even when DB error occurs during join', async () => {
     const { db } = makeMockDb({ loadError: new Error('DB connection failed') });
 
-    const { ioServer, makeSocket, connect, getHandler, toReturn } = makeFakeIo();
+    const { ioServer, makeSocket, connect, getHandler, peerEmit } = makeFakeIo();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     createWhiteboardServer(ioServer as any, { roomPresence, syncRooms, db });
 
@@ -239,8 +290,8 @@ describe('AC-7 (P3A-02): DB error during join is non-fatal', () => {
     const handler = getHandler(socket, WS_EVENTS.JOIN_ROOM);
     await (handler as (p: typeof JOIN_PAYLOAD) => Promise<void>)(JOIN_PAYLOAD);
 
-    // USER_JOIN should still be emitted to the room
-    expect(toReturn.emit).toHaveBeenCalledWith(
+    // USER_JOIN should still be emitted to peers.
+    expect(peerEmit).toHaveBeenCalledWith(
       WS_EVENTS.USER_JOIN,
       expect.objectContaining({ presences: expect.any(Array) }),
     );
@@ -308,7 +359,7 @@ describe('P4-03 admission control on socket join', () => {
       ]),
     );
     const { db } = makeAccessDb(makeAccessRoom({ visibility: 'link_edit', maxEditors: 1 }));
-    const { ioServer, makeSocket, connect, getHandler, toReturn } = makeFakeIo();
+    const { ioServer, makeSocket, connect, getHandler, peerEmit } = makeFakeIo();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     createWhiteboardServer(ioServer as any, { roomPresence, syncRooms, db });
 
@@ -326,11 +377,11 @@ describe('P4-03 admission control on socket join', () => {
       baseRole: 'editor',
       effectiveRole: 'viewer',
     });
-    expect(toReturn.emit).toHaveBeenCalledWith(
+    expect(peerEmit).toHaveBeenCalledWith(
       WS_EVENTS.USER_JOIN,
       expect.objectContaining({
         presences: expect.arrayContaining([
-          expect.objectContaining({ sessionId: JOIN_PAYLOAD.sessionId, effectiveRole: 'viewer' }),
+          expect.objectContaining({ sessionId: socket.id, effectiveRole: 'viewer' }),
         ]),
       }),
     );
