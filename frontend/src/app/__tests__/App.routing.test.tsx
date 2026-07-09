@@ -1,9 +1,11 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { act, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import App from '../App';
 import { useAuthStore } from '../../auth/auth.store';
 import { useRoomAccessStore } from '../../rooms/room-access.store';
 import { initSocketClient, stopSocketClient } from '../../sync/socket-client';
+import { dashboardPath } from '../routing';
 
 // Mock heavy canvas components to keep routing tests fast
 vi.mock('../../canvas/Whiteboard', () => ({
@@ -102,7 +104,7 @@ describe('App routing — AC-3', () => {
     });
   });
 
-  it('shows an access error instead of a saved canvas when a private room rejects the user', () => {
+  it('shows an access error with a dashboard button when a private room rejects the user', async () => {
     setLocation('/', '?room=private-room-id');
     useRoomAccessStore.getState().setRoomAccessError({
       code: 'room-access/forbidden',
@@ -114,6 +116,12 @@ describe('App routing — AC-3', () => {
     expect(screen.queryByTestId('whiteboard')).not.toBeInTheDocument();
     expect(screen.getByRole('alert')).toHaveTextContent('Room access denied.');
     expect(screen.getByRole('button', { name: /login/i })).toBeInTheDocument();
+    const pushStateSpy = vi.spyOn(window.history, 'pushState');
+
+    await userEvent.click(screen.getByRole('button', { name: /open dashboard/i }));
+
+    expect(pushStateSpy).toHaveBeenCalledWith({}, '', dashboardPath());
+    pushStateSpy.mockRestore();
   });
 });
 

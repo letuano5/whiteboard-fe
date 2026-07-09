@@ -1,6 +1,4 @@
 import { useEffect, useRef, useSyncExternalStore } from 'react';
-import { AlertTriangle } from 'lucide-react';
-import { AuthMenu } from '../auth/AuthMenu';
 import { RenderBenchmarkProbe } from '../benchmark/render-benchmark';
 import { useAuthStore } from '../auth/auth.store';
 import Whiteboard from '../canvas/Whiteboard';
@@ -9,6 +7,7 @@ import { useRoomAccessStore } from '../rooms/room-access.store';
 import { registerMutationHook } from '../store/mutation-pipeline';
 import { createArrowBindingHook } from '../sync/arrow-binding-hook';
 import { initSocketClient, stopSocketClient } from '../sync/socket-client';
+import { AccessDeniedScreen } from './AccessDeniedScreen';
 import { getLocationSnapshot, isDashboardPath, subscribeToLocation } from './routing';
 
 export default function App() {
@@ -60,43 +59,6 @@ export default function App() {
     <div style={{ width: '100vw', height: '100dvh' }}>
       <RenderBenchmarkProbe />
       <Whiteboard mode={boardMode} />
-    </div>
-  );
-}
-
-function AccessDeniedScreen({
-  isAuthenticated,
-  message,
-  code,
-}: {
-  isAuthenticated: boolean;
-  message: string;
-  code: string | null;
-}) {
-  const title = isAuthenticated ? "You don't have access" : 'Login required';
-  const body = isAuthenticated
-    ? 'This board is private. Ask the owner to add your email before opening it.'
-    : 'This board is private. Login with an account that has access to open it.';
-
-  return (
-    <div className="grid min-h-screen place-items-center bg-paper px-4 text-ink">
-      <div className="absolute right-4 top-4">
-        <AuthMenu />
-      </div>
-      <section className="w-[min(440px,calc(100vw-32px))] rounded-lg border border-rule bg-paper p-6 text-center shadow-lg">
-        <div className="mx-auto mb-4 flex h-11 w-11 items-center justify-center rounded-lg bg-warning-soft text-warning">
-          <AlertTriangle className="h-5 w-5" />
-        </div>
-        <p className="text-xs font-semibold uppercase text-muted">{code ?? 'room-access'}</p>
-        <h1 className="mt-2 text-xl font-semibold text-ink">{title}</h1>
-        <p className="mt-3 text-sm leading-6 text-muted">{body}</p>
-        <p
-          role="alert"
-          className="mt-4 rounded-md border border-warning-border bg-warning-soft p-3 text-sm text-warning"
-        >
-          {message}
-        </p>
-      </section>
     </div>
   );
 }
