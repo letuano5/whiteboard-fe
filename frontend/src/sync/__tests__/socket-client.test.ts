@@ -225,6 +225,31 @@ describe('socket-client — P3B-02 room access events', () => {
       role: 'viewer',
     });
   });
+
+  it('ROOM_ACCESS_ERROR blocks further saved-room sync from the current socket', async () => {
+    const { initSocketClient } = await import('../socket-client');
+    const { dispatchMutationEvent } = await import('../../store/mutation-pipeline');
+    const { useRoomAccessStore } = await import('../../rooms/room-access.store');
+    initSocketClient('room-access');
+
+    const errorHandler = _handlers[WS_EVENTS.ROOM_ACCESS_ERROR];
+    expect(errorHandler).toBeDefined();
+    errorHandler({
+      code: 'room-access/forbidden',
+      message: 'Room access changed. You no longer have permission to stay in this room.',
+    });
+
+    expect(useRoomAccessStore.getState().errorCode).toBe('room-access/forbidden');
+
+    mockEmit.mockClear();
+    const element = makeFakeElement('blocked-sync');
+    dispatchMutationEvent({ type: 'create', elements: [element], before: [] });
+
+    expect(mockEmit).not.toHaveBeenCalledWith(
+      WS_EVENTS.SYNC_COMMAND,
+      expect.objectContaining({ roomId: 'room-access' }),
+    );
+  });
 });
 
 // ─── 015 feature tests (live cursor presence) ────────────────────────────────

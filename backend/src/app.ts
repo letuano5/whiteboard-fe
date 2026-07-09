@@ -11,12 +11,14 @@ import { createNativeFileExportRouter } from './rooms/native-file-export.js';
 import { createNativeFileImportRouter } from './rooms/native-file-import.js';
 import { createRoomHistoryRouter } from './rooms/room-history.js';
 import { createRoomSharingRouter } from './rooms/room-sharing.js';
+import type { RoomPresenceStore } from './realtime/types.js';
 import type { SyncRoom } from './sync/index.js';
 
 export interface AppServerOptions {
   authVerifier?: AuthVerifier;
   appUserRepository?: AppUserRepository;
   db?: PrismaClient;
+  roomPresence?: RoomPresenceStore;
   syncRooms?: Map<string, SyncRoom>;
 }
 
@@ -49,6 +51,9 @@ export function createAppServer(options: AppServerOptions = {}) {
         authVerifier: options.authVerifier,
         appUserRepository: options.appUserRepository,
         db: options.db,
+        ioServer: io,
+        roomPresence: options.roomPresence,
+        syncRooms: options.syncRooms,
       }),
     );
     app.use(
