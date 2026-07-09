@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useInteractionStore } from '../../store/interaction.store';
 import { clearLaserTrail } from '../../canvas/tools/laser-tool';
 import { cancelFreehandDraw, cancelHighlighterDraw } from '../../canvas/tools/freehand-tool';
@@ -7,7 +8,10 @@ import ToolButton from './ToolButton';
 import MoreToolsMenu from './more-tools/MoreToolsMenu';
 import ImageInsertControl from './ImageInsertControl';
 
+type ActiveToolbarPanel = 'image' | 'more' | null;
+
 export default function Toolbar() {
+  const [activeToolbarPanel, setActiveToolbarPanel] = useState<ActiveToolbarPanel>(null);
   const tool = useInteractionStore((s) => s.tool);
   const setTool = useInteractionStore((s) => s.setTool);
   const setSelectedIds = useInteractionStore((s) => s.setSelectedIds);
@@ -31,7 +35,12 @@ export default function Toolbar() {
 
   function chooseTool(id: ToolId) {
     resetInteraction();
+    setActiveToolbarPanel(null);
     setTool(id);
+  }
+
+  function setToolbarPanel(nextPanel: ActiveToolbarPanel) {
+    setActiveToolbarPanel(nextPanel);
   }
 
   return (
@@ -47,13 +56,25 @@ export default function Toolbar() {
         <ToolButton
           key={id}
           title={label}
-          active={tool === id}
+          active={activeToolbarPanel === null && tool === id}
           onClick={() => chooseTool(id)}
           Icon={Icon}
         />
       ))}
-      <ImageInsertControl resetInteraction={resetInteraction} />
-      <MoreToolsMenu tool={tool} chooseTool={chooseTool} />
+      <ImageInsertControl
+        open={activeToolbarPanel === 'image'}
+        onOpen={() => setToolbarPanel('image')}
+        onClose={() => setToolbarPanel(null)}
+        resetInteraction={resetInteraction}
+      />
+      <MoreToolsMenu
+        tool={tool}
+        open={activeToolbarPanel === 'more'}
+        showToolActive={activeToolbarPanel === null}
+        chooseTool={chooseTool}
+        resetInteraction={resetInteraction}
+        onOpenChange={(open) => setToolbarPanel(open ? 'more' : null)}
+      />
     </div>
   );
 }

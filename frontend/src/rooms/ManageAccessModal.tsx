@@ -1,5 +1,5 @@
 import type { FormEvent } from 'react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronRight, X } from 'lucide-react';
 import type { RoomAccessMode, RoomRole } from '../types/shared';
@@ -28,6 +28,15 @@ export function ManageAccessModal({ roomId, onClose }: ManageAccessModalProps) {
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<EditableRole>('viewer');
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') onClose();
+    }
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
 
   async function apply(action: Promise<Parameters<typeof setRoomAccess>[0]>) {
     try {

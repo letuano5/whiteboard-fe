@@ -100,14 +100,35 @@ describe('Whiteboard role permissions', () => {
     const dashboardButton = screen.getByRole('button', { name: /open dashboard/i });
     const topRightCluster = screen.getByRole('button', { name: /share/i }).parentElement
       ?.parentElement as HTMLElement;
-    const selectHint = screen.getByText('Click chuột giữa để scroll canvas');
 
     expect(dashboardButton.style.top).toBe('calc(12px + env(safe-area-inset-top))');
     expect(dashboardButton.style.left).toBe('calc(12px + env(safe-area-inset-left))');
     expect(topRightCluster.style.top).toBe('calc(12px + env(safe-area-inset-top))');
     expect(topRightCluster.style.right).toBe('calc(12px + env(safe-area-inset-right))');
-    expect(selectHint.style.bottom).toBe('calc(12px + env(safe-area-inset-bottom))');
-    expect(selectHint.style.left).toBe('calc(12px + env(safe-area-inset-left))');
+    expect(screen.queryByText('Click chuột giữa để scroll canvas')).not.toBeInTheDocument();
+  });
+
+  it('keeps only the latest top-right panel open', () => {
+    useRoomAccessStore.getState().setRoomAccess({
+      roomId: 'room-1',
+      role: 'owner',
+      baseRole: 'owner',
+      effectiveRole: 'owner',
+      visibility: 'private',
+      shareRevokedAt: null,
+      members: [],
+      invitations: [],
+    });
+
+    render(<Whiteboard mode="saved" />);
+
+    fireEvent.click(screen.getByRole('button', { name: /share/i }));
+    expect(screen.getByRole('dialog', { name: /share/i })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /login/i }));
+
+    expect(screen.queryByRole('dialog', { name: /share/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /login/i })).toBeInTheDocument();
   });
 
   it('shows dashboard navigation on saved boards', async () => {

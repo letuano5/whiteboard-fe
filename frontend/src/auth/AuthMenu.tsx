@@ -4,25 +4,40 @@ import { AuthPanel } from './AuthPanel';
 import { useAuthStore, type AuthStoreState } from './auth.store';
 import { getInitials } from '../utils/initials';
 
-export function AuthMenu() {
+interface AuthMenuProps {
+  isOpen?: boolean;
+  onOpenChange?: (open: boolean) => void;
+}
+
+export function AuthMenu({ isOpen: controlledIsOpen, onOpenChange }: AuthMenuProps = {}) {
   const session = useAuthStore((state: AuthStoreState) => state.session);
   const status = useAuthStore((state: AuthStoreState) => state.status);
   const signOut = useAuthStore((state: AuthStoreState) => state.signOut);
-  const [isOpen, setIsOpen] = useState(false);
+  const [uncontrolledIsOpen, setUncontrolledIsOpen] = useState(false);
   const isLoading = status === 'loading';
+  const isOpen = controlledIsOpen ?? uncontrolledIsOpen;
+
+  function setOpen(nextOpen: boolean) {
+    if (onOpenChange) {
+      onOpenChange(nextOpen);
+      return;
+    }
+
+    setUncontrolledIsOpen(nextOpen);
+  }
 
   if (!session) {
     return (
       <div className="relative">
         <button
           type="button"
-          onClick={() => setIsOpen(true)}
+          onClick={() => setOpen(true)}
           className="flex h-9 items-center gap-1.5 rounded-md border border-ink bg-paper px-3 text-sm font-semibold text-ink shadow-sm transition-colors hover:bg-panel"
         >
           <LogIn className="h-4 w-4" />
           Login
         </button>
-        {isOpen ? <AuthPopover onClose={() => setIsOpen(false)} /> : null}
+        {isOpen ? <AuthPopover onClose={() => setOpen(false)} /> : null}
       </div>
     );
   }
@@ -35,7 +50,7 @@ export function AuthMenu() {
       <button
         type="button"
         aria-label="Account menu"
-        onClick={() => setIsOpen((current) => !current)}
+        onClick={() => setOpen(!isOpen)}
         className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-full border border-primary bg-primary text-sm font-semibold text-paper shadow-sm transition-opacity hover:opacity-90"
       >
         {session.user.avatarUrl ? (
@@ -63,7 +78,7 @@ export function AuthMenu() {
           </div>
           <button
             type="button"
-            onClick={() => void signOut()}
+            onClick={() => void signOut().then(() => setOpen(false))}
             disabled={isLoading}
             className="flex h-10 w-full items-center justify-center gap-2 rounded-md border border-ink bg-paper px-3 text-sm font-semibold text-ink transition-colors hover:bg-panel disabled:cursor-not-allowed disabled:opacity-60"
           >

@@ -111,4 +111,13 @@ describe('ManageAccessModal', () => {
       expect(updateRoomCapacitySettings).toHaveBeenCalledWith('room-1', { maxEditors: 5 });
     });
   });
+
+  it('closes when Escape is pressed', () => {
+    const onClose = vi.fn();
+    render(<ManageAccessModal roomId="room-1" onClose={onClose} />);
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+
+    expect(onClose).toHaveBeenCalledOnce();
+  });
 });

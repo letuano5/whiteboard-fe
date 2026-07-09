@@ -50,6 +50,7 @@ describe('ShareLinkButton — AC-7', () => {
     expect(screen.getByRole('button', { name: 'Private' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Can view' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Can edit' })).toBeInTheDocument();
+    expect(screen.getByText('/?room=test-room')).toBeInTheDocument();
   });
 });
 

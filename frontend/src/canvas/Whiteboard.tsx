@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Menu } from 'lucide-react';
 import { useElementsStore, useInteractionStore, useCameraStore } from '../store';
 import ContextMenu from '../components/context-menu/ContextMenu';
@@ -28,6 +28,8 @@ interface WhiteboardProps {
   mode?: 'local' | 'saved';
 }
 
+type ActivePanel = 'version' | 'share' | 'auth' | null;
+
 async function openDashboard(isLocalBoard: boolean): Promise<void> {
   // Wait for any pending delete/patch to reach the server first, so the
   // dashboard's fresh fetch doesn't race ahead of a just-issued mutation.
@@ -47,6 +49,7 @@ export default function Whiteboard({ mode = 'saved' }: WhiteboardProps) {
   const isLocalBoard = mode === 'local';
   const canEdit = isLocalBoard || canEditRoom(role);
   const roomId = new URLSearchParams(window.location.search).get('room');
+  const [activePanel, setActivePanel] = useState<ActivePanel>(null);
   const activeTool = canEdit ? tool : 'select';
   const editingElement = editingId
     ? (elements.find((el) => el.id === editingId && !el.isDeleted) ?? null)
@@ -65,6 +68,15 @@ export default function Whiteboard({ mode = 'saved' }: WhiteboardProps) {
       spaceDown,
       tool: activeTool,
     });
+
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') setActivePanel(null);
+    }
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   // T023: cursor style based on pan/zoom mode
   const cursor = isPanning
@@ -121,8 +133,8 @@ export default function Whiteboard({ mode = 'saved' }: WhiteboardProps) {
       {canEdit && editingElement && <TextEditor element={editingElement} camera={camera} />}
       {canEdit && <ActionToolbar />}
       {canEdit && <Toolbar />}
-      {canEdit && <DetailPanel />}
-      {canEdit && <DefaultStylePanel />}
+      {canEdit && activePanel === null && <DetailPanel />}
+      {canEdit && activePanel === null && <DefaultStylePanel />}
       <BackToContent containerRef={containerRef} />
       {/* T021: Online users panel + share button stacked in top-right */}
       <div
@@ -146,26 +158,25 @@ export default function Whiteboard({ mode = 'saved' }: WhiteboardProps) {
           <>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <NativeFileControls mode="saved" roomId={roomId} canImport={canEdit} />
-              <RoomHistoryButton roomId={roomId} canRestore={role === 'owner'} />
-              <ShareLinkButton />
-              <AuthMenu />
+              <RoomHistoryButton
+                roomId={roomId}
+                canRestore={role === 'owner'}
+                isOpen={activePanel === 'version'}
+                onOpenChange={(open) => setActivePanel(open ? 'version' : null)}
+              />
+              <ShareLinkButton
+                isOpen={activePanel === 'share'}
+                onOpenChange={(open) => setActivePanel(open ? 'share' : null)}
+              />
+              <AuthMenu
+                isOpen={activePanel === 'auth'}
+                onOpenChange={(open) => setActivePanel(open ? 'auth' : null)}
+              />
             </div>
             <OnlineUsersPanel />
           </>
         )}
       </div>
-      {activeTool === 'select' && (
-        <div
-          className="absolute select-none text-xs text-muted"
-          style={{
-            bottom: 'calc(12px + env(safe-area-inset-bottom))',
-            left: 'calc(12px + env(safe-area-inset-left))',
-            pointerEvents: 'none',
-          }}
-        >
-          Click chuột giữa để scroll canvas
-        </div>
-      )}
     </div>
   );
 }
