@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { authenticatedFetch } from '../../auth/authenticated-fetch';
+import { useAuthStore } from '../../auth/auth.store';
+import type { AuthSession } from '../../auth/types';
 import {
   createDocument,
   listDocuments,
@@ -32,8 +34,25 @@ const dashboardResponse = {
   nextCursor: 'cursor-next',
 };
 
+const session: AuthSession = {
+  accessToken: 'access-token',
+  expiresAt: 123,
+  user: {
+    id: 'user-123',
+    email: 'player@example.com',
+    name: 'Player',
+    avatarUrl: null,
+  },
+};
+
 beforeEach(() => {
   vi.mocked(authenticatedFetch).mockReset();
+  useAuthStore.setState({
+    session: null,
+    status: 'idle',
+    errorMessage: null,
+    noticeMessage: null,
+  });
 });
 
 describe('document dashboard API client', () => {
@@ -103,5 +122,54 @@ describe('document dashboard API client', () => {
     expect(authenticatedFetch).toHaveBeenNthCalledWith(3, '/api/documents/room-owned', {
       method: 'DELETE',
     });
+  });
+
+  it('clears the auth session when a dashboard request becomes unauthenticated', async () => {
+    useAuthStore.setState({ session, status: 'authenticated' });
+    vi.mocked(authenticatedFetch).mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          error: { code: 'documents/unauthenticated', message: 'Authentication is required.' },
+        }),
+        { status: 401 },
+      ),
+    );
+
+    await expect(listDocuments()).rejects.toThrow('Authentication is required.');
+
+    expect(useAuthStore.getState().session).toBeNull();
+    expect(useAuthStore.getState().status).toBe('anonymous');
+  });
+
+  it('clears the auth session when a document action loses access', async () => {
+    useAuthStore.setState({ session, status: 'authenticated' });
+    vi.mocked(authenticatedFetch).mockResolvedValue(
+      new Response(
+        JSON.stringify({ error: { code: 'documents/forbidden', message: 'Room access denied.' } }),
+        { status: 403 },
+      ),
+    );
+
+    await expect(openDocument('room-owned')).rejects.toThrow('Room access denied.');
+
+    expect(useAuthStore.getState().session).toBeNull();
+    expect(useAuthStore.getState().status).toBe('anonymous');
+  });
+
+  it('keeps the auth session for non-auth document errors', async () => {
+    useAuthStore.setState({ session, status: 'authenticated' });
+    vi.mocked(authenticatedFetch).mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          error: { code: 'documents/not-found', message: 'Document was not found.' },
+        }),
+        { status: 404 },
+      ),
+    );
+
+    await expect(openDocument('missing-room')).rejects.toThrow('Document was not found.');
+
+    expect(useAuthStore.getState().session).toEqual(session);
+    expect(useAuthStore.getState().status).toBe('authenticated');
   });
 });
