@@ -29,6 +29,17 @@ describe('AuthMenu', () => {
     expect(screen.getByTestId('auth-panel')).toBeInTheDocument();
   });
 
+  it('closes the Login panel when clicking outside', () => {
+    render(<AuthMenu />);
+
+    fireEvent.click(screen.getByRole('button', { name: /login/i }));
+    expect(screen.getByTestId('auth-panel')).toBeInTheDocument();
+
+    fireEvent.mouseDown(document.body);
+
+    expect(screen.queryByTestId('auth-panel')).not.toBeInTheDocument();
+  });
+
   it('shows an avatar menu with Sign out for authenticated users', async () => {
     useAuthStore.setState({
       session: {

@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { LogIn, LogOut, X } from 'lucide-react';
 import { AuthPanel } from './AuthPanel';
 import { useAuthStore, type AuthStoreState } from './auth.store';
 import { getInitials } from '../utils/initials';
+import { useDismissOnOutsideClick } from '../hooks/use-dismiss-on-outside-click';
 
 interface AuthMenuProps {
   isOpen?: boolean;
@@ -10,12 +11,17 @@ interface AuthMenuProps {
 }
 
 export function AuthMenu({ isOpen: controlledIsOpen, onOpenChange }: AuthMenuProps = {}) {
+  const menuRef = useRef<HTMLDivElement>(null);
   const session = useAuthStore((state: AuthStoreState) => state.session);
   const status = useAuthStore((state: AuthStoreState) => state.status);
   const signOut = useAuthStore((state: AuthStoreState) => state.signOut);
   const [uncontrolledIsOpen, setUncontrolledIsOpen] = useState(false);
   const isLoading = status === 'loading';
   const isOpen = controlledIsOpen ?? uncontrolledIsOpen;
+
+  useDismissOnOutsideClick(menuRef, () => {
+    if (isOpen) setOpen(false);
+  });
 
   function setOpen(nextOpen: boolean) {
     if (onOpenChange) {
@@ -28,7 +34,7 @@ export function AuthMenu({ isOpen: controlledIsOpen, onOpenChange }: AuthMenuPro
 
   if (!session) {
     return (
-      <div className="relative">
+      <div ref={menuRef} className="relative">
         <button
           type="button"
           onClick={() => setOpen(true)}
@@ -46,7 +52,7 @@ export function AuthMenu({ isOpen: controlledIsOpen, onOpenChange }: AuthMenuPro
   const initials = getInitials(label);
 
   return (
-    <div className="relative">
+    <div ref={menuRef} className="relative">
       <button
         type="button"
         aria-label="Account menu"

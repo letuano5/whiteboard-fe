@@ -59,11 +59,16 @@ export function ManageAccessModal({ roomId, onClose }: ManageAccessModalProps) {
   }
 
   return createPortal(
-    <div role="presentation" className="fixed inset-0 z-[10000] grid place-items-center bg-black/70">
+    <div
+      role="presentation"
+      onClick={onClose}
+      className="fixed inset-0 z-[10000] grid place-items-center bg-black/70"
+    >
       <section
         role="dialog"
         aria-modal="true"
         aria-label="Share"
+        onClick={(event) => event.stopPropagation()}
         className="max-h-[calc(100vh-48px)] w-[min(460px,calc(100vw-32px))] overflow-auto rounded-[14px] bg-paper p-[18px] text-ink shadow-lg"
       >
         <div className="mb-4 flex items-center justify-between">

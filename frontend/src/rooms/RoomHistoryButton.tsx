@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { AlertCircle, History, Loader2, RotateCcw, X } from 'lucide-react';
+import { useDismissOnOutsideClick } from '../hooks/use-dismiss-on-outside-click';
 import {
   fetchRoomSnapshots,
   restoreRoomSnapshot,
@@ -20,12 +21,17 @@ export function RoomHistoryButton({
   isOpen: controlledIsOpen,
   onOpenChange,
 }: RoomHistoryButtonProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
   const [uncontrolledIsOpen, setUncontrolledIsOpen] = useState(false);
   const [snapshots, setSnapshots] = useState<RoomSnapshotMetadata[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [restoringId, setRestoringId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const isOpen = controlledIsOpen ?? uncontrolledIsOpen;
+
+  useDismissOnOutsideClick(containerRef, () => {
+    if (isOpen) setOpen(false);
+  });
 
   function setOpen(nextOpen: boolean) {
     if (onOpenChange) {
@@ -78,7 +84,7 @@ export function RoomHistoryButton({
   }
 
   return (
-    <div className="relative">
+    <div ref={containerRef} className="relative">
       <button
         type="button"
         onClick={handleToggle}

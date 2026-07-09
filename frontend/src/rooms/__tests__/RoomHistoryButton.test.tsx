@@ -82,4 +82,15 @@ describe('RoomHistoryButton', () => {
       screen.queryByRole('button', { name: /restore snapshot from/i }),
     ).not.toBeInTheDocument();
   });
+
+  it('closes the version history panel when clicking outside', async () => {
+    render(<RoomHistoryButton roomId="room-1" canRestore />);
+
+    fireEvent.click(screen.getByRole('button', { name: /open version history/i }));
+    expect(await screen.findByRole('heading', { name: /snapshot history/i })).toBeInTheDocument();
+
+    fireEvent.mouseDown(document.body);
+
+    expect(screen.queryByRole('heading', { name: /snapshot history/i })).not.toBeInTheDocument();
+  });
 });
