@@ -105,22 +105,40 @@ function resolveBaseRole(
     return { baseRole: 'owner', fromLink: false };
   }
 
+  const linkRole = resolveLinkRole(room);
+  let memberRole: EffectiveRoomRole = 'none';
   if (user) {
-    const memberRole = room.members.find((member) => member.userId === user.id)?.role;
-    if (memberRole && isRoomRole(memberRole)) {
-      return { baseRole: memberRole, fromLink: false };
+    const role = room.members.find((member) => member.userId === user.id)?.role;
+    if (role && isRoomRole(role)) {
+      memberRole = role;
     }
   }
 
+  const baseRole = strongerRoomRole(memberRole, linkRole);
+  return { baseRole, fromLink: roleRankValue(linkRole) > roleRankValue(memberRole) };
+}
+
+function resolveLinkRole(room: RoomAccessRecord): EffectiveRoomRole {
   const visibility = normalizeVisibility(room.visibility);
   if (visibility === 'link_view') {
-    return { baseRole: 'viewer', fromLink: true };
+    return 'viewer';
   }
   if (visibility === 'link_edit') {
-    return { baseRole: 'editor', fromLink: true };
+    return 'editor';
   }
 
-  return { baseRole: 'none', fromLink: false };
+  return 'none';
+}
+
+function strongerRoomRole(left: EffectiveRoomRole, right: EffectiveRoomRole): EffectiveRoomRole {
+  return roleRankValue(left) >= roleRankValue(right) ? left : right;
+}
+
+function roleRankValue(role: EffectiveRoomRole): number {
+  if (role === 'owner') return 3;
+  if (role === 'editor') return 2;
+  if (role === 'viewer') return 1;
+  return 0;
 }
 
 function resolveEffectiveRole(

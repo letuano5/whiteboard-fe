@@ -44,6 +44,44 @@ describe('resolveRoomAccess', () => {
     });
   });
 
+  it('upgrades email viewers to editor when the room link allows editing', async () => {
+    const db = makeDb([
+      makeRoom({
+        visibility: 'link_edit',
+        members: [makeMember(owner, 'owner'), makeMember(editor, 'viewer')],
+      }),
+    ]);
+
+    await expect(resolveRoomAccess(db, 'room-1', editor)).resolves.toMatchObject({
+      baseRole: 'editor',
+      effectiveRole: 'editor',
+      role: 'editor',
+      visibility: 'link_edit',
+    });
+  });
+
+  it('still downgrades email viewers upgraded by link_edit when maxEditors is full', async () => {
+    const db = makeDb([
+      makeRoom({
+        visibility: 'link_edit',
+        maxEditors: 1,
+        members: [makeMember(owner, 'owner'), makeMember(editor, 'viewer')],
+      }),
+    ]);
+
+    await expect(
+      resolveRoomAccess(db, 'room-1', editor, {
+        activePresences: [makePresence('existing-editor', 'editor')],
+        currentSessionId: 'new-session',
+      }),
+    ).resolves.toMatchObject({
+      baseRole: 'editor',
+      effectiveRole: 'viewer',
+      role: 'viewer',
+      maxEditors: 1,
+    });
+  });
+
   it('rejects new participants when maxParticipants is already reached', async () => {
     // @covers AC-3
     const db = makeDb([makeRoom({ visibility: 'link_view', maxParticipants: 1 })]);
