@@ -425,6 +425,32 @@ describe('P5 command queue drag flushing and backpressure', () => {
     });
   });
 
+  it('sets command clientClock to the last applied server clock, not wall time', () => {
+    // @covers P5-07 pending request GC classification
+    const emit = vi.fn();
+    const element = makeElement({ id: 'shape-1', x: 0 });
+    applyRoomSnapshot({
+      protocolVersion: SYNC_PROTOCOL_VERSION,
+      schemaVersion: SYNC_SCHEMA_VERSION,
+      roomId: 'room-1',
+      serverClock: 42,
+      roomEpoch: 0,
+      elements: [element],
+      slotClocks: [{ elementId: 'shape-1', slot: 'transform.position', clock: 42 }],
+    });
+    getSocketState().socket = { emit, connected: true } as never;
+    getSocketState().roomId = 'room-1';
+
+    enqueueMutationSyncCommands(patchEvent(0, 25), 'room-1', {
+      final: true,
+      now: 1_700_000_000_000,
+    });
+
+    const command = emittedCommand(emit, 0);
+    expect(command.clientClock).toBe(42);
+    expect(getPendingRequestRefs()).toEqual([{ requestId: command.requestId, clientClock: 42 }]);
+  });
+
   it('materializes z-order updates as reorder commands', () => {
     const emit = vi.fn();
     const bottom = makeElement({ id: 'bottom', zIndex: 1 });

@@ -12,7 +12,7 @@ import { useElementsStore } from '../../store/elements.store';
 import { SYNC_PROTOCOL_VERSION, SYNC_SCHEMA_VERSION } from '../../types/shared';
 import { generateId } from '../../utils/id';
 import { applySlotPatch, slotValueFromElement } from './p5-change-set';
-import { getKnownSlotClock, getRoomEpochState } from './state';
+import { getKnownSlotClock, getLastServerClockState, getRoomEpochState } from './state';
 
 const PATCHABLE_SLOTS: SyncSlot[] = [
   'transform.position',
@@ -217,13 +217,13 @@ export function cloneElement(element: Element): Element {
   return { ...element, props: { ...element.props } };
 }
 
-function baseCommand(roomId: string, now: number, final: boolean): SyncCommandBase {
+function baseCommand(roomId: string, _createdAt: number, final: boolean): SyncCommandBase {
   return {
     protocolVersion: SYNC_PROTOCOL_VERSION,
     schemaVersion: SYNC_SCHEMA_VERSION,
     roomId,
     requestId: generateId(),
-    clientClock: now,
+    clientClock: getLastServerClockState(),
     baseRoomEpoch: getRoomEpochState(),
     persistence: final
       ? { durability: 'durable', resendable: true, storeProcessedRequest: true }
