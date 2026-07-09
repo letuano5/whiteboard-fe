@@ -34,6 +34,22 @@ export function DocumentDashboard() {
   const userId = useAuthStore((state: AuthStoreState) => state.session?.user.id ?? null);
   const status = useAuthStore((state: AuthStoreState) => state.status);
   const initAuth = useAuthStore((state: AuthStoreState) => state.initAuth);
+  const isCheckingAuth = status === 'idle' || status === 'loading';
+
+  useEffect(() => {
+    if (status === 'idle') {
+      void initAuth();
+    }
+  }, [initAuth, status]);
+
+  if (!userId) {
+    return <DocumentDashboardLogin isCheckingAuth={isCheckingAuth} />;
+  }
+
+  return <AuthenticatedDocumentDashboard key={userId} />;
+}
+
+function AuthenticatedDocumentDashboard() {
   const [documents, setDocuments] = useState<DashboardDocument[]>(EMPTY_DASHBOARD.documents);
   const [nextCursor, setNextCursor] = useState<string | null>(EMPTY_DASHBOARD.nextCursor);
   const [search, setSearch] = useState('');
@@ -48,12 +64,6 @@ export function DocumentDashboard() {
   useEffect(() => {
     documentCountRef.current = documents.length;
   }, [documents.length]);
-
-  useEffect(() => {
-    if (status === 'idle') {
-      void initAuth();
-    }
-  }, [initAuth, status]);
 
   const fetchDocuments = useCallback(
     async (mode: 'replace' | 'append', cursor: string | null = null) => {
@@ -90,21 +100,11 @@ export function DocumentDashboard() {
   );
 
   useEffect(() => {
-    if (!userId) {
-      latestRequestRef.current += 1;
-      setDocuments(EMPTY_DASHBOARD.documents);
-      setNextCursor(EMPTY_DASHBOARD.nextCursor);
-      setErrorMessage(null);
-      setIsInitialLoading(false);
-      setIsLoadingMore(false);
-      return;
-    }
-
     const timer = window.setTimeout(() => {
       void fetchDocuments('replace');
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [fetchDocuments, userId]);
+  }, [fetchDocuments]);
 
   useEffect(() => {
     const sentinel = loadMoreRef.current;
@@ -177,12 +177,6 @@ export function DocumentDashboard() {
   function handleOpenLocalBoard() {
     window.history.pushState({}, '', homePath());
     window.location.reload();
-  }
-
-  const isCheckingAuth = status === 'idle' || status === 'loading';
-
-  if (!userId) {
-    return <DocumentDashboardLogin isCheckingAuth={isCheckingAuth} />;
   }
 
   return (
