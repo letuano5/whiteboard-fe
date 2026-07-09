@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useAuthStore } from '../../auth/auth.store';
 import type { AuthSession } from '../../auth/types';
@@ -26,6 +26,17 @@ const session: AuthSession = {
     id: 'user-123',
     email: 'player@example.com',
     name: 'Player',
+    avatarUrl: null,
+  },
+};
+
+const otherSession: AuthSession = {
+  accessToken: 'other-access-token',
+  expiresAt: 456,
+  user: {
+    id: 'user-456',
+    email: 'coach@example.com',
+    name: 'Coach',
     avatarUrl: null,
   },
 };
@@ -62,6 +73,49 @@ const dashboardResponse = {
   nextCursor: null,
 };
 
+const otherDashboardResponse = {
+  documents: [
+    {
+      id: 'other-room',
+      name: 'Other User Plan',
+      ownerId: 'user-456',
+      ownerName: 'Coach',
+      role: 'owner',
+      visibility: 'private',
+      locked: false,
+      archivedAt: null,
+      updatedAt: '2026-07-01T10:00:00.000Z',
+      lastOpenedAt: null,
+      previewElements: [],
+    },
+  ],
+  nextCursor: null,
+};
+
+const pagedDashboardResponse = {
+  documents: [dashboardResponse.documents[0]],
+  nextCursor: 'cursor-1',
+};
+
+const nextPageDashboardResponse = {
+  documents: [
+    {
+      id: 'next-room',
+      name: 'Next Page Plan',
+      ownerId: 'user-123',
+      ownerName: 'Player',
+      role: 'editor',
+      visibility: 'private',
+      locked: false,
+      archivedAt: null,
+      updatedAt: '2026-07-01T12:00:00.000Z',
+      lastOpenedAt: null,
+      previewElements: [],
+    },
+  ],
+  nextCursor: null,
+};
+
 function setDashboardLocation() {
   Object.defineProperty(window, 'location', {
     value: {
@@ -72,6 +126,12 @@ function setDashboardLocation() {
       reload: vi.fn(),
     },
     writable: true,
+  });
+}
+
+async function waitForDashboardTimers() {
+  await act(async () => {
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
   });
 }
 
@@ -125,6 +185,70 @@ describe('DocumentDashboard', () => {
     });
   });
 
+  it('does not refetch when the session object and access token change for the same user', async () => {
+    useAuthStore.setState({ session, status: 'authenticated' });
+
+    render(<DocumentDashboard />);
+    await screen.findByText('Owned Plan');
+
+    act(() => {
+      useAuthStore.setState({
+        session: { ...session, accessToken: 'refreshed-token', expiresAt: 999 },
+        status: 'authenticated',
+      });
+    });
+    await waitForDashboardTimers();
+
+    expect(screen.getByText('Owned Plan')).toBeInTheDocument();
+    expect(listDocuments).toHaveBeenCalledTimes(1);
+  });
+
+  it('clears visible documents on logout without refetching the dashboard', async () => {
+    useAuthStore.setState({ session, status: 'authenticated' });
+
+    render(<DocumentDashboard />);
+    await screen.findByText('Owned Plan');
+
+    act(() => {
+      useAuthStore.setState({ session: null, status: 'anonymous' });
+    });
+    await waitForDashboardTimers();
+
+    expect(screen.getByText('Document dashboard')).toBeInTheDocument();
+    expect(screen.queryByText('Owned Plan')).not.toBeInTheDocument();
+    expect(screen.queryByText('Shared Plan')).not.toBeInTheDocument();
+    expect(listDocuments).toHaveBeenCalledTimes(1);
+  });
+
+  it('fetches the first page for a different user after logout', async () => {
+    vi.mocked(listDocuments)
+      .mockResolvedValueOnce(dashboardResponse)
+      .mockResolvedValueOnce(otherDashboardResponse);
+    useAuthStore.setState({ session, status: 'authenticated' });
+
+    render(<DocumentDashboard />);
+    await screen.findByText('Owned Plan');
+
+    act(() => {
+      useAuthStore.setState({ session: null, status: 'anonymous' });
+    });
+    await waitForDashboardTimers();
+
+    act(() => {
+      useAuthStore.setState({ session: otherSession, status: 'authenticated' });
+    });
+
+    expect(await screen.findByText('Other User Plan')).toBeInTheDocument();
+    expect(screen.queryByText('Owned Plan')).not.toBeInTheDocument();
+    expect(listDocuments).toHaveBeenCalledTimes(2);
+    expect(listDocuments).toHaveBeenLastCalledWith({
+      search: '',
+      scope: 'all',
+      cursor: null,
+      limit: 10,
+    });
+  });
+
   it('reloads the dashboard query when ownership filter changes', async () => {
     // @covers AC-4
     const user = userEvent.setup();
@@ -141,6 +265,28 @@ describe('DocumentDashboard', () => {
         cursor: null,
         limit: 10,
       });
+    });
+    expect(listDocuments).toHaveBeenCalledTimes(2);
+  });
+
+  it('appends the next page when loading more documents', async () => {
+    const user = userEvent.setup();
+    vi.mocked(listDocuments)
+      .mockResolvedValueOnce(pagedDashboardResponse)
+      .mockResolvedValueOnce(nextPageDashboardResponse);
+    useAuthStore.setState({ session, status: 'authenticated' });
+
+    render(<DocumentDashboard />);
+    await screen.findByText('Owned Plan');
+    await user.click(screen.getByRole('button', { name: /load more/i }));
+
+    expect(await screen.findByText('Next Page Plan')).toBeInTheDocument();
+    expect(screen.getByText('Owned Plan')).toBeInTheDocument();
+    expect(listDocuments).toHaveBeenNthCalledWith(2, {
+      search: '',
+      scope: 'all',
+      cursor: 'cursor-1',
+      limit: 10,
     });
   });
 

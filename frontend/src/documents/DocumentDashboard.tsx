@@ -34,6 +34,7 @@ export function DocumentDashboard() {
   const session = useAuthStore((state: AuthStoreState) => state.session);
   const status = useAuthStore((state: AuthStoreState) => state.status);
   const initAuth = useAuthStore((state: AuthStoreState) => state.initAuth);
+  const userId = session?.user.id ?? null;
   const [documents, setDocuments] = useState<DashboardDocument[]>(EMPTY_DASHBOARD.documents);
   const [nextCursor, setNextCursor] = useState<string | null>(EMPTY_DASHBOARD.nextCursor);
   const [search, setSearch] = useState('');
@@ -85,12 +86,21 @@ export function DocumentDashboard() {
   );
 
   useEffect(() => {
-    if (!session) return;
+    if (!userId) {
+      latestRequestRef.current += 1;
+      setDocuments(EMPTY_DASHBOARD.documents);
+      setNextCursor(EMPTY_DASHBOARD.nextCursor);
+      setErrorMessage(null);
+      setIsInitialLoading(false);
+      setIsLoadingMore(false);
+      return;
+    }
+
     const timer = window.setTimeout(() => {
       void fetchDocuments('replace');
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [fetchDocuments, session]);
+  }, [fetchDocuments, userId]);
 
   useEffect(() => {
     const sentinel = loadMoreRef.current;

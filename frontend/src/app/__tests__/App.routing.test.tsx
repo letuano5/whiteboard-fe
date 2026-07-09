@@ -1,8 +1,9 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { act, render, screen } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import App from '../App';
 import { useAuthStore } from '../../auth/auth.store';
 import { useRoomAccessStore } from '../../rooms/room-access.store';
+import { initSocketClient, stopSocketClient } from '../../sync/socket-client';
 
 // Mock heavy canvas components to keep routing tests fast
 vi.mock('../../canvas/Whiteboard', () => ({
@@ -33,6 +34,8 @@ function setLocation(pathname: string, search: string) {
 
 beforeEach(() => {
   setLocation('/', '');
+  vi.mocked(initSocketClient).mockClear();
+  vi.mocked(stopSocketClient).mockClear();
   useAuthStore.setState({
     session: null,
     status: 'anonymous',
@@ -57,6 +60,46 @@ describe('App routing — AC-3', () => {
     setLocation('/', '?room=test-room-id');
     render(<App />);
     expect(screen.getByTestId('whiteboard')).toHaveAttribute('data-mode', 'saved');
+  });
+
+  it('reconnects the saved board socket when the access token changes', async () => {
+    setLocation('/', '?room=test-room-id');
+    useAuthStore.setState({
+      session: {
+        accessToken: 'token-a',
+        expiresAt: 123,
+        user: {
+          id: 'user-123',
+          email: 'player@example.com',
+          name: 'Player',
+          avatarUrl: null,
+        },
+      },
+      status: 'authenticated',
+    });
+
+    render(<App />);
+
+    act(() => {
+      useAuthStore.setState({
+        session: {
+          accessToken: 'token-b',
+          expiresAt: 456,
+          user: {
+            id: 'user-123',
+            email: 'player@example.com',
+            name: 'Player',
+            avatarUrl: null,
+          },
+        },
+        status: 'authenticated',
+      });
+    });
+
+    await waitFor(() => {
+      expect(stopSocketClient).toHaveBeenCalledTimes(1);
+      expect(initSocketClient).toHaveBeenCalledWith('test-room-id');
+    });
   });
 
   it('shows an access error instead of a saved canvas when a private room rejects the user', () => {
